@@ -38,12 +38,15 @@ class MonthBar extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Large text shrinks the name to fit rather than cutting the year off.
                   Flexible(
-                    child: Text(
-                      DateFormat('MMMM y').format(month),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        DateFormat('MMMM y').format(month),
+                        maxLines: 1,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 2),
