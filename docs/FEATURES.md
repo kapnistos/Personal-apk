@@ -40,6 +40,7 @@ For each widget you can choose:
 | Shopping | How much to buy and at which shops |
 | Savings | Saved towards goals |
 | Investing | Portfolio value and gain |
+| Work days | Days worked this month and holidays left |
 | Headlines | Latest news |
 | Notes | Latest notes |
 
@@ -77,7 +78,7 @@ The layout is saved on the device. **Back to the starting layout** (in edit mode
 - Filters: Open, Today, Important, Done. Groups: Overdue, Today, Tomorrow, This week, Later, No date.
 - Reminders as notifications with **Done** and **Snooze 10 min** buttons, exact to the minute where the phone allows.
 - Repeating tasks: tick one off and the next appears.
-- Tasks can belong to a space (such as University).
+- Tasks can belong to a space (Job, University or one of your own).
 - Swipe right to complete, left to delete (with undo).
 
 <br clear="right">
@@ -124,16 +125,18 @@ The layout is saved on the device. **Back to the starting layout** (in edit mode
 
 <br clear="right">
 
-## University
+## Job, University and your own spaces
 
 <img src="../screenshots/out/phone-light-university.png" width="220" align="right" alt="University space">
 
-University has its own calendar and these sections:
+Each space has its own calendar and these sections:
 
 - **Important dates** with a countdown (exams, deadlines, conferences).
 - **Meetings** for the next two weeks.
 - **Plan:** tasks with a progress bar and inline add (a study plan, a research plan).
 - **Saved:** notes, links and files that belong to the space.
+
+**Job** also has a **work log**: tap a day to mark it worked, worked from home, off, holiday or sick; hold it to add hours and a note. Counters for the month and a yearly summary with holidays left (the allowance is adjustable).
 
 <br clear="right">
 

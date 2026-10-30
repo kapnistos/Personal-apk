@@ -65,6 +65,24 @@ int habitStreak(Habit h, Set<String> done, {DateTime? now}) {
   return n;
 }
 
+/// The longest run of done days the habit ever had, skipping days it doesn't apply to.
+int habitBestStreak(Habit h, Set<String> done, {DateTime? now}) {
+  if (done.isEmpty) return 0;
+  final first = DateTime.parse(done.reduce((a, b) => a.compareTo(b) < 0 ? a : b));
+  final today = dateOnly(now ?? DateTime.now());
+  var best = 0, run = 0;
+  for (var d = first; !d.isAfter(today); d = addDays(d, 1)) {
+    if (!habitDueOn(h, d)) continue;
+    if (done.contains(AppDatabase.dayKey(d))) {
+      run++;
+      if (run > best) best = run;
+    } else if (d != today) {
+      run = 0;
+    }
+  }
+  return best;
+}
+
 class HabitsPage extends StatelessWidget {
   const HabitsPage({super.key});
 
@@ -182,6 +200,14 @@ class HabitsPage extends StatelessWidget {
                       child: HabitCard(habit: h, done: byHabit[h.id] ?? const {}),
                     ),
                   ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Hold a habit to see its history and tick past days.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: p.muted, fontSize: 12.5),
+                  ),
+                ),
               ],
             );
           },
@@ -219,6 +245,7 @@ class HabitCard extends StatelessWidget {
           HapticFeedback.selectionClick();
           db.setHabitDone(habit.id, d, !isDone);
         },
+        onLongPress: () => showHabitHistory(context, habit),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -243,7 +270,7 @@ class HabitCard extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onLongPress: () => editHabit(context, habit: habit),
+        onLongPress: () => showHabitHistory(context, habit),
         onTap: () => editHabit(context, habit: habit),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -439,7 +466,27 @@ Future<void> editHabit(BuildContext context, {Habit? habit}) async {
     ),
   );
   if (result == 'delete' && habit != null) {
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final checks = await db.habitChecksSince(DateTime(1970));
+    final kept = checks.where((c) => c.habitId == habit.id).toList();
     await db.deleteHabit(habit.id);
+    messenger
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('${habit.name} deleted'),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () => db.transaction(() async {
+              await db.into(db.habits).insert(habit);
+              for (final c in kept) {
+                await db.into(db.habitChecks).insert(c);
+              }
+            }),
+          ),
+        ),
+      );
     return;
   }
   if (result != 'save' || name.text.trim().isEmpty) return;
@@ -456,4 +503,179 @@ Future<void> editHabit(BuildContext context, {Habit? habit}) async {
     ),
   );
   if (remind.isNotEmpty) await Reminders.instance.ensurePermission();
+}
+
+/// A month-by-month view of one habit where any past day can be ticked.
+Future<void> showHabitHistory(BuildContext context, Habit habit) {
+  HapticFeedback.selectionClick();
+  return showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (_) => Hub(
+      db: context.db,
+      settings: context.settings,
+      child: HabitHistory(habit: habit),
+    ),
+  );
+}
+
+class HabitHistory extends StatefulWidget {
+  const HabitHistory({super.key, required this.habit});
+  final Habit habit;
+
+  @override
+  State<HabitHistory> createState() => _HabitHistoryState();
+}
+
+class _HabitHistoryState extends State<HabitHistory> {
+  late DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
+  late final Stream<List<HabitCheck>> _checks = context.db.watchHabitChecks(DateTime(1970));
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final h = widget.habit;
+    final c = Color(h.color);
+    final today = dateOnly(DateTime.now());
+    final thisMonth = DateTime(today.year, today.month);
+    return StreamBuilder<List<HabitCheck>>(
+      stream: _checks,
+      builder: (context, snap) {
+        final done = {
+          for (final x in snap.data ?? const <HabitCheck>[])
+            if (x.habitId == h.id) x.day,
+        };
+        final lead = DateTime(_month.year, _month.month, 1).weekday - 1;
+        final days = DateTime(_month.year, _month.month + 1, 0).day;
+        final inMonth = done.where((k) => k.startsWith(AppDatabase.dayKey(_month).substring(0, 7))).length;
+        Widget stat(String value, String label) => Expanded(
+          child: Column(
+            children: [
+              Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+              Text(label, style: TextStyle(color: p.muted, fontSize: 12.5)),
+            ],
+          ),
+        );
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: c.withValues(alpha: 0.14),
+                      child: Icon(habitIcons[h.icon] ?? Icons.check_rounded, color: c, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        h.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    stat('${habitStreak(h, done)}', 'Streak'),
+                    stat('${habitBestStreak(h, done)}', 'Best'),
+                    stat('${done.length}', 'Total'),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Previous month',
+                      icon: const Icon(Icons.chevron_left_rounded),
+                      onPressed: () => setState(() => _month = DateTime(_month.year, _month.month - 1)),
+                    ),
+                    Expanded(
+                      child: Text(
+                        '${DateFormat('MMMM y').format(_month)}  ·  $inMonth',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Next month',
+                      icon: const Icon(Icons.chevron_right_rounded),
+                      onPressed: _month == thisMonth
+                          ? null
+                          : () => setState(() => _month = DateTime(_month.year, _month.month + 1)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                GridView.count(
+                  crossAxisCount: 7,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 4,
+                  crossAxisSpacing: 4,
+                  children: [
+                    for (final l in const ['M', 'T', 'W', 'T', 'F', 'S', 'S'])
+                      Center(
+                        child: Text(l, style: TextStyle(color: p.muted, fontSize: 12)),
+                      ),
+                    for (var i = 0; i < lead; i++) const SizedBox.shrink(),
+                    for (var n = 1; n <= days; n++)
+                      Builder(
+                        builder: (context) {
+                          final d = DateTime(_month.year, _month.month, n);
+                          final key = AppDatabase.dayKey(d);
+                          final isDone = done.contains(key);
+                          final future = d.isAfter(today);
+                          final due = habitDueOn(h, d);
+                          return InkWell(
+                            key: ValueKey('habit-day-$key'),
+                            customBorder: const CircleBorder(),
+                            onTap: future
+                                ? null
+                                : () {
+                                    HapticFeedback.selectionClick();
+                                    context.db.setHabitDone(h.id, d, !isDone);
+                                  },
+                            child: Container(
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isDone ? c : (due && !future ? c.withValues(alpha: 0.10) : null),
+                                border: d == today && !isDone ? Border.all(color: c, width: 1.6) : null,
+                              ),
+                              child: Text(
+                                '$n',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isDone ? FontWeight.w700 : FontWeight.w500,
+                                  color: isDone ? Colors.white : (future || !due ? p.muted : null),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Tap a day to tick or untick it.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: p.muted, fontSize: 12.5),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }

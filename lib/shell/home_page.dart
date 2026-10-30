@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../apps/calendar/calendar_model.dart';
@@ -10,6 +11,7 @@ import '../apps/news/news_page.dart';
 import '../apps/news/news_service.dart';
 import '../apps/notes/notes_page.dart';
 import '../apps/registry.dart';
+import '../apps/spaces/my_spaces.dart';
 import '../apps/todo/todo_page.dart';
 import '../apps/weather/weather_page.dart';
 import '../apps/weather/weather_service.dart';
@@ -34,10 +36,100 @@ class _HomePageState extends State<HomePage> {
   final _dash = GlobalKey<DashboardState>();
   bool _editing = false;
 
+  Future<void> _confirmReset() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Start over?'),
+        content: const Text('Home goes back to the starting widgets. Your data stays.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Reset')),
+        ],
+      ),
+    );
+    if (ok == true) _dash.currentState?.resetLayout();
+  }
+
+  Widget _header(BuildContext context, String name, bool greet) {
+    final p = Palette.of(context);
+    final now = DateTime.now();
+    final showText = _editing || greet;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: !showText
+              ? const SizedBox.shrink()
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      DateFormat('EEEE d MMMM').format(now),
+                      style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w500, color: p.muted),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _editing
+                          ? 'Edit home'
+                          : name.isEmpty
+                          ? greeting(now)
+                          : '${greeting(now)}, $name',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                  ],
+                ),
+        ),
+        if (_editing) ...[
+          IconButton(
+            tooltip: 'Back to the starting layout',
+            icon: const Icon(Icons.restart_alt_rounded),
+            onPressed: _confirmReset,
+          ),
+          IconButton.filledTonal(
+            tooltip: 'Add a widget',
+            style: IconButton.styleFrom(backgroundColor: p.raised, foregroundColor: p.ink),
+            icon: const Icon(Icons.add_rounded),
+            onPressed: () => _dash.currentState?.addWidget(),
+          ),
+          const SizedBox(width: 6),
+          FilledButton(onPressed: () => setState(() => _editing = false), child: const Text('Done')),
+        ] else ...[
+          IconButton.filledTonal(
+            tooltip: 'Edit home',
+            style: IconButton.styleFrom(backgroundColor: p.raised, foregroundColor: p.ink),
+            icon: const Icon(Icons.dashboard_customize_outlined),
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              setState(() => _editing = true);
+            },
+          ),
+          const SizedBox(width: 4),
+          Semantics(
+            button: true,
+            label: 'Me and settings',
+            child: GestureDetector(
+              // Your profile holds every setting.
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MePage())),
+              child: CircleAvatar(
+                radius: 22,
+                backgroundColor: p.accent,
+                child: Text(
+                  name.isEmpty ? '?' : name.characters.first.toUpperCase(),
+                  style: TextStyle(color: p.onAccent, fontWeight: FontWeight.w700, fontSize: 17),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final settings = context.settings;
-    final now = DateTime.now();
     final p = Palette.of(context);
     return PopScope(
       canPop: !_editing,
@@ -52,85 +144,28 @@ class _HomePageState extends State<HomePage> {
             children: [
               ContentWidth(
                 maxWidth: 960,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            DateFormat('EEEE d MMMM').format(now),
-                            style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w500, color: p.muted),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _editing
-                                ? 'Edit home'
-                                : settings.name.isEmpty
-                                ? greeting(now)
-                                : '${greeting(now)}, ${settings.name}',
-                            style: Theme.of(context).textTheme.headlineMedium,
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (_editing) ...[
-                      IconButton(
-                        tooltip: 'Back to the starting layout',
-                        icon: const Icon(Icons.restart_alt_rounded),
-                        onPressed: () async {
-                          final ok = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Start over?'),
-                              content: const Text('Home goes back to the starting widgets. Your data stays.'),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                                FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Reset')),
-                              ],
-                            ),
-                          );
-                          if (ok == true) _dash.currentState?.resetLayout();
-                        },
-                      ),
-                      FilledButton(onPressed: () => setState(() => _editing = false), child: const Text('Done')),
-                    ] else ...[
-                      IconButton.filledTonal(
-                        tooltip: 'Edit home',
-                        style: IconButton.styleFrom(backgroundColor: p.raised, foregroundColor: p.ink),
-                        icon: const Icon(Icons.dashboard_customize_outlined),
-                        onPressed: () => setState(() => _editing = true),
-                      ),
-                      const SizedBox(width: 4),
-                      GestureDetector(
-                        // Your profile holds every setting.
-                        onTap: () =>
-                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MePage())),
-                        child: CircleAvatar(
-                          radius: 22,
-                          backgroundColor: p.raised,
-                          child: Text(
-                            settings.name.isEmpty ? '?' : settings.name.characters.first.toUpperCase(),
-                            style: TextStyle(color: p.ink, fontWeight: FontWeight.w700, fontSize: 17),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
+                child: SettingSelector<(String, bool)>(
+                  select: (s) => (s.name, s.raw(homeGreetingKey) != 'off'),
+                  builder: (context, v) => _header(context, v.$1, v.$2),
                 ),
               ),
-              if (_editing)
-                ContentWidth(
-                  maxWidth: 960,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      'Tap a widget to change its size, shape and colour. Hold and drag it to move it.',
-                      style: TextStyle(color: p.muted),
-                    ),
-                  ),
-                ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: _editing
+                    ? ContentWidth(
+                        maxWidth: 960,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            'Hold and drag a widget to move it. Tap one to change its size, shape and colour.',
+                            style: TextStyle(color: p.muted),
+                          ),
+                        ),
+                      )
+                    : const SizedBox(width: double.infinity),
+              ),
               const SizedBox(height: 16),
               ContentWidth(
                 maxWidth: 960,
@@ -157,15 +192,20 @@ class AppGrid extends StatelessWidget {
           builder: (context, c) {
             final perRow = c.maxWidth >= 640 ? 6 : 4;
             final w = c.maxWidth / perRow;
-            return Wrap(
-              runSpacing: 12,
-              children: [
-                for (final app in miniApps)
-                  SizedBox(
-                    width: w,
-                    child: _AppTile(app: app, muted: p.muted),
-                  ),
-              ],
+            final hidden = hiddenApps(context.settings);
+            return StreamBuilder<List<Space>>(
+              stream: context.db.watchSpaces(),
+              builder: (context, snap) => Wrap(
+                runSpacing: 12,
+                children: [
+                  for (final app in [...miniApps, ...customSpaceApps(snap.data ?? const [])])
+                    if (!hidden.contains(app.id))
+                      SizedBox(
+                        width: w,
+                        child: _AppTile(app: app, muted: p.muted),
+                      ),
+                ],
+              ),
             );
           },
         ),
@@ -631,4 +671,56 @@ class RecentNotesCard extends StatelessWidget {
       },
     );
   }
+}
+
+const _hiddenAppsKey = 'home.hiddenApps';
+
+/// Apps the user took off the Apps widget.
+Set<String> hiddenApps(AppSettings s) => {...?s.raw(_hiddenAppsKey)?.split(',').where((x) => x.isNotEmpty)};
+
+/// Tick the apps to show on Home; your own spaces are listed too.
+Future<void> pickVisibleApps(BuildContext context) async {
+  final settings = context.settings;
+  final spaces = await context.db.watchSpaces().first;
+  if (!context.mounted) return;
+  final apps = [...miniApps, ...customSpaceApps(spaces)];
+  final hidden = hiddenApps(settings);
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setSheet) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.75,
+        builder: (ctx, scroll) => ListView(
+          controller: scroll,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text('Apps on Home', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            ),
+            for (final a in apps)
+              CheckboxListTile(
+                secondary: AppGlyph(icon: a.icon, color: a.color, size: 36),
+                title: Text(a.title),
+                value: !hidden.contains(a.id),
+                onChanged: (on) {
+                  setSheet(() => on == true ? hidden.remove(a.id) : hidden.add(a.id));
+                  settings.setRaw(_hiddenAppsKey, hidden.join(','));
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.add_rounded),
+              title: const Text('Make a new space'),
+              onTap: () {
+                Navigator.pop(ctx);
+                editSpace(context);
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    ),
+  );
 }

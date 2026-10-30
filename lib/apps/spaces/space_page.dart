@@ -28,7 +28,8 @@ class SpaceLauncher extends StatelessWidget {
     final db = context.db;
     return FutureBuilder<Space?>(
       future: () async {
-        final row = await db.customSelect('SELECT id FROM spaces WHERE gid = ?', variables: [Variable.withString(gid)])
+        final row = await db
+            .customSelect('SELECT id FROM spaces WHERE gid = ?', variables: [Variable.withString(gid)])
             .getSingleOrNull();
         final spaces = await db.watchSpaces().first;
         final id = row?.read<int>('id');
@@ -40,7 +41,11 @@ class SpaceLauncher extends StatelessWidget {
         if (space == null) {
           return Scaffold(
             appBar: AppBar(title: Text(fallbackName)),
-            body: const EmptyState(icon: Icons.folder_off_outlined, title: 'Not found', message: 'This space was removed.'),
+            body: const EmptyState(
+              icon: Icons.folder_off_outlined,
+              title: 'Not found',
+              message: 'This space was removed.',
+            ),
           );
         }
         return SpacePage(spaceId: space.id);
@@ -65,11 +70,13 @@ class SpacePage extends StatelessWidget {
         final words = SpaceWords.of(space.icon);
         return Scaffold(
           appBar: AppBar(
-            title: Row(children: [
-              Icon(spaceIcon(space.icon), color: color),
-              const SizedBox(width: 10),
-              Flexible(child: Text(space.name, overflow: TextOverflow.ellipsis)),
-            ]),
+            title: Row(
+              children: [
+                Icon(spaceIcon(space.icon), color: color),
+                const SizedBox(width: 10),
+                Flexible(child: Text(space.name, overflow: TextOverflow.ellipsis)),
+              ],
+            ),
           ),
           floatingActionButton: FloatingActionButton(
             tooltip: 'Add',
@@ -82,15 +89,18 @@ class SpacePage extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
             children: [
               // The work log is what a job page is mostly for, so it comes first there.
-              if (space.icon == 'work') ...[
-                ContentWidth(child: WorkLogCard(color: color)),
-                const SizedBox(height: 12),
-              ],
-              ContentWidth(child: _UpcomingDates(space: space, title: words.dates)),
+              if (space.icon == 'work') ...[ContentWidth(child: WorkLogCard(color: color)), const SizedBox(height: 12)],
+              ContentWidth(
+                child: _UpcomingDates(space: space, title: words.dates),
+              ),
               const SizedBox(height: 12),
-              ContentWidth(child: _Meetings(space: space, title: words.meetings)),
+              ContentWidth(
+                child: _Meetings(space: space, title: words.meetings),
+              ),
               const SizedBox(height: 12),
-              ContentWidth(child: _Plan(space: space, words: words)),
+              ContentWidth(
+                child: _Plan(space: space, words: words),
+              ),
               const SizedBox(height: 12),
               ContentWidth(child: _Saved(space: space)),
             ],
@@ -105,58 +115,61 @@ class SpacePage extends StatelessWidget {
       context: context,
       showDragHandle: true,
       builder: (sheet) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(
-            leading: const Icon(Icons.flag_outlined),
-            title: Text('Add to ${words.dates.toLowerCase()}'),
-            subtitle: const Text('Exam, deadline, holiday: a whole-day date with a reminder'),
-            onTap: () {
-              Navigator.pop(sheet);
-              addImportantDate(context, space);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.groups_outlined),
-            title: Text('Add to ${words.meetings.toLowerCase()}'),
-            subtitle: const Text('A meeting, lecture or shift with a time'),
-            onTap: () {
-              Navigator.pop(sheet);
-              addMeeting(context, space);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.check_circle_outline_rounded),
-            title: Text('Add to ${words.plan.toLowerCase()}'),
-            onTap: () {
-              Navigator.pop(sheet);
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => TodoPage(spaceId: space.id)));
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.notes_rounded),
-            title: const Text('Save a note'),
-            onTap: () {
-              Navigator.pop(sheet);
-              editSpaceItem(context, space, kind: 'note');
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.link_rounded),
-            title: const Text('Save a link'),
-            onTap: () {
-              Navigator.pop(sheet);
-              editSpaceItem(context, space, kind: 'link');
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.attach_file_rounded),
-            title: const Text('Save a file'),
-            onTap: () {
-              Navigator.pop(sheet);
-              pickSpaceFile(context, space);
-            },
-          ),
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.flag_outlined),
+              title: Text('Add to ${words.dates.toLowerCase()}'),
+              subtitle: const Text('Exam, deadline, holiday: a whole-day date with a reminder'),
+              onTap: () {
+                Navigator.pop(sheet);
+                addImportantDate(context, space);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.groups_outlined),
+              title: Text('Add to ${words.meetings.toLowerCase()}'),
+              subtitle: const Text('A meeting, lecture or shift with a time'),
+              onTap: () {
+                Navigator.pop(sheet);
+                addMeeting(context, space);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.check_circle_outline_rounded),
+              title: Text('Add to ${words.plan.toLowerCase()}'),
+              onTap: () {
+                Navigator.pop(sheet);
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => TodoPage(spaceId: space.id)));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.notes_rounded),
+              title: const Text('Save a note'),
+              onTap: () {
+                Navigator.pop(sheet);
+                editSpaceItem(context, space, kind: 'note');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.link_rounded),
+              title: const Text('Save a link'),
+              onTap: () {
+                Navigator.pop(sheet);
+                editSpaceItem(context, space, kind: 'link');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.attach_file_rounded),
+              title: const Text('Save a file'),
+              onTap: () {
+                Navigator.pop(sheet);
+                pickSpaceFile(context, space);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -187,26 +200,32 @@ class _Block extends StatelessWidget {
     final p = Palette.of(context);
     return Section(
       title: title,
-      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        ?action,
-        if (onAdd != null)
-          IconButton(
-            tooltip: 'Add',
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.add_rounded, size: 20),
-            onPressed: onAdd,
-          ),
-      ]),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ?action,
+          if (onAdd != null)
+            IconButton(
+              tooltip: 'Add',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.add_rounded, size: 20),
+              onPressed: onAdd,
+            ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (children.isEmpty && empty != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
-              child: Text(empty!, style: TextStyle(color: p.muted)),
-            ),
-          ...children,
-        ]),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (children.isEmpty && empty != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
+                child: Text(empty!, style: TextStyle(color: p.muted)),
+              ),
+            ...children,
+          ],
+        ),
       ),
     );
   }
@@ -230,11 +249,12 @@ class _UpcomingDates extends StatelessWidget {
         return StreamBuilder<List<Event>>(
           stream: db.watchEventsBetween(today, to),
           builder: (context, snap) {
-            final occ = expand((snap.data ?? const []).where((e) => e.calendarId == space.calendarId).toList(), cals,
-                    today, to)
-                .where((o) => o.allDay)
-                .take(8)
-                .toList();
+            final occ = expand(
+              (snap.data ?? const []).where((e) => e.calendarId == space.calendarId).toList(),
+              cals,
+              today,
+              to,
+            ).where((o) => o.allDay).take(8).toList();
             return _Block(
               title: title,
               onAdd: () => addImportantDate(context, space),
@@ -278,13 +298,21 @@ class _Countdown extends StatelessWidget {
         color: urgent ? color : color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Text(days == 0 ? 'Today' : '$days',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            days == 0 ? 'Today' : '$days',
             style: TextStyle(
-                fontWeight: FontWeight.w700, fontSize: days == 0 ? 13 : 17, color: urgent ? Colors.white : color)),
-        if (days != 0)
-          Text(days == 1 ? 'day' : 'days', style: TextStyle(fontSize: 11.5, color: urgent ? Colors.white : color)),
-      ]),
+              fontWeight: FontWeight.w700,
+              fontSize: days == 0 ? 13 : 17,
+              color: urgent ? Colors.white : color,
+            ),
+          ),
+          if (days != 0)
+            Text(days == 1 ? 'day' : 'days', style: TextStyle(fontSize: 11.5, color: urgent ? Colors.white : color)),
+        ],
+      ),
     );
   }
 }
@@ -318,10 +346,12 @@ class _MeetingsState extends State<_Meetings> {
         return StreamBuilder<List<Event>>(
           stream: db.watchEventsBetween(today, to),
           builder: (context, snap) {
-            final occ = expand((snap.data ?? const []).where((e) => e.calendarId == space.calendarId).toList(), cals,
-                    today, to)
-                .where((o) => !o.allDay && o.end.isAfter(now))
-                .toList();
+            final occ = expand(
+              (snap.data ?? const []).where((e) => e.calendarId == space.calendarId).toList(),
+              cals,
+              today,
+              to,
+            ).where((o) => !o.allDay && o.end.isAfter(now)).toList();
             const limit = 5;
             final byDay = <DateTime, List<Occurrence>>{};
             for (final o in _all ? occ : occ.take(limit)) {
@@ -336,9 +366,16 @@ class _MeetingsState extends State<_Meetings> {
                 for (final MapEntry(key: d, value: list) in byDay.entries) ...[
                   Padding(
                     padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-                    child: Text(friendlyDay(d), style: TextStyle(color: p.muted, fontWeight: FontWeight.w600)),
+                    child: Text(
+                      friendlyDay(d),
+                      style: TextStyle(color: p.muted, fontWeight: FontWeight.w600),
+                    ),
                   ),
-                  for (final o in list) Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: EventRow(o: o)),
+                  for (final o in list)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: EventRow(o: o),
+                    ),
                 ],
                 if (occ.length > limit)
                   Align(
@@ -352,9 +389,10 @@ class _MeetingsState extends State<_Meetings> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
                     child: Text(
-                        '${occ.length} ${occ.length == 1 ? 'session' : 'sessions'}, '
-                        '${hours.toStringAsFixed(hours == hours.roundToDouble() ? 0 : 1)} hours in total',
-                        style: TextStyle(color: p.muted, fontSize: 13.5)),
+                      '${occ.length} ${occ.length == 1 ? 'session' : 'sessions'}, '
+                      '${hours.toStringAsFixed(hours == hours.roundToDouble() ? 0 : 1)} hours in total',
+                      style: TextStyle(color: p.muted, fontSize: 13.5),
+                    ),
                   ),
               ],
             );
@@ -387,10 +425,16 @@ class _PlanState extends State<_Plan> {
     final text = _add.text.trim();
     if (text.isEmpty) return;
     final q = parseQuickTask(text);
-    await context.db.addTodo(q.title,
-        due: q.due, remindAt: q.remindAt, repeat: q.repeat, important: q.important, spaceId: widget.space.id);
+    await context.db.addTodo(
+      q.title,
+      due: q.due,
+      remindAt: q.remindAt,
+      repeat: q.repeat,
+      important: q.important,
+      spaceId: widget.space.id,
+    );
     if (q.remindAt != null) await Reminders.instance.ensurePermission();
-    _add.clear();
+    if (mounted) _add.clear();
   }
 
   @override
@@ -416,21 +460,23 @@ class _PlanState extends State<_Plan> {
             if (all.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                child: Row(children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: all.isEmpty ? 0 : done / all.length,
-                        minHeight: 6,
-                        color: color,
-                        backgroundColor: color.withValues(alpha: 0.15),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: all.isEmpty ? 0 : done / all.length,
+                          minHeight: 6,
+                          color: color,
+                          backgroundColor: color.withValues(alpha: 0.15),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text('$done of ${all.length} done', style: TextStyle(color: p.muted, fontSize: 13.5)),
-                ]),
+                    const SizedBox(width: 10),
+                    Text('$done of ${all.length} done', style: TextStyle(color: p.muted, fontSize: 13.5)),
+                  ],
+                ),
               ),
             for (final t in open.take(8)) TodoTile(todo: t, dense: true),
             if (open.length > 8)
@@ -491,26 +537,31 @@ class _Saved extends StatelessWidget {
                 },
                 child: ListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                  leading: Icon(
-                    switch (i.kind) {
-                      'link' => Icons.link_rounded,
-                      'file' => Icons.insert_drive_file_outlined,
-                      _ => Icons.notes_rounded,
-                    },
-                    color: Color(space.color),
+                  leading: Icon(switch (i.kind) {
+                    'link' => Icons.link_rounded,
+                    'file' => Icons.insert_drive_file_outlined,
+                    _ => Icons.notes_rounded,
+                  }, color: Color(space.color)),
+                  title: Text(
+                    i.title.isEmpty ? (i.kind == 'link' ? i.url : 'Note') : i.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  title: Text(i.title.isEmpty ? (i.kind == 'link' ? i.url : 'Note') : i.title,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
                   subtitle: Text(
-                    i.kind == 'note' ? i.body.replaceAll('\n', ' ') : (i.kind == 'link' ? Uri.tryParse(i.url)?.host ?? i.url : i.url),
+                    i.kind == 'note'
+                        ? i.body.replaceAll('\n', ' ')
+                        : (i.kind == 'link' ? Uri.tryParse(i.url)?.host ?? i.url : i.url),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: p.muted),
                   ),
                   trailing: IconButton(
                     tooltip: i.pinned ? 'Unpin' : 'Pin',
-                    icon: Icon(i.pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-                        size: 18, color: i.pinned ? Color(space.color) : p.muted),
+                    icon: Icon(
+                      i.pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                      size: 18,
+                      color: i.pinned ? Color(space.color) : p.muted,
+                    ),
                     onPressed: () => db.saveSpaceItem(i.toCompanion(false).copyWith(pinned: Value(!i.pinned))),
                   ),
                   onTap: () => _open(context, i),
@@ -531,8 +582,9 @@ class _Saved extends StatelessWidget {
     }
     final uri = i.kind == 'file' ? Uri.file(i.url) : Uri.tryParse(i.url.contains('://') ? i.url : 'https://${i.url}');
     if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      messenger.showSnackBar(SnackBar(
-          content: Text(i.kind == 'file' ? 'That file is not on this device.' : 'Could not open the link.')));
+      messenger.showSnackBar(
+        SnackBar(content: Text(i.kind == 'file' ? 'That file is not on this device.' : 'Could not open the link.')),
+      );
     }
   }
 }
@@ -542,12 +594,9 @@ Future<void> pickSpaceFile(BuildContext context, Space space) async {
   final res = await FilePicker.pickFiles();
   final f = res.firstOrNull;
   if (f == null || f.path == null) return;
-  await db.saveSpaceItem(SpaceItemsCompanion.insert(
-    spaceId: space.id,
-    kind: 'file',
-    title: Value(f.name),
-    url: Value(f.path!),
-  ));
+  await db.saveSpaceItem(
+    SpaceItemsCompanion.insert(spaceId: space.id, kind: 'file', title: Value(f.name), url: Value(f.path!)),
+  );
 }
 
 Future<void> editSpaceItem(BuildContext context, Space space, {SpaceItem? item, required String kind}) async {
@@ -561,54 +610,62 @@ Future<void> editSpaceItem(BuildContext context, Space space, {SpaceItem? item, 
     showDragHandle: true,
     builder: (sheet) => Padding(
       padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(sheet).bottom),
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(item == null ? (kind == 'link' ? 'Save a link' : 'Save a note') : 'Edit',
-            style: Theme.of(sheet).textTheme.titleLarge),
-        const SizedBox(height: 12),
-        if (kind == 'link') ...[
-          TextField(
-            controller: url,
-            autofocus: item == null,
-            keyboardType: TextInputType.url,
-            decoration: const InputDecoration(labelText: 'Link', hintText: 'https://'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            item == null ? (kind == 'link' ? 'Save a link' : 'Save a note') : 'Edit',
+            style: Theme.of(sheet).textTheme.titleLarge,
           ),
-          const SizedBox(height: 10),
-        ],
-        TextField(
-          controller: title,
-          autofocus: item == null && kind != 'link',
-          textCapitalization: TextCapitalization.sentences,
-          decoration: InputDecoration(labelText: kind == 'link' ? 'Name (optional)' : 'Title'),
-        ),
-        if (kind != 'link') ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
+          if (kind == 'link') ...[
+            TextField(
+              controller: url,
+              autofocus: item == null,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(labelText: 'Link', hintText: 'https://'),
+            ),
+            const SizedBox(height: 10),
+          ],
           TextField(
-            controller: body,
-            minLines: 4,
-            maxLines: 12,
+            controller: title,
+            autofocus: item == null && kind != 'link',
             textCapitalization: TextCapitalization.sentences,
-            decoration: InputDecoration(labelText: kind == 'file' ? 'Note about this file' : 'Note'),
+            decoration: InputDecoration(labelText: kind == 'link' ? 'Name (optional)' : 'Title'),
+          ),
+          if (kind != 'link') ...[
+            const SizedBox(height: 10),
+            TextField(
+              controller: body,
+              minLines: 4,
+              maxLines: 12,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(labelText: kind == 'file' ? 'Note about this file' : 'Note'),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(onPressed: () => Navigator.pop(sheet, true), child: const Text('Save')),
           ),
         ],
-        const SizedBox(height: 14),
-        Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton(onPressed: () => Navigator.pop(sheet, true), child: const Text('Save')),
-        ),
-      ]),
+      ),
     ),
   );
   if (ok != true) return;
   if (kind == 'link' && url.text.trim().isEmpty) return;
   if (kind == 'note' && title.text.trim().isEmpty && body.text.trim().isEmpty) return;
-  await db.saveSpaceItem(SpaceItemsCompanion(
-    id: item == null ? const Value.absent() : Value(item.id),
-    spaceId: Value(space.id),
-    kind: Value(kind),
-    title: Value(title.text.trim()),
-    body: Value(body.text.trim()),
-    url: Value(kind == 'file' ? (item?.url ?? '') : url.text.trim()),
-    pinned: Value(item?.pinned ?? false),
-    createdAt: item == null ? const Value.absent() : Value(item.createdAt),
-  ));
+  await db.saveSpaceItem(
+    SpaceItemsCompanion(
+      id: item == null ? const Value.absent() : Value(item.id),
+      spaceId: Value(space.id),
+      kind: Value(kind),
+      title: Value(title.text.trim()),
+      body: Value(body.text.trim()),
+      url: Value(kind == 'file' ? (item?.url ?? '') : url.text.trim()),
+      pinned: Value(item?.pinned ?? false),
+      createdAt: item == null ? const Value.absent() : Value(item.createdAt),
+    ),
+  );
 }

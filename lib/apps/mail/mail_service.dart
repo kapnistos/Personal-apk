@@ -51,7 +51,8 @@ const mailPresets = <MailPreset>[
     smtpPort: 465,
     smtpSecurity: 'ssl',
     passwordLabel: 'App password',
-    help: 'Google needs an app password, not your normal one. Turn on 2-Step Verification, '
+    help:
+        'Google needs an app password, not your normal one. Turn on 2-Step Verification, '
         'then create one at myaccount.google.com/apppasswords and paste the 16 letters here.',
     color: 0xFFC0563F,
   ),
@@ -65,7 +66,8 @@ const mailPresets = <MailPreset>[
     smtpPort: 1025,
     smtpSecurity: 'starttls',
     passwordLabel: 'Bridge password',
-    help: 'Proton works through Proton Bridge. Open Bridge on your PC, click your account, '
+    help:
+        'Proton works through Proton Bridge. Open Bridge on your PC, click your account, '
         'and copy the IMAP username and password it shows (not your Proton password). '
         'On the phone this works once the laptop server runs Bridge; then use its address as the host.',
     color: 0xFF6D4AFF,
@@ -81,7 +83,8 @@ const mailPresets = <MailPreset>[
     smtpPort: 587,
     smtpSecurity: 'starttls',
     passwordLabel: 'Microsoft sign-in',
-    help: 'Outlook only allows Microsoft sign-in. That needs a one-time app registration of your own '
+    help:
+        'Outlook only allows Microsoft sign-in. That needs a one-time app registration of your own '
         '(free, about 5 minutes): portal.azure.com → App registrations → New registration, name "Hub", '
         'choose "Accounts in any organizational directory and personal Microsoft accounts", Register. '
         'Then Authentication → "Allow public client flows" → Yes, Save. Paste the Application (client) ID below.',
@@ -111,7 +114,8 @@ class MailItem {
   final MimeMessage message;
 
   DateTime get date => message.decodeDate()?.toLocal() ?? DateTime.fromMillisecondsSinceEpoch(0);
-  String get subject => (message.decodeSubject() ?? '').trim().isEmpty ? '(no subject)' : message.decodeSubject()!.trim();
+  String get subject =>
+      (message.decodeSubject() ?? '').trim().isEmpty ? '(no subject)' : message.decodeSubject()!.trim();
   String get sender {
     final f = message.from?.firstOrNull;
     if (f == null) return 'Unknown';
@@ -157,21 +161,21 @@ class MailService {
   }
 
   static MailAccount buildAccount(MailboxAccount a, String secret) => MailAccount.fromManualSettingsWithAuth(
-        name: a.name,
-        email: a.email,
-        userName: a.name,
-        auth: switch (_parseOauth(secret)) {
-          (_, final token) => OauthAuthentication(a.email, token),
-          null => PlainAuthentication(a.email, secret),
-        },
-        incomingHost: a.imapHost,
-        incomingPort: a.imapPort,
-        incomingSocketType: _socket(a.imapSecurity),
-        outgoingHost: a.smtpHost,
-        outgoingPort: a.smtpPort,
-        outgoingSocketType: _socket(a.smtpSecurity),
-        outgoingClientDomain: 'hub.local',
-      );
+    name: a.name,
+    email: a.email,
+    userName: a.name,
+    auth: switch (_parseOauth(secret)) {
+      (_, final token) => OauthAuthentication(a.email, token),
+      null => PlainAuthentication(a.email, secret),
+    },
+    incomingHost: a.imapHost,
+    incomingPort: a.imapPort,
+    incomingSocketType: _socket(a.imapSecurity),
+    outgoingHost: a.smtpHost,
+    outgoingPort: a.smtpPort,
+    outgoingSocketType: _socket(a.smtpSecurity),
+    outgoingClientDomain: 'hub.local',
+  );
 
   MailClient _newClient(MailboxAccount a, String secret) {
     final oauth = _parseOauth(secret);
@@ -247,17 +251,25 @@ class MailService {
   Future<(List<MailItem>, List<MailError>)> inbox(List<MailboxAccount> accounts, {int perAccount = 30}) async {
     final items = <MailItem>[];
     final errors = <MailError>[];
-    await Future.wait(accounts.map((a) async {
-      try {
-        final client = await _client(a);
-        await client.selectInbox();
-        final msgs = await client.fetchMessages(count: perAccount, fetchPreference: FetchPreference.envelope);
-        items.addAll(msgs.map((m) => MailItem(a, m)));
-      } catch (e) {
-        _clients.remove(a.id);
-        errors.add(MailError(a, e is String ? e : explain('$e', a)));
-      }
-    }));
+    await Future.wait(
+      accounts.map((a) async {
+        try {
+          // A server that stops answering shouldn't keep the inbox spinning forever.
+          final msgs = await () async {
+            final client = await _client(a);
+            await client.selectInbox();
+            return client.fetchMessages(count: perAccount, fetchPreference: FetchPreference.envelope);
+          }().timeout(const Duration(seconds: 40));
+          items.addAll(msgs.map((m) => MailItem(a, m)));
+        } on TimeoutException {
+          _clients.remove(a.id);
+          errors.add(MailError(a, 'The server took too long to answer. Pull down to try again.'));
+        } catch (e) {
+          _clients.remove(a.id);
+          errors.add(MailError(a, e is String ? e : explain('$e', a)));
+        }
+      }),
+    );
     items.sort((x, y) => y.date.compareTo(x.date));
     return (items, errors);
   }

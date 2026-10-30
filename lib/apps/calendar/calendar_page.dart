@@ -252,7 +252,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
   DateTime _defaultStart() {
     final now = DateTime.now();
-    final base = _selected == dateOnly(now) ? now : _selected.add(const Duration(hours: 9));
+    final base = _selected == dateOnly(now) ? now : DateTime(_selected.year, _selected.month, _selected.day, 9);
     // Next half hour.
     final m = base.minute < 30 ? 30 : 60;
     return DateTime(base.year, base.month, base.day, base.hour).add(Duration(minutes: m));
@@ -873,6 +873,15 @@ class _TimeGridState extends State<_TimeGrid> {
   }
 }
 
+/// Where an event sits on [day], as wall-clock minutes from midnight. Uses the
+/// clock time rather than elapsed time so blocks line up with the hour labels on
+/// the days summer time starts or ends.
+(int, int) minutesOnDay(DateTime start, DateTime end, DateTime day) {
+  final from = start.isBefore(day) ? 0 : start.hour * 60 + start.minute;
+  final to = !end.isBefore(addDays(day, 1)) ? 24 * 60 : end.hour * 60 + end.minute;
+  return (from, to < from ? from : to);
+}
+
 class _DayColumn extends StatelessWidget {
   const _DayColumn({required this.day, required this.occ, required this.isToday});
   final DateTime day;
@@ -891,7 +900,7 @@ class _DayColumn extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTapUp: (d) {
             final minutes = (d.localPosition.dy / _hourHeight * 60 / 30).floor() * 30;
-            openEventEditor(context, start: day.add(Duration(minutes: minutes)));
+            openEventEditor(context, start: DateTime(day.year, day.month, day.day, 0, minutes));
           },
           child: Stack(
             children: [
@@ -907,11 +916,9 @@ class _DayColumn extends StatelessWidget {
               for (final (o, col, n) in placed)
                 Builder(
                   builder: (context) {
-                    final s = o.start.isBefore(day) ? day : o.start;
-                    final dayEnd = addDays(day, 1);
-                    final e = o.end.isAfter(dayEnd) ? dayEnd : o.end;
-                    final top = s.difference(day).inMinutes / 60 * _hourHeight;
-                    final height = (e.difference(s).inMinutes / 60 * _hourHeight).clamp(20.0, 24 * _hourHeight);
+                    final (from, to) = minutesOnDay(o.start, o.end, day);
+                    final top = from / 60 * _hourHeight;
+                    final height = ((to - from) / 60 * _hourHeight).clamp(20.0, 24 * _hourHeight);
                     final colW = (w - 4) / n;
                     return Positioned(
                       top: top + 1,

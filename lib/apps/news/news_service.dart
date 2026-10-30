@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
@@ -206,6 +207,20 @@ List<NewsItem> parseFeed(String body, NewsSource source) {
   return out;
 }
 
+/// Parses fetched feeds on a background isolate. Null marks a feed that could not be read.
+Future<List<List<NewsItem>?>> _parseInBackground(List<(NewsSource, String)> feeds) => Isolate.run(
+  () => [
+    for (final (src, body) in feeds)
+      () {
+        try {
+          return parseFeed(body, src).take(25).toList();
+        } catch (_) {
+          return null;
+        }
+      }(),
+  ],
+);
+
 /// Loads every enabled feed, newest first, and keeps a copy for offline reading.
 class NewsService {
   NewsService._();
@@ -251,24 +266,38 @@ class NewsService {
 
   bool get stale => fetchedAt == null || DateTime.now().difference(fetchedAt!) > const Duration(minutes: 30);
 
-  Future<void> refresh(AppSettings s) async {
+  Future<void>? _refreshing;
+
+  /// Fetches every enabled feed. Calls made while one is running share it.
+  Future<void> refresh(AppSettings s) => _refreshing ??= _refresh(s).whenComplete(() => _refreshing = null);
+
+  Future<void> _refresh(AppSettings s) async {
     final enabled = sources(s).where((x) => x.on).toList();
-    failed.clear();
-    final results = await Future.wait(
+    final failedNow = <String>[];
+    final bodies = await Future.wait(
       enabled.map((src) async {
         try {
           final res = await http
               .get(Uri.parse(src.url), headers: {'User-Agent': 'Mozilla/5.0 (Hub news reader)'})
               .timeout(const Duration(seconds: 12));
           if (res.statusCode != 200) throw 'HTTP ${res.statusCode}';
-          return parseFeed(utf8.decode(res.bodyBytes, allowMalformed: true), src).take(25).toList();
+          return (src, utf8.decode(res.bodyBytes, allowMalformed: true));
         } catch (_) {
-          failed.add(src.name);
-          return <NewsItem>[];
+          failedNow.add(src.name);
+          return null;
         }
       }),
     );
-    final all = [for (final r in results) ...r];
+    final fetched = bodies.nonNulls.toList();
+    // XML parsing of a dozen feeds takes long enough to stutter scrolling, so it runs on its own isolate.
+    final parsed = fetched.isEmpty ? <List<NewsItem>?>[] : await _parseInBackground(fetched);
+    for (var i = 0; i < fetched.length; i++) {
+      if (parsed[i] == null) failedNow.add(fetched[i].$1.name);
+    }
+    failed
+      ..clear()
+      ..addAll(failedNow);
+    final all = [for (final r in parsed) ...?r];
     if (all.isEmpty && items.isNotEmpty) return; // Offline: keep what we had.
     // The same story from two feeds shows once.
     final seen = <String>{};
@@ -276,12 +305,14 @@ class NewsService {
     all.sort((a, b) => (b.published ?? DateTime(2000)).compareTo(a.published ?? DateTime(2000)));
     items = all;
     fetchedAt = DateTime.now();
+    // A cache, not a preference: saved quietly so screens reading settings don't redraw.
     await s.setRaw(
       'news.cache',
       jsonEncode({
         'at': fetchedAt!.millisecondsSinceEpoch,
         'items': [for (final i in all.take(250)) i.toJson()],
       }),
+      quiet: true,
     );
   }
 

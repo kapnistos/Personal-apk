@@ -63,6 +63,8 @@ class SavingsTab extends StatelessWidget {
               const SizedBox(height: 12),
               ContentWidth(child: RoundUpTile(goals: goals)),
               const SizedBox(height: 12),
+              ContentWidth(child: PaydayTile(goals: goals, moves: moves)),
+              const SizedBox(height: 12),
               if (goals.isEmpty)
                 const EmptyState(
                   icon: Icons.savings_outlined,

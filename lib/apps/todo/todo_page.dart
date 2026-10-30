@@ -13,6 +13,16 @@ import '../spaces/space_model.dart';
 
 enum TodoFilter { open, today, important, done }
 
+/// How tasks are ordered inside each group.
+enum TodoSort { smart, due, added, title }
+
+const todoSortLabels = {
+  TodoSort.smart: 'Important first',
+  TodoSort.due: 'By date',
+  TodoSort.added: 'Newest first',
+  TodoSort.title: 'A to Z',
+};
+
 class TodoPage extends StatefulWidget {
   const TodoPage({super.key, this.spaceId});
 
@@ -25,6 +35,14 @@ class TodoPage extends StatefulWidget {
 
 class _TodoPageState extends State<TodoPage> {
   TodoFilter _filter = TodoFilter.open;
+  TodoSort? _sort;
+
+  TodoSort get sort => _sort ?? TodoSort.values.asNameMap()[context.settings.raw('todo.sort')] ?? TodoSort.smart;
+
+  void _setSort(TodoSort s) {
+    setState(() => _sort = s);
+    context.settings.setRaw('todo.sort', s.name);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,13 +51,23 @@ class _TodoPageState extends State<TodoPage> {
       appBar: AppBar(
         title: const Text('To-do'),
         actions: [
+          PopupMenuButton<TodoSort>(
+            tooltip: 'Sort',
+            icon: const Icon(Icons.sort_rounded),
+            initialValue: sort,
+            onSelected: _setSort,
+            itemBuilder: (_) => [
+              for (final s in TodoSort.values)
+                CheckedPopupMenuItem(value: s, checked: s == sort, child: Text(todoSortLabels[s]!)),
+            ],
+          ),
           if (_filter == TodoFilter.done)
             TextButton(
               onPressed: () async {
                 final n = await db.clearCompletedTodos();
                 if (context.mounted && n > 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Cleared $n completed ${n == 1 ? 'task' : 'tasks'}')));
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(SnackBar(content: Text('Cleared $n completed ${n == 1 ? 'task' : 'tasks'}')));
                 }
               },
               child: const Text('Clear all'),
@@ -57,7 +85,7 @@ class _TodoPageState extends State<TodoPage> {
               if (!snap.hasData) return const SizedBox.shrink();
               final all = snap.data!;
               final counts = {for (final f in TodoFilter.values) f: applyTodoFilter(all, f).length};
-              final groups = groupTodos(applyTodoFilter(all, _filter), byDate: _filter != TodoFilter.done);
+              final groups = groupTodos(applyTodoFilter(all, _filter), byDate: _filter != TodoFilter.done, sort: sort);
               return Column(
                 children: [
                   SizedBox(
@@ -71,12 +99,14 @@ class _TodoPageState extends State<TodoPage> {
                             padding: const EdgeInsets.only(right: 8),
                             child: ChoiceChip(
                               showCheckmark: false,
-                              label: Text('${switch (f) {
-                                TodoFilter.open => 'Open',
-                                TodoFilter.today => 'Today',
-                                TodoFilter.important => 'Important',
-                                TodoFilter.done => 'Done',
-                              }}${counts[f]! > 0 && f != TodoFilter.done ? '  ${counts[f]}' : ''}'),
+                              label: Text(
+                                '${switch (f) {
+                                  TodoFilter.open => 'Open',
+                                  TodoFilter.today => 'Today',
+                                  TodoFilter.important => 'Important',
+                                  TodoFilter.done => 'Done',
+                                }}${counts[f]! > 0 && f != TodoFilter.done ? '  ${counts[f]}' : ''}',
+                              ),
                               selected: _filter == f,
                               onSelected: (_) => setState(() => _filter = f),
                             ),
@@ -87,11 +117,25 @@ class _TodoPageState extends State<TodoPage> {
                   Expanded(
                     child: groups.isEmpty
                         ? EmptyState(
-                            icon: _filter == TodoFilter.done ? Icons.history_rounded : Icons.check_circle_outline_rounded,
-                            title: _filter == TodoFilter.done ? 'Nothing completed yet' : 'All clear',
-                            message: _filter == TodoFilter.done
-                                ? 'Finished tasks show up here.'
-                                : 'Add a task below. Try "Call the bank tomorrow 10:00" or "Gym every monday 18:00".',
+                            icon: switch (_filter) {
+                              TodoFilter.done => Icons.history_rounded,
+                              TodoFilter.important => Icons.star_outline_rounded,
+                              TodoFilter.today => Icons.wb_sunny_outlined,
+                              TodoFilter.open => Icons.check_circle_outline_rounded,
+                            },
+                            title: switch (_filter) {
+                              TodoFilter.done => 'Nothing completed yet',
+                              TodoFilter.important => 'Nothing starred',
+                              TodoFilter.today => 'Nothing left for today',
+                              TodoFilter.open => 'All clear',
+                            },
+                            message: switch (_filter) {
+                              TodoFilter.done => 'Finished tasks show up here.',
+                              TodoFilter.important => 'Tap the star on a task, or end it with "!" when you add it.',
+                              TodoFilter.today => 'Enjoy the rest of the day.',
+                              TodoFilter.open =>
+                                'Add a task below. Try "Call the bank tomorrow 10:00" or "Gym every monday 18:00".',
+                            },
                           )
                         : ContentWidth(
                             child: ListView(
@@ -100,12 +144,16 @@ class _TodoPageState extends State<TodoPage> {
                                 for (final (label, items) in groups) ...[
                                   Padding(
                                     padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
-                                    child: Row(children: [
-                                      SectionLabel(label),
-                                      const SizedBox(width: 6),
-                                      Text('${items.length}',
-                                          style: TextStyle(fontSize: 12.5, color: Palette.of(context).muted)),
-                                    ]),
+                                    child: Row(
+                                      children: [
+                                        SectionLabel(label),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          '${items.length}',
+                                          style: TextStyle(fontSize: 12.5, color: Palette.of(context).muted),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                   for (final t in items) TodoTile(todo: t, space: spaces[t.spaceId]),
                                 ],
@@ -132,15 +180,21 @@ bool isTodayTask(Todo t, {DateTime? now}) {
 }
 
 List<Todo> applyTodoFilter(List<Todo> all, TodoFilter f) => switch (f) {
-      TodoFilter.open => all.where((t) => !t.done).toList(),
-      TodoFilter.today => all.where((t) => isTodayTask(t)).toList(),
-      TodoFilter.important => all.where((t) => !t.done && t.important).toList(),
-      TodoFilter.done => all.where((t) => t.done).toList()
-        ..sort((a, b) => (b.completedAt ?? b.createdAt).compareTo(a.completedAt ?? a.createdAt)),
-    };
+  TodoFilter.open => all.where((t) => !t.done).toList(),
+  TodoFilter.today => all.where((t) => isTodayTask(t)).toList(),
+  TodoFilter.important => all.where((t) => !t.done && t.important).toList(),
+  TodoFilter.done =>
+    all.where((t) => t.done).toList()
+      ..sort((a, b) => (b.completedAt ?? b.createdAt).compareTo(a.completedAt ?? a.createdAt)),
+};
 
 /// Splits tasks into Overdue, Today, Tomorrow, This week, Later and No date.
-List<(String, List<Todo>)> groupTodos(List<Todo> todos, {bool byDate = true, DateTime? now}) {
+List<(String, List<Todo>)> groupTodos(
+  List<Todo> todos, {
+  bool byDate = true,
+  DateTime? now,
+  TodoSort sort = TodoSort.smart,
+}) {
   if (todos.isEmpty) return const [];
   if (!byDate) return [('Completed', todos)];
   final today = dateOnly(now ?? DateTime.now());
@@ -155,30 +209,185 @@ List<(String, List<Todo>)> groupTodos(List<Todo> todos, {bool byDate = true, Dat
       key = d < 0
           ? 'Overdue'
           : d == 0
-              ? 'Today'
-              : d == 1
-                  ? 'Tomorrow'
-                  : d < 7
-                      ? 'This week'
-                      : 'Later';
+          ? 'Today'
+          : d == 1
+          ? 'Tomorrow'
+          : d < 7
+          ? 'This week'
+          : 'Later';
     }
     (buckets[key] ??= []).add(t);
   }
   const order = ['Overdue', 'Today', 'Tomorrow', 'This week', 'Later', 'No date'];
   return [
     for (final k in order)
-      if (buckets[k] != null)
-        (
-          k,
-          buckets[k]!
-            ..sort((a, b) {
-              if (a.important != b.important) return a.important ? -1 : 1;
-              final x = a.due ?? a.remindAt, y = b.due ?? b.remindAt;
-              if (x != null && y != null) return x.compareTo(y);
-              return b.createdAt.compareTo(a.createdAt);
-            })
-        ),
+      if (buckets[k] != null) (k, buckets[k]!..sort((a, b) => compareTodos(a, b, sort))),
   ];
+}
+
+int compareTodos(Todo a, Todo b, TodoSort sort) {
+  int byWhen() {
+    final x = a.remindAt ?? a.due, y = b.remindAt ?? b.due;
+    if (x != null && y != null) return x.compareTo(y);
+    if (x != null || y != null) return x != null ? -1 : 1;
+    return 0;
+  }
+
+  int newest() => b.createdAt.compareTo(a.createdAt);
+  int r;
+  switch (sort) {
+    case TodoSort.smart:
+      if (a.important != b.important) return a.important ? -1 : 1;
+      r = byWhen();
+    case TodoSort.due:
+      r = byWhen();
+    case TodoSort.added:
+      r = newest();
+    case TodoSort.title:
+      r = a.title.toLowerCase().compareTo(b.title.toLowerCase());
+  }
+  return r != 0 ? r : newest();
+}
+
+/// Moves a task to [day], keeping its reminder at the same time of day.
+Todo moveTodoTo(Todo t, DateTime? day) {
+  if (day == null) return t.copyWith(due: const Value(null), remindAt: const Value(null));
+  final r = t.remindAt;
+  return t.copyWith(
+    due: Value(dateOnly(day)),
+    remindAt: Value(r == null ? null : DateTime(day.year, day.month, day.day, r.hour, r.minute)),
+  );
+}
+
+/// Ticks a task off (or back on) and offers to undo it.
+Future<void> toggleTodoDone(BuildContext context, Todo todo) async {
+  final db = context.db;
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  final done = !todo.done;
+  if (done) HapticFeedback.lightImpact();
+  await db.setTodoDone(todo.id, done);
+  if (!done || messenger == null) return;
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(
+          todo.repeat != 'none'
+              ? 'Done. It repeats ${todoRepeatLabels[todo.repeat]!.toLowerCase()}.'
+              : 'Done: ${todo.title}',
+        ),
+        // Undoing a repeating task would leave its next copy behind, so only plain tasks get it.
+        action: todo.repeat == 'none'
+            ? SnackBarAction(label: 'Undo', onPressed: () => db.setTodoDone(todo.id, false))
+            : null,
+      ),
+    );
+}
+
+/// Long-press actions: move the date, star, duplicate or delete.
+Future<void> showTodoActions(BuildContext context, Todo todo) async {
+  final db = context.db;
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  final today = dateOnly(DateTime.now());
+  final nextMonday = addDays(today, 8 - today.weekday);
+  HapticFeedback.selectionClick();
+  final action = await showModalBottomSheet<String>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) {
+      final p = Palette.of(context);
+      Widget item(String key, IconData icon, String label, {Color? color}) => ListTile(
+        leading: Icon(icon, color: color ?? p.muted),
+        title: Text(label, style: color == null ? null : TextStyle(color: color)),
+        onTap: () => Navigator.pop(context, key),
+      );
+      return SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  todo.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final (key, label) in [
+                      ('today', 'Today'),
+                      ('tomorrow', 'Tomorrow'),
+                      ('monday', 'Next week'),
+                      if (todo.due != null) ('nodate', 'No date'),
+                    ])
+                      ActionChip(label: Text(label), onPressed: () => Navigator.pop(context, key)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              item('done', todo.done ? Icons.undo_rounded : Icons.check_rounded, todo.done ? 'Mark not done' : 'Done'),
+              item(
+                'star',
+                todo.important ? Icons.star_rounded : Icons.star_outline_rounded,
+                todo.important ? 'Unmark important' : 'Mark important',
+              ),
+              item('copy', Icons.copy_rounded, 'Duplicate'),
+              item('delete', Icons.delete_outline_rounded, 'Delete', color: p.danger),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+  if (action == null || !context.mounted) return;
+  switch (action) {
+    case 'today' || 'tomorrow' || 'monday' || 'nodate':
+      final day = switch (action) {
+        'today' => today,
+        'tomorrow' => addDays(today, 1),
+        'monday' => nextMonday,
+        _ => null,
+      };
+      await db.updateTodo(moveTodoTo(todo, day));
+      messenger
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(day == null ? 'Date removed' : 'Moved to ${friendlyDay(day).toLowerCase()}'),
+            action: SnackBarAction(label: 'Undo', onPressed: () => db.updateTodo(todo)),
+          ),
+        );
+    case 'done':
+      await toggleTodoDone(context, todo);
+    case 'star':
+      await db.updateTodo(todo.copyWith(important: !todo.important));
+    case 'copy':
+      await db.addTodo(
+        todo.title,
+        due: todo.due,
+        remindAt: todo.remindAt,
+        repeat: todo.repeat,
+        important: todo.important,
+        spaceId: todo.spaceId,
+      );
+    case 'delete':
+      await db.deleteTodo(todo.id);
+      messenger
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: const Text('Task deleted'),
+            action: SnackBarAction(label: 'Undo', onPressed: () => db.restoreTodo(todo)),
+          ),
+        );
+  }
 }
 
 class TodoTile extends StatelessWidget {
@@ -207,7 +416,12 @@ class TodoTile extends StatelessWidget {
           TextSpan(text: space!.name),
         ],
       if (todo.due != null)
-        [TextSpan(text: friendlyDay(todo.due!), style: overdue ? TextStyle(color: p.danger) : null)],
+        [
+          TextSpan(
+            text: friendlyDay(todo.due!),
+            style: overdue ? TextStyle(color: p.danger) : null,
+          ),
+        ],
       if (remind != null && !todo.done)
         [
           WidgetSpan(
@@ -218,9 +432,10 @@ class TodoTile extends StatelessWidget {
             ),
           ),
           TextSpan(
-              text: todo.due != null && daysBetween(todo.due!, remind) == 0
-                  ? DateFormat.Hm().format(remind)
-                  : '${friendlyDay(remind)} ${DateFormat.Hm().format(remind)}'),
+            text: todo.due != null && daysBetween(todo.due!, remind) == 0
+                ? DateFormat.Hm().format(remind)
+                : '${friendlyDay(remind)} ${DateFormat.Hm().format(remind)}',
+          ),
         ],
       if (todo.repeat != 'none')
         [
@@ -239,6 +454,7 @@ class TodoTile extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () => editTodo(context, todo),
+        onLongPress: () => showTodoActions(context, todo),
         child: Padding(
           padding: EdgeInsets.symmetric(vertical: dense ? 2 : 4),
           child: Row(
@@ -247,16 +463,7 @@ class TodoTile extends StatelessWidget {
                 value: todo.done,
                 shape: const CircleBorder(),
                 activeColor: TileColors.todo,
-                onChanged: (v) {
-                  if (v ?? false) HapticFeedback.lightImpact();
-                  db.setTodoDone(todo.id, v ?? false);
-                  if ((v ?? false) && todo.repeat != 'none') {
-                    ScaffoldMessenger.of(context)
-                      ..hideCurrentSnackBar()
-                      ..showSnackBar(SnackBar(
-                          content: Text('Done. It repeats ${todoRepeatLabels[todo.repeat]!.toLowerCase()}.')));
-                  }
-                },
+                onChanged: (_) => toggleTodoDone(context, todo),
               ),
               Expanded(
                 child: Column(
@@ -264,6 +471,8 @@ class TodoTile extends StatelessWidget {
                   children: [
                     Text(
                       todo.title,
+                      maxLines: dense ? 1 : 3,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 15,
                         decoration: todo.done ? TextDecoration.lineThrough : null,
@@ -286,8 +495,10 @@ class TodoTile extends StatelessWidget {
               IconButton(
                 tooltip: todo.important ? 'Unmark important' : 'Mark important',
                 visualDensity: VisualDensity.compact,
-                icon: Icon(todo.important ? Icons.star_rounded : Icons.star_outline_rounded,
-                    color: todo.important ? const Color(0xFFE0A526) : p.muted),
+                icon: Icon(
+                  todo.important ? Icons.star_rounded : Icons.star_outline_rounded,
+                  color: todo.important ? const Color(0xFFE0A526) : p.muted,
+                ),
                 onPressed: () => db.updateTodo(todo.copyWith(important: !todo.important)),
               ),
             ],
@@ -312,8 +523,7 @@ class TodoTile extends StatelessWidget {
       ),
       confirmDismiss: (dir) async {
         if (dir == DismissDirection.startToEnd) {
-          if (!todo.done) HapticFeedback.lightImpact();
-          await db.setTodoDone(todo.id, !todo.done);
+          await toggleTodoDone(context, todo);
           return false;
         }
         return true;
@@ -435,6 +645,14 @@ QuickTask parseQuickTask(String input, {DateTime? now}) {
   return (q.title, q.due);
 }
 
+/// The bits quick-add understood, shown as chips while typing.
+List<(IconData, String)> quickTaskChips(QuickTask q) => [
+  if (q.due != null) (Icons.event_outlined, friendlyDay(q.due!)),
+  if (q.remindAt != null) (Icons.notifications_none_rounded, DateFormat.Hm().format(q.remindAt!)),
+  if (q.repeat != 'none') (Icons.repeat_rounded, todoRepeatLabels[q.repeat]!),
+  if (q.important) (Icons.star_rounded, 'Important'),
+];
+
 class _QuickAdd extends StatefulWidget {
   const _QuickAdd({this.spaceId});
   final int? spaceId;
@@ -459,9 +677,16 @@ class _QuickAddState extends State<_QuickAdd> {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     final q = parseQuickTask(text);
-    await context.db.addTodo(q.title,
-        due: q.due, remindAt: q.remindAt, repeat: q.repeat, important: q.important, spaceId: widget.spaceId);
+    await context.db.addTodo(
+      q.title,
+      due: q.due,
+      remindAt: q.remindAt,
+      repeat: q.repeat,
+      important: q.important,
+      spaceId: widget.spaceId,
+    );
     if (q.remindAt != null) await Reminders.instance.ensurePermission();
+    if (!mounted) return;
     _controller.clear();
     setState(() => _preview = null);
     _focus.requestFocus();
@@ -471,14 +696,7 @@ class _QuickAddState extends State<_QuickAdd> {
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     final q = _preview;
-    final hint = q == null || (q.due == null && q.remindAt == null && q.repeat == 'none' && !q.important)
-        ? null
-        : [
-            if (q.due != null) friendlyDay(q.due!),
-            if (q.remindAt != null) 'reminder ${DateFormat.Hm().format(q.remindAt!)}',
-            if (q.repeat != 'none') todoRepeatLabels[q.repeat]!.toLowerCase(),
-            if (q.important) 'important',
-          ].join(' · ');
+    final chips = q == null ? const <(IconData, String)>[] : quickTaskChips(q);
     return Container(
       decoration: BoxDecoration(
         color: p.surface,
@@ -486,34 +704,69 @@ class _QuickAddState extends State<_QuickAdd> {
       ),
       padding: EdgeInsets.fromLTRB(16, 10, 10, 10 + MediaQuery.paddingOf(context).bottom),
       child: ContentWidth(
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (hint != null)
-            Padding(
-              padding: const EdgeInsets.only(left: 12, bottom: 6),
-              child: Text(hint, style: const TextStyle(fontSize: 13.5, color: TileColors.todo)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AnimatedSize(
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOut,
+              alignment: Alignment.topLeft,
+              child: chips.isEmpty
+                  ? const SizedBox(width: double.infinity)
+                  : Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 8),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final (icon, label) in chips)
+                            Container(
+                              key: ValueKey('quick-$label'),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: TileColors.todo.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(icon, size: 14, color: TileColors.todo),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    label,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: TileColors.todo,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
             ),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _controller,
-                  focusNode: _focus,
-                  textCapitalization: TextCapitalization.sentences,
-                  textInputAction: TextInputAction.done,
-                  onChanged: (v) => setState(() => _preview = v.trim().isEmpty ? null : parseQuickTask(v)),
-                  onSubmitted: (_) => _submit(),
-                  decoration: const InputDecoration(hintText: 'Add a task', prefixIcon: Icon(Icons.add_rounded)),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _focus,
+                    textCapitalization: TextCapitalization.sentences,
+                    textInputAction: TextInputAction.done,
+                    onChanged: (v) => setState(() => _preview = v.trim().isEmpty ? null : parseQuickTask(v)),
+                    onSubmitted: (_) => _submit(),
+                    decoration: const InputDecoration(hintText: 'Add a task', prefixIcon: Icon(Icons.add_rounded)),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              IconButton.filled(
-                tooltip: 'Add',
-                onPressed: _submit,
-                icon: const Icon(Icons.arrow_upward_rounded),
-              ),
-            ],
-          ),
-        ]),
+                const SizedBox(width: 6),
+                IconButton.filled(tooltip: 'Add', onPressed: _submit, icon: const Icon(Icons.arrow_upward_rounded)),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -524,7 +777,11 @@ Future<void> editTodo(BuildContext context, Todo todo) {
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (_) => Hub(db: context.db, settings: context.settings, child: _TodoEditor(todo: todo)),
+    builder: (_) => Hub(
+      db: context.db,
+      settings: context.settings,
+      child: _TodoEditor(todo: todo),
+    ),
   );
 }
 
@@ -554,10 +811,12 @@ class _TodoEditorState extends State<_TodoEditor> {
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
+    final first = DateTime(now.year - 1);
     final picked = await showDatePicker(
       context: context,
       initialDate: _due ?? now,
-      firstDate: DateTime(now.year - 1),
+      // An old due date must still be inside the picker's range, or it throws.
+      firstDate: _due != null && _due!.isBefore(first) ? dateOnly(_due!) : first,
       lastDate: DateTime(now.year + 5),
     );
     if (picked != null) setState(() => _due = picked);
@@ -565,7 +824,8 @@ class _TodoEditorState extends State<_TodoEditor> {
 
   Future<void> _pickReminder() async {
     final now = DateTime.now();
-    final base = _remind ?? (_due != null ? DateTime(_due!.year, _due!.month, _due!.day, 9) : now.add(const Duration(hours: 1)));
+    final base =
+        _remind ?? (_due != null ? DateTime(_due!.year, _due!.month, _due!.day, 9) : now.add(const Duration(hours: 1)));
     final day = await showDatePicker(
       context: context,
       initialDate: base.isBefore(now) ? now : base,
@@ -574,7 +834,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     );
     if (day == null || !mounted) return;
     final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(base));
-    if (time == null) return;
+    if (time == null || !mounted) return;
     setState(() => _remind = DateTime(day.year, day.month, day.day, time.hour, time.minute));
   }
 
@@ -582,15 +842,17 @@ class _TodoEditorState extends State<_TodoEditor> {
     final title = _title.text.trim();
     if (title.isEmpty) return;
     final db = context.db;
-    await db.updateTodo(widget.todo.copyWith(
-      title: title,
-      details: _details.text.trim(),
-      due: Value(_due),
-      remindAt: Value(_remind),
-      important: _important,
-      repeat: _repeat,
-      spaceId: Value(_spaceId),
-    ));
+    await db.updateTodo(
+      widget.todo.copyWith(
+        title: title,
+        details: _details.text.trim(),
+        due: Value(_due),
+        remindAt: Value(_remind),
+        important: _important,
+        repeat: _repeat,
+        spaceId: Value(_spaceId),
+      ),
+    );
     if (_remind != null && _remind != widget.todo.remindAt) await Reminders.instance.ensurePermission();
     if (mounted) Navigator.of(context).pop();
   }
@@ -641,15 +903,18 @@ class _TodoEditorState extends State<_TodoEditor> {
                 ),
                 InputChip(
                   avatar: Icon(Icons.notifications_none_rounded, size: 18, color: p.muted),
-                  label: Text(_remind == null
-                      ? 'Remind me'
-                      : '${friendlyDay(_remind!)} ${DateFormat.Hm().format(_remind!)}'),
+                  label: Text(
+                    _remind == null ? 'Remind me' : '${friendlyDay(_remind!)} ${DateFormat.Hm().format(_remind!)}',
+                  ),
                   onPressed: _pickReminder,
                   onDeleted: _remind == null ? null : () => setState(() => _remind = null),
                 ),
                 FilterChip(
-                  avatar: Icon(_important ? Icons.star_rounded : Icons.star_outline_rounded,
-                      size: 18, color: _important ? const Color(0xFFE0A526) : p.muted),
+                  avatar: Icon(
+                    _important ? Icons.star_rounded : Icons.star_outline_rounded,
+                    size: 18,
+                    color: _important ? const Color(0xFFE0A526) : p.muted,
+                  ),
                   showCheckmark: false,
                   label: const Text('Important'),
                   selected: _important,
@@ -659,69 +924,85 @@ class _TodoEditorState extends State<_TodoEditor> {
             ),
             if (_remind == null) ...[
               const SizedBox(height: 8),
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                for (final MapEntry(key: label, value: at) in presets.entries)
-                  ActionChip(label: Text(label), onPressed: () => setState(() => _remind = at)),
-              ]),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final MapEntry(key: label, value: at) in presets.entries)
+                    ActionChip(label: Text(label), onPressed: () => setState(() => _remind = at)),
+                ],
+              ),
             ],
             const SizedBox(height: 14),
-            Row(children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _repeat,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Repeat'),
-                  items: [
-                    for (final MapEntry(key: k, value: v) in todoRepeatLabels.entries)
-                      DropdownMenuItem(value: k, child: Text(v, overflow: TextOverflow.ellipsis)),
-                  ],
-                  onChanged: (v) => setState(() => _repeat = v ?? 'none'),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _repeat,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Repeat'),
+                    items: [
+                      for (final MapEntry(key: k, value: v) in todoRepeatLabels.entries)
+                        DropdownMenuItem(
+                          value: k,
+                          child: Text(v, overflow: TextOverflow.ellipsis),
+                        ),
+                    ],
+                    onChanged: (v) => setState(() => _repeat = v ?? 'none'),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: StreamBuilder<List<Space>>(
-                  stream: context.db.watchSpaces(),
-                  builder: (context, snap) {
-                    final spaces = snap.data ?? const <Space>[];
-                    return DropdownButtonFormField<int?>(
-                      key: ValueKey(spaces.length),
-                      initialValue: spaces.any((s) => s.id == _spaceId) ? _spaceId : null,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Part of'),
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('Nothing')),
-                        for (final s in spaces)
-                          DropdownMenuItem(value: s.id, child: Text(s.name, overflow: TextOverflow.ellipsis)),
-                      ],
-                      onChanged: (v) => setState(() => _spaceId = v),
-                    );
-                  },
+                const SizedBox(width: 10),
+                Expanded(
+                  child: StreamBuilder<List<Space>>(
+                    stream: context.db.watchSpaces(),
+                    builder: (context, snap) {
+                      final spaces = snap.data ?? const <Space>[];
+                      return DropdownButtonFormField<int?>(
+                        key: ValueKey(spaces.length),
+                        initialValue: spaces.any((s) => s.id == _spaceId) ? _spaceId : null,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'Part of'),
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('Nothing')),
+                          for (final s in spaces)
+                            DropdownMenuItem(
+                              value: s.id,
+                              child: Text(s.name, overflow: TextOverflow.ellipsis),
+                            ),
+                        ],
+                        onChanged: (v) => setState(() => _spaceId = v),
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ]),
+              ],
+            ),
             const SizedBox(height: 18),
-            Row(children: [
-              TextButton.icon(
-                style: TextButton.styleFrom(foregroundColor: p.danger),
-                onPressed: () {
-                  final db = context.db;
-                  final messenger = ScaffoldMessenger.of(context);
-                  db.deleteTodo(widget.todo.id);
-                  Navigator.of(context).pop();
-                  messenger
-                    ..hideCurrentSnackBar()
-                    ..showSnackBar(SnackBar(
-                      content: const Text('Task deleted'),
-                      action: SnackBarAction(label: 'Undo', onPressed: () => db.restoreTodo(widget.todo)),
-                    ));
-                },
-                icon: const Icon(Icons.delete_outline_rounded),
-                label: const Text('Delete'),
-              ),
-              const Spacer(),
-              FilledButton(onPressed: _save, child: const Text('Save')),
-            ]),
+            Row(
+              children: [
+                TextButton.icon(
+                  style: TextButton.styleFrom(foregroundColor: p.danger),
+                  onPressed: () {
+                    final db = context.db;
+                    final messenger = ScaffoldMessenger.of(context);
+                    db.deleteTodo(widget.todo.id);
+                    Navigator.of(context).pop();
+                    messenger
+                      ..hideCurrentSnackBar()
+                      ..showSnackBar(
+                        SnackBar(
+                          content: const Text('Task deleted'),
+                          action: SnackBarAction(label: 'Undo', onPressed: () => db.restoreTodo(widget.todo)),
+                        ),
+                      );
+                  },
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  label: const Text('Delete'),
+                ),
+                const Spacer(),
+                FilledButton(onPressed: _save, child: const Text('Save')),
+              ],
+            ),
           ],
         ),
       ),

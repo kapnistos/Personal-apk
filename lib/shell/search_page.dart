@@ -52,33 +52,40 @@ class _SearchPageState extends State<SearchPage> {
 
   Future<void> _run(String q) async {
     final text = q.trim();
+    if (!mounted) return;
     if (text.length < 2) {
       setState(() => _results = null);
       return;
     }
     final db = context.db;
-    final like = '%$text%';
+    // Escape LIKE wildcards so "50%" or "a_b" match literally.
+    final like = '%${text.replaceAll(r'\', r'\\').replaceAll('%', r'\%').replaceAll('_', r'\_')}%';
+    Expression<bool> has(Expression<String> column) => column.like(like, escapeChar: r'\');
     final r = _SearchResults()
-      ..notes = await (db.select(db.notes)
-            ..where((n) => n.title.like(like) | n.body.like(like))
-            ..orderBy([(n) => OrderingTerm.desc(n.updatedAt)])
-            ..limit(8))
-          .get()
-      ..todos = await (db.select(db.todos)
-            ..where((t) => t.title.like(like) | t.details.like(like))
-            ..orderBy([(t) => OrderingTerm.asc(t.done)])
-            ..limit(8))
-          .get()
-      ..events = await (db.select(db.events)
-            ..where((e) => e.title.like(like) | e.location.like(like) | e.notes.like(like))
-            ..orderBy([(e) => OrderingTerm.desc(e.start)])
-            ..limit(8))
-          .get()
-      ..entries = await (db.select(db.entries)
-            ..where((e) => e.note.like(like) | e.category.like(like) | e.account.like(like))
-            ..orderBy([(e) => OrderingTerm.desc(e.date)])
-            ..limit(8))
-          .get();
+      ..notes =
+          await (db.select(db.notes)
+                ..where((n) => has(n.title) | has(n.body))
+                ..orderBy([(n) => OrderingTerm.desc(n.updatedAt)])
+                ..limit(8))
+              .get()
+      ..todos =
+          await (db.select(db.todos)
+                ..where((t) => has(t.title) | has(t.details))
+                ..orderBy([(t) => OrderingTerm.asc(t.done)])
+                ..limit(8))
+              .get()
+      ..events =
+          await (db.select(db.events)
+                ..where((e) => has(e.title) | has(e.location) | has(e.notes))
+                ..orderBy([(e) => OrderingTerm.desc(e.start)])
+                ..limit(8))
+              .get()
+      ..entries =
+          await (db.select(db.entries)
+                ..where((e) => has(e.note) | has(e.category) | has(e.account))
+                ..orderBy([(e) => OrderingTerm.desc(e.date)])
+                ..limit(8))
+              .get();
     final cals = await db.watchCalendars().first;
     if (!mounted || _controller.text.trim() != text) return;
     setState(() {
@@ -111,57 +118,61 @@ class _SearchPageState extends State<SearchPage> {
       body: r == null
           ? const SizedBox.shrink()
           : r.isEmpty
-              ? const EmptyState(icon: Icons.search_off_rounded, title: 'No results', message: 'Try another word.')
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-                  children: [
-                    if (r.notes.isNotEmpty)
-                      _group('Notes', [
-                        for (final n in r.notes)
-                          ListTile(
-                            leading: const Icon(Icons.sticky_note_2_outlined, color: TileColors.notes),
-                            title: Text(n.title.isEmpty ? 'Untitled' : n.title),
-                            subtitle: Text(n.body.replaceAll('\n', ' '), maxLines: 1, overflow: TextOverflow.ellipsis),
-                            onTap: () => openNote(context, note: n),
-                          ),
-                      ]),
-                    if (r.todos.isNotEmpty)
-                      _group('Tasks', [for (final t in r.todos) TodoTile(todo: t, dense: true)]),
-                    if (r.events.isNotEmpty)
-                      _group('Events', [
-                        for (final e in r.events)
-                          ListTile(
-                            leading: Icon(Icons.circle, size: 14, color: Color(_cals[e.calendarId]?.color ?? 0xFF888888)),
-                            title: Text(e.title),
-                            subtitle: Text(
-                              '${DateFormat('EEE d MMM y').format(e.start)}${e.allDay ? '' : ', ${DateFormat.Hm().format(e.start)}'}'
-                              '${e.repeat != 'none' ? ' · ${repeatLabels[e.repeat]}' : ''}',
-                              style: TextStyle(color: p.muted),
-                            ),
-                            onTap: () => showEventDetails(
-                              context,
-                              Occurrence(e, e.start, e.end, Color(_cals[e.calendarId]?.color ?? 0xFF888888)),
-                            ),
-                          ),
-                      ]),
-                    if (r.entries.isNotEmpty)
-                      _group('Wallet', [
-                        for (final e in r.entries)
-                          ListTile(
-                            leading: Icon(categoryInfo(e.category).icon, color: categoryInfo(e.category).color),
-                            title: Text(e.note.isEmpty ? e.category : e.note),
-                            subtitle: Text('${friendlyDay(e.date)} · ${e.category}', style: TextStyle(color: p.muted)),
-                            trailing: Text(money(e.kind.sign * e.amountCents, currency, signed: e.kind.sign != 0)),
-                            onTap: () => editEntry(context, entry: e),
-                          ),
-                      ]),
-                  ],
-                ),
+          ? const EmptyState(icon: Icons.search_off_rounded, title: 'No results', message: 'Try another word.')
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+              children: [
+                if (r.notes.isNotEmpty)
+                  _group('Notes', [
+                    for (final n in r.notes)
+                      ListTile(
+                        leading: const Icon(Icons.sticky_note_2_outlined, color: TileColors.notes),
+                        title: Text(n.title.isEmpty ? 'Untitled' : n.title),
+                        subtitle: Text(n.body.replaceAll('\n', ' '), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        onTap: () => openNote(context, note: n),
+                      ),
+                  ]),
+                if (r.todos.isNotEmpty) _group('Tasks', [for (final t in r.todos) TodoTile(todo: t, dense: true)]),
+                if (r.events.isNotEmpty)
+                  _group('Events', [
+                    for (final e in r.events)
+                      ListTile(
+                        leading: Icon(Icons.circle, size: 14, color: Color(_cals[e.calendarId]?.color ?? 0xFF888888)),
+                        title: Text(e.title),
+                        subtitle: Text(
+                          '${DateFormat('EEE d MMM y').format(e.start)}${e.allDay ? '' : ', ${DateFormat.Hm().format(e.start)}'}'
+                          '${e.repeat != 'none' ? ' · ${repeatLabels[e.repeat]}' : ''}',
+                          style: TextStyle(color: p.muted),
+                        ),
+                        onTap: () => showEventDetails(
+                          context,
+                          Occurrence(e, e.start, e.end, Color(_cals[e.calendarId]?.color ?? 0xFF888888)),
+                        ),
+                      ),
+                  ]),
+                if (r.entries.isNotEmpty)
+                  _group('Wallet', [
+                    for (final e in r.entries)
+                      ListTile(
+                        leading: Icon(categoryInfo(e.category).icon, color: categoryInfo(e.category).color),
+                        title: Text(e.note.isEmpty ? e.category : e.note),
+                        subtitle: Text('${friendlyDay(e.date)} · ${e.category}', style: TextStyle(color: p.muted)),
+                        trailing: Text(money(e.kind.sign * e.amountCents, currency, signed: e.kind.sign != 0)),
+                        onTap: () => editEntry(context, entry: e),
+                      ),
+                  ]),
+              ],
+            ),
     );
   }
 
   Widget _group(String title, List<Widget> children) => Padding(
-        padding: const EdgeInsets.only(bottom: 14),
-        child: ContentWidth(child: Section(title: title, child: Column(children: [...children, const SizedBox(height: 6)]))),
-      );
+    padding: const EdgeInsets.only(bottom: 14),
+    child: ContentWidth(
+      child: Section(
+        title: title,
+        child: Column(children: [...children, const SizedBox(height: 6)]),
+      ),
+    ),
+  );
 }

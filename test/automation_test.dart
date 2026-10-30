@@ -5,6 +5,7 @@ import 'package:hub/apps/habits/habits_page.dart';
 import 'package:hub/core/automations.dart';
 import 'package:hub/core/backup.dart';
 import 'package:hub/core/db/database.dart';
+import 'package:hub/core/reminders.dart';
 
 void main() {
   final now = DateTime(2026, 10, 30, 8); // A Friday morning.
@@ -99,5 +100,19 @@ void main() {
     // Saturday: Friday counts, the weekend doesn't break it.
     expect(habitStreak(h, done, now: DateTime(2026, 10, 31)), 3);
     expect(habitStreak(h, {'2026-10-26', '2026-10-30'}, now: DateTime(2026, 10, 30)), 1);
+  });
+
+  test('the reminder plan is stable, so an unchanged schedule is left alone', () async {
+    final db = await seeded();
+    await db.addTodo('Call the dentist', remindAt: DateTime(2026, 10, 30, 15));
+    await db.addTodo('Old reminder', remindAt: DateTime(2026, 10, 29, 15));
+    final a = await planReminders(db, now);
+    final b = await planReminders(db, now);
+    expect(a.join('\n'), b.join('\n'));
+    final todo = a.singleWhere((r) => r.payload.startsWith('todo:'));
+    expect(todo.title, 'Call the dentist');
+    expect(todo.todo, isTrue);
+    expect(a.where((r) => r.quiet), isNotEmpty);
+    await db.close();
   });
 }

@@ -8,6 +8,7 @@ import '../core/settings.dart';
 import '../core/theme.dart';
 import '../core/widgets.dart';
 import 'automations_page.dart';
+import 'dashboard.dart';
 
 class MePage extends StatelessWidget {
   const MePage({super.key});
@@ -49,16 +50,66 @@ class MePage extends StatelessWidget {
               child: Section(
                 title: 'Appearance',
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                  child: SegmentedButton<ThemeMode>(
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(value: ThemeMode.system, label: Text('System')),
-                      ButtonSegment(value: ThemeMode.light, label: Text('Light')),
-                      ButtonSegment(value: ThemeMode.dark, label: Text('Dark')),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SegmentedButton<ThemeMode>(
+                        showSelectedIcon: false,
+                        segments: const [
+                          ButtonSegment(value: ThemeMode.system, label: Text('System')),
+                          ButtonSegment(value: ThemeMode.light, label: Text('Light')),
+                          ButtonSegment(value: ThemeMode.dark, label: Text('Dark')),
+                        ],
+                        selected: {s.themeMode},
+                        onSelectionChanged: (v) => s.setThemeMode(v.first),
+                      ),
+                      const SizedBox(height: 18),
+                      _SubLabel('Accent colour'),
+                      ColorDots(
+                        colors: [for (final a in accentChoices) a.forBrightness(Theme.of(context).brightness)],
+                        labels: [for (final a in accentChoices) a.label],
+                        selected: accentChoices.indexOf(accentById(s.raw(accentKey))),
+                        onSelected: (i) {
+                          HapticFeedback.selectionClick();
+                          s.setRaw(accentKey, accentChoices[i].id);
+                        },
+                      ),
+                      const SizedBox(height: 18),
+                      _SubLabel('Dark background'),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          for (final e in darkBackgrounds.entries)
+                            ChoiceChip(
+                              label: Text(e.value),
+                              selected: (s.raw(darkBackgroundKey) ?? 'black') == e.key,
+                              onSelected: (_) => s.setRaw(darkBackgroundKey, e.key),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      _SubLabel('Home spacing'),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          for (final e in const {'comfortable': 'Comfortable', 'compact': 'Compact'}.entries)
+                            ChoiceChip(
+                              label: Text(e.value),
+                              selected: (s.raw(homeDensityKey) ?? 'comfortable') == e.key,
+                              onSelected: (_) => s.setRaw(homeDensityKey, e.key),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Greeting on Home'),
+                        subtitle: const Text('The date and a hello above your widgets'),
+                        value: s.raw(homeGreetingKey) != 'off',
+                        onChanged: (v) => s.setRaw(homeGreetingKey, v ? 'on' : 'off'),
+                      ),
                     ],
-                    selected: {s.themeMode},
-                    onSelectionChanged: (v) => s.setThemeMode(v.first),
                   ),
                 ),
               ),
@@ -184,6 +235,14 @@ class MePage extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SubLabel extends StatelessWidget {
+  const _SubLabel(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(bottom: 10), child: SectionLabel(text));
 }
 
 Future<String?> _prompt(BuildContext context, String title, String initial, {String? help}) {

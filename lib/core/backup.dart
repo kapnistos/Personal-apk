@@ -71,7 +71,7 @@ Future<int> restoreBackup(AppDatabase db, String json) async {
 Future<Directory> backupFolder() async {
   final base = await getApplicationSupportDirectory();
   final dir = Directory('${base.path}${Platform.pathSeparator}backups');
-  if (!dir.existsSync()) dir.createSync(recursive: true);
+  if (!await dir.exists()) await dir.create(recursive: true);
   return dir;
 }
 
@@ -81,10 +81,16 @@ Future<File?> autoBackup(AppDatabase db, {int keep = 14}) async {
     final dir = await backupFolder();
     final today = AppDatabase.dayKey(DateTime.now());
     final file = File('${dir.path}${Platform.pathSeparator}hub-$today.json');
-    if (!file.existsSync()) await file.writeAsString(await backupJson(db));
-    final all = listBackupsSync(dir);
+    if (!await file.exists()) {
+      // Written beside it first, so a crash mid-write never leaves a broken file that counts as today's backup.
+      final part = File('${file.path}.part');
+      await part.writeAsString(await backupJson(db), flush: true);
+      await part.rename(file.path);
+    }
+    final all = await dir.list().where((f) => f is File && f.path.endsWith('.json')).cast<File>().toList()
+      ..sort((a, b) => b.path.compareTo(a.path));
     for (final old in all.skip(keep)) {
-      old.deleteSync();
+      await old.delete();
     }
     return file;
   } catch (_) {

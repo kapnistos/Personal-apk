@@ -50,6 +50,24 @@ String toggleChecklistLine(String body, int line) {
   return lines.join('\n');
 }
 
+/// How the notes list is ordered. Pinned notes always come first.
+enum NoteSort { edited, created, title }
+
+const noteSortLabels = {NoteSort.edited: 'Last edited', NoteSort.created: 'Date created', NoteSort.title: 'Title'};
+
+List<Note> sortNotes(List<Note> notes, NoteSort sort) {
+  final out = List.of(notes);
+  String name(Note n) => (n.title.trim().isEmpty ? n.body.trim() : n.title.trim()).toLowerCase();
+  out.sort(
+    (a, b) => switch (sort) {
+      NoteSort.edited => b.updatedAt.compareTo(a.updatedAt),
+      NoteSort.created => b.createdAt.compareTo(a.createdAt),
+      NoteSort.title => name(a).compareTo(name(b)),
+    },
+  );
+  return out;
+}
+
 class NotesPage extends StatefulWidget {
   const NotesPage({super.key});
 
@@ -60,6 +78,18 @@ class NotesPage extends StatefulWidget {
 class _NotesPageState extends State<NotesPage> {
   String _query = '';
   late Stream<List<Note>> _stream;
+  final _search = TextEditingController();
+  NoteSort? _sort;
+  bool? _list;
+
+  NoteSort get sort => _sort ?? NoteSort.values.asNameMap()[context.settings.raw('notes.sort')] ?? NoteSort.edited;
+  bool get listView => _list ?? context.settings.raw('notes.view') == 'list';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
@@ -68,29 +98,58 @@ class _NotesPageState extends State<NotesPage> {
   }
 
   void _setQuery(String q) => setState(() {
-        _query = q;
-        _stream = context.db.watchNotes(query: q);
-      });
+    _query = q;
+    _stream = context.db.watchNotes(query: q);
+  });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Notes')),
-      floatingActionButton: Column(mainAxisSize: MainAxisSize.min, children: [
-        FloatingActionButton.small(
-          heroTag: 'checklist',
-          tooltip: 'New checklist',
-          onPressed: () => openNote(context, startWith: '- [ ] '),
-          child: const Icon(Icons.checklist_rounded),
-        ),
-        const SizedBox(height: 10),
-        FloatingActionButton(
-          heroTag: 'note',
-          tooltip: 'New note',
-          onPressed: () => openNote(context),
-          child: const Icon(Icons.edit_rounded),
-        ),
-      ]),
+      appBar: AppBar(
+        title: const Text('Notes'),
+        actions: [
+          IconButton(
+            tooltip: listView ? 'Show as grid' : 'Show as list',
+            icon: Icon(listView ? Icons.grid_view_rounded : Icons.view_agenda_outlined),
+            onPressed: () {
+              final v = !listView;
+              setState(() => _list = v);
+              context.settings.setRaw('notes.view', v ? 'list' : 'grid');
+            },
+          ),
+          PopupMenuButton<NoteSort>(
+            tooltip: 'Sort',
+            icon: const Icon(Icons.sort_rounded),
+            onSelected: (v) {
+              setState(() => _sort = v);
+              context.settings.setRaw('notes.sort', v.name);
+            },
+            itemBuilder: (_) => [
+              for (final v in NoteSort.values)
+                CheckedPopupMenuItem(value: v, checked: v == sort, child: Text(noteSortLabels[v]!)),
+            ],
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton.small(
+            heroTag: 'checklist',
+            tooltip: 'New checklist',
+            onPressed: () => openNote(context, startWith: '- [ ] '),
+            child: const Icon(Icons.checklist_rounded),
+          ),
+          const SizedBox(height: 10),
+          FloatingActionButton(
+            heroTag: 'note',
+            tooltip: 'New note',
+            onPressed: () => openNote(context),
+            child: const Icon(Icons.edit_rounded),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
@@ -98,10 +157,22 @@ class _NotesPageState extends State<NotesPage> {
             child: ContentWidth(
               maxWidth: 960,
               child: TextField(
+                controller: _search,
                 onChanged: _setQuery,
-                decoration: const InputDecoration(
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
                   hintText: 'Search notes',
-                  prefixIcon: Icon(Icons.search_rounded),
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: _query.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Clear',
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () {
+                            _search.clear();
+                            _setQuery('');
+                          },
+                        ),
                 ),
               ),
             ),
@@ -111,7 +182,7 @@ class _NotesPageState extends State<NotesPage> {
               stream: _stream,
               builder: (context, snap) {
                 if (!snap.hasData) return const SizedBox.shrink();
-                final notes = snap.data!;
+                final notes = sortNotes(snap.data!, sort);
                 if (notes.isEmpty) {
                   return _query.isEmpty
                       ? const EmptyState(
@@ -127,20 +198,33 @@ class _NotesPageState extends State<NotesPage> {
                 }
                 final pinned = notes.where((n) => n.pinned).toList();
                 final others = notes.where((n) => !n.pinned).toList();
-                return LayoutBuilder(builder: (context, c) {
-                  final cols = (c.maxWidth.clamp(0, 960) / 290).floor().clamp(2, 3);
-                  return ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 140),
-                    children: [
-                      if (pinned.isNotEmpty) ...[
-                        const ContentWidth(maxWidth: 960, child: _GroupLabel('Pinned')),
-                        ContentWidth(maxWidth: 960, child: _Masonry(columns: cols, notes: pinned)),
-                        if (others.isNotEmpty) const ContentWidth(maxWidth: 960, child: _GroupLabel('Others')),
+                return LayoutBuilder(
+                  builder: (context, c) {
+                    final cols = listView ? 1 : (c.maxWidth.clamp(0, 960) / 290).floor().clamp(2, 3);
+                    return ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 140),
+                      children: [
+                        if (_query.isNotEmpty)
+                          ContentWidth(
+                            maxWidth: 960,
+                            child: _GroupLabel('${notes.length} ${notes.length == 1 ? 'note' : 'notes'} found'),
+                          ),
+                        if (pinned.isNotEmpty) ...[
+                          ContentWidth(maxWidth: 960, child: _GroupLabel('Pinned  ${pinned.length}')),
+                          ContentWidth(
+                            maxWidth: 960,
+                            child: _Masonry(columns: cols, notes: pinned),
+                          ),
+                          if (others.isNotEmpty) const ContentWidth(maxWidth: 960, child: _GroupLabel('Others')),
+                        ],
+                        ContentWidth(
+                          maxWidth: 960,
+                          child: _Masonry(columns: cols, notes: others),
+                        ),
                       ],
-                      ContentWidth(maxWidth: 960, child: _Masonry(columns: cols, notes: others)),
-                    ],
-                  );
-                });
+                    );
+                  },
+                );
               },
             ),
           ),
@@ -188,9 +272,15 @@ class _Masonry extends StatelessWidget {
         for (var c = 0; c < columns; c++) ...[
           if (c > 0) const SizedBox(width: 10),
           Expanded(
-            child: Column(children: [
-              for (final n in cols[c]) Padding(padding: const EdgeInsets.only(bottom: 10), child: NoteCard(note: n)),
-            ]),
+            child: Column(
+              children: [
+                for (final n in cols[c])
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: NoteCard(note: n),
+                  ),
+              ],
+            ),
           ),
         ],
       ],
@@ -206,38 +296,51 @@ class NoteCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     final title = note.title.trim();
-    final lines = note.body.trim().split('\n').where((l) => l.trim().isNotEmpty).take(8).toList();
+    final lines = [
+      for (final (i, l) in note.body.split('\n').indexed)
+        if (l.trim().isNotEmpty) (i, l),
+    ].take(8).toList();
     final (done, total) = checklistCount(note.body);
     return Card(
       color: noteColor(context, note.color),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => openNote(context, note: note),
+        onLongPress: () => showNoteActions(context, note),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (title.isNotEmpty || note.pinned)
-                Row(children: [
-                  Expanded(
-                    child: Text(title.isEmpty ? 'Untitled' : title,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title.isEmpty ? 'Untitled' : title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-                  ),
-                  if (note.pinned) const Icon(Icons.push_pin_rounded, size: 15, color: TileColors.notes),
-                ]),
-              if (lines.isNotEmpty) const SizedBox(height: 4),
-              for (final l in lines) _PreviewLine(line: l, note: note),
-              const SizedBox(height: 6),
-              Row(children: [
-                Expanded(
-                  child: Text(relativeTime(note.updatedAt), style: TextStyle(color: p.muted, fontSize: 12.5)),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    if (note.pinned) const Icon(Icons.push_pin_rounded, size: 15, color: TileColors.notes),
+                  ],
                 ),
-                if (total > 0)
-                  Text('$done/$total', style: TextStyle(color: p.muted, fontSize: 12.5, fontWeight: FontWeight.w600)),
-              ]),
+              if (lines.isNotEmpty) const SizedBox(height: 4),
+              for (final (i, l) in lines) _PreviewLine(line: l, index: i, note: note),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(relativeTime(note.updatedAt), style: TextStyle(color: p.muted, fontSize: 12.5)),
+                  ),
+                  if (total > 0)
+                    Text(
+                      '$done/$total',
+                      style: TextStyle(color: p.muted, fontSize: 12.5, fontWeight: FontWeight.w600),
+                    ),
+                ],
+              ),
             ],
           ),
         ),
@@ -247,8 +350,11 @@ class NoteCard extends StatelessWidget {
 }
 
 class _PreviewLine extends StatelessWidget {
-  const _PreviewLine({required this.line, required this.note});
+  const _PreviewLine({required this.line, required this.index, required this.note});
   final String line;
+
+  /// The line's position in the note body, so repeated items tick the right one.
+  final int index;
   final Note note;
 
   @override
@@ -262,30 +368,123 @@ class _PreviewLine extends StatelessWidget {
     final ticked = m[2]!.toLowerCase() == 'x';
     return InkWell(
       onTap: () {
-        final index = note.body.split('\n').indexOf(line);
-        if (index < 0) return;
+        HapticFeedback.selectionClick();
         context.db.saveNote(id: note.id, title: note.title, body: toggleChecklistLine(note.body, index));
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 1),
-        child: Row(children: [
-          Icon(ticked ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
-              size: 17, color: ticked ? TileColors.notes : p.muted),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(m[3]!,
+        child: Row(
+          children: [
+            Icon(
+              ticked ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+              size: 17,
+              color: ticked ? TileColors.notes : p.muted,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                m[3]!,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: style.copyWith(decoration: ticked ? TextDecoration.lineThrough : null)),
-          ),
-        ]),
+                style: style.copyWith(decoration: ticked ? TextDecoration.lineThrough : null),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
+/// Long-press actions on a note card: pin, colour, copy or delete.
+Future<void> showNoteActions(BuildContext context, Note note) async {
+  final db = context.db;
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  HapticFeedback.selectionClick();
+  final action = await showModalBottomSheet<String>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) {
+      final p = Palette.of(context);
+      return SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (var i = 0; i < noteColors.length; i++)
+                      GestureDetector(
+                        onTap: () => Navigator.pop(context, 'color$i'),
+                        child: Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: noteColor(context, i) ?? p.surface,
+                            border: Border.all(color: note.color == i ? TileColors.notes : p.line, width: 2),
+                          ),
+                          child: note.color == i
+                              ? const Icon(Icons.check_rounded, size: 16, color: TileColors.notes)
+                              : null,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              ListTile(
+                leading: Icon(note.pinned ? Icons.push_pin_outlined : Icons.push_pin_rounded, color: p.muted),
+                title: Text(note.pinned ? 'Unpin' : 'Pin to the top'),
+                onTap: () => Navigator.pop(context, 'pin'),
+              ),
+              ListTile(
+                leading: Icon(Icons.copy_rounded, color: p.muted),
+                title: const Text('Copy text'),
+                onTap: () => Navigator.pop(context, 'copy'),
+              ),
+              ListTile(
+                leading: Icon(Icons.delete_outline_rounded, color: p.danger),
+                title: Text('Delete', style: TextStyle(color: p.danger)),
+                onTap: () => Navigator.pop(context, 'delete'),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+  if (action == null) return;
+  if (action.startsWith('color')) {
+    await db.setNoteColor(note.id, int.parse(action.substring(5)));
+  } else if (action == 'pin') {
+    await db.setNotePinned(note.id, !note.pinned);
+  } else if (action == 'copy') {
+    final text = [note.title.trim(), note.body.trim()].where((s) => s.isNotEmpty).join('\n\n');
+    await Clipboard.setData(ClipboardData(text: text));
+    messenger?.showSnackBar(const SnackBar(content: Text('Copied')));
+  } else if (action == 'delete') {
+    await db.deleteNote(note.id);
+    messenger
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: const Text('Note deleted'),
+          action: SnackBarAction(label: 'Undo', onPressed: () => db.restoreNote(note)),
+        ),
+      );
+  }
+}
+
 void openNote(BuildContext context, {Note? note, String startWith = ''}) {
-  Navigator.of(context).push(MaterialPageRoute(builder: (_) => NoteEditor(note: note, startWith: startWith)));
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => NoteEditor(note: note, startWith: startWith),
+    ),
+  );
 }
 
 class NoteEditor extends StatefulWidget {
@@ -347,12 +546,17 @@ class _NoteEditorState extends State<NoteEditor> {
           final start = before.length - prevLine.length;
           final next = text.substring(0, start) + text.substring(sel.start);
           _lastBody = next;
-          _body.value = TextEditingValue(text: next, selection: TextSelection.collapsed(offset: start));
+          _body.value = TextEditingValue(
+            text: next,
+            selection: TextSelection.collapsed(offset: start),
+          );
         } else {
           final next = text.substring(0, sel.start) + prefix + text.substring(sel.start);
           _lastBody = next;
-          _body.value =
-              TextEditingValue(text: next, selection: TextSelection.collapsed(offset: sel.start + prefix.length));
+          _body.value = TextEditingValue(
+            text: next,
+            selection: TextSelection.collapsed(offset: sel.start + prefix.length),
+          );
         }
         _changed();
         return;
@@ -414,7 +618,10 @@ class _NoteEditorState extends State<NoteEditor> {
     final next = line.startsWith(prefix) ? stripped : prefix + stripped;
     final updated = text.substring(0, lineStart) + next + text.substring(lineEnd);
     _lastBody = updated;
-    _body.value = TextEditingValue(text: updated, selection: TextSelection.collapsed(offset: lineStart + next.length));
+    _body.value = TextEditingValue(
+      text: updated,
+      selection: TextSelection.collapsed(offset: lineStart + next.length),
+    );
     _changed();
   }
 
@@ -423,7 +630,10 @@ class _NoteEditorState extends State<NoteEditor> {
     final at = _body.selection.isValid ? _body.selection.start : text.length;
     final updated = text.substring(0, at) + s + text.substring(_body.selection.isValid ? _body.selection.end : at);
     _lastBody = updated;
-    _body.value = TextEditingValue(text: updated, selection: TextSelection.collapsed(offset: at + s.length));
+    _body.value = TextEditingValue(
+      text: updated,
+      selection: TextSelection.collapsed(offset: at + s.length),
+    );
     _changed();
   }
 
@@ -446,10 +656,12 @@ class _NoteEditorState extends State<NoteEditor> {
       await _db.deleteNote(id);
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(
-          content: const Text('Note deleted'),
-          action: SnackBarAction(label: 'Undo', onPressed: () => _db.restoreNote(snapshot)),
-        ));
+        ..showSnackBar(
+          SnackBar(
+            content: const Text('Note deleted'),
+            action: SnackBarAction(label: 'Undo', onPressed: () => _db.restoreNote(snapshot)),
+          ),
+        );
     }
     navigator.pop();
   }
@@ -475,17 +687,16 @@ class _NoteEditorState extends State<NoteEditor> {
         actions: [
           IconButton(
             tooltip: _pinned ? 'Unpin' : 'Pin',
-            icon: Icon(_pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-                color: _pinned ? TileColors.notes : null),
+            icon: Icon(
+              _pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+              color: _pinned ? TileColors.notes : null,
+            ),
             onPressed: _togglePin,
           ),
           IconButton(
             tooltip: 'Ask Claude about this note',
             icon: const Icon(Icons.auto_awesome_outlined),
-            onPressed: () => ClaudeBridge.ask(
-              context,
-              'Help me with this note.\n\n# ${_title.text}\n\n${_body.text}',
-            ),
+            onPressed: () => ClaudeBridge.ask(context, 'Help me with this note.\n\n# ${_title.text}\n\n${_body.text}'),
           ),
           PopupMenuButton<String>(
             onSelected: (v) async {
@@ -506,97 +717,107 @@ class _NoteEditorState extends State<NoteEditor> {
               if (total > 0) const PopupMenuItem(value: 'untick', child: Text('Untick all items')),
               PopupMenuItem(
                 value: 'delete',
-                child: Row(children: [
-                  Icon(Icons.delete_outline_rounded, color: p.danger),
-                  const SizedBox(width: 12),
-                  Text('Delete', style: TextStyle(color: p.danger)),
-                ]),
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline_rounded, color: p.danger),
+                    const SizedBox(width: 12),
+                    Text('Delete', style: TextStyle(color: p.danger)),
+                  ],
+                ),
               ),
             ],
           ),
           const SizedBox(width: 4),
         ],
       ),
-      body: Column(children: [
-        Expanded(
-          child: ContentWidth(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 48),
-              children: [
-                TextField(
-                  controller: _title,
-                  autofocus: widget.note == null && widget.startWith.isEmpty,
-                  textCapitalization: TextCapitalization.sentences,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                  decoration: plain.copyWith(hintText: 'Title'),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 6, bottom: 4),
-                  child: Text(
-                    [
-                      if (widget.note != null) 'Edited ${relativeTime(widget.note!.updatedAt)}',
-                      '$words ${words == 1 ? 'word' : 'words'}',
-                      if (total > 0) '$done of $total done',
-                    ].join(' · '),
-                    style: TextStyle(color: p.muted, fontSize: 13),
+      body: Column(
+        children: [
+          Expanded(
+            child: ContentWidth(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 48),
+                children: [
+                  TextField(
+                    controller: _title,
+                    autofocus: widget.note == null && widget.startWith.isEmpty,
+                    textCapitalization: TextCapitalization.sentences,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                    decoration: plain.copyWith(hintText: 'Title'),
                   ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, bottom: 4),
+                    child: Text(
+                      [
+                        if (widget.note != null) 'Edited ${relativeTime(widget.note!.updatedAt)}',
+                        '$words ${words == 1 ? 'word' : 'words'}',
+                        if (total > 0) '$done of $total done',
+                      ].join(' · '),
+                      style: TextStyle(color: p.muted, fontSize: 13),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _body,
+                    autofocus: widget.startWith.isNotEmpty,
+                    maxLines: null,
+                    minLines: 12,
+                    keyboardType: TextInputType.multiline,
+                    textCapitalization: TextCapitalization.sentences,
+                    style: const TextStyle(fontSize: 16, height: 1.5),
+                    decoration: plain.copyWith(hintText: 'Start writing'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: p.line)),
+            ),
+            padding: EdgeInsets.fromLTRB(8, 4, 8, 4 + MediaQuery.paddingOf(context).bottom),
+            child: Row(
+              children: [
+                IconButton(
+                  tooltip: 'Checklist item',
+                  icon: const Icon(Icons.check_box_outlined),
+                  onPressed: () => _toggleLinePrefix('- [ ] '),
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _body,
-                  autofocus: widget.startWith.isNotEmpty,
-                  maxLines: null,
-                  minLines: 12,
-                  keyboardType: TextInputType.multiline,
-                  textCapitalization: TextCapitalization.sentences,
-                  style: const TextStyle(fontSize: 16, height: 1.5),
-                  decoration: plain.copyWith(hintText: 'Start writing'),
+                IconButton(
+                  tooltip: 'Bullet',
+                  icon: const Icon(Icons.format_list_bulleted_rounded),
+                  onPressed: () => _toggleLinePrefix('- '),
                 ),
+                IconButton(
+                  tooltip: 'Insert date and time',
+                  icon: const Icon(Icons.schedule_rounded),
+                  onPressed: () {
+                    final now = DateTime.now();
+                    _insert(
+                      '${friendlyDay(now)} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ',
+                    );
+                  },
+                ),
+                const Spacer(),
+                for (var i = 0; i < noteColors.length; i++)
+                  GestureDetector(
+                    onTap: () => _setColor(i),
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      decoration: BoxDecoration(
+                        color: i == 0 ? p.surface : noteColor(context, i),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: _color == i ? p.ink : p.line, width: _color == i ? 2 : 1),
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 6),
               ],
             ),
           ),
-        ),
-        Container(
-          decoration: BoxDecoration(border: Border(top: BorderSide(color: p.line))),
-          padding: EdgeInsets.fromLTRB(8, 4, 8, 4 + MediaQuery.paddingOf(context).bottom),
-          child: Row(children: [
-            IconButton(
-              tooltip: 'Checklist item',
-              icon: const Icon(Icons.check_box_outlined),
-              onPressed: () => _toggleLinePrefix('- [ ] '),
-            ),
-            IconButton(
-              tooltip: 'Bullet',
-              icon: const Icon(Icons.format_list_bulleted_rounded),
-              onPressed: () => _toggleLinePrefix('- '),
-            ),
-            IconButton(
-              tooltip: 'Insert date and time',
-              icon: const Icon(Icons.schedule_rounded),
-              onPressed: () {
-                final now = DateTime.now();
-                _insert('${friendlyDay(now)} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ');
-              },
-            ),
-            const Spacer(),
-            for (var i = 0; i < noteColors.length; i++)
-              GestureDetector(
-                onTap: () => _setColor(i),
-                child: Container(
-                  width: 22,
-                  height: 22,
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  decoration: BoxDecoration(
-                    color: i == 0 ? p.surface : noteColor(context, i),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: _color == i ? p.ink : p.line, width: _color == i ? 2 : 1),
-                  ),
-                ),
-              ),
-            const SizedBox(width: 6),
-          ]),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 }

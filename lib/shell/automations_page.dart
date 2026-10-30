@@ -292,7 +292,7 @@ class _BackupPageState extends State<BackupPage> {
         ],
       ),
     );
-    if (ok != true) return;
+    if (ok != true || !mounted) return;
     setState(() => _busy = true);
     try {
       // Keep a copy of how things are now, in case the restore was a mistake.
@@ -311,7 +311,8 @@ class _BackupPageState extends State<BackupPage> {
     final f = files.firstOrNull;
     if (f == null) return;
     final bytes = await f.xFile.readAsBytes();
-    await _restoreText(utf8.decode(bytes));
+    if (!mounted) return;
+    await _restoreText(utf8.decode(bytes, allowMalformed: true));
   }
 
   @override

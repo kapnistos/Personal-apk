@@ -8,6 +8,7 @@ import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'accounts_page.dart';
+import 'wallet_logic.dart';
 import 'wallet_model.dart';
 
 class SubscriptionsPage extends StatelessWidget {
@@ -41,105 +42,160 @@ class SubscriptionsPage extends StatelessWidget {
         icon: const Icon(Icons.add_rounded),
         label: const Text('Add'),
       ),
-      body: StreamBuilder<List<Subscription>>(
-        stream: context.db.watchSubscriptions(),
-        builder: (context, snap) {
-          final subs = snap.data ?? const <Subscription>[];
-          if (subs.isEmpty) {
-            return const EmptyState(
-              icon: Icons.autorenew_rounded,
-              title: 'No recurring items',
-              message: 'Add rent, Netflix, insurance or your salary. Hub books each payment on its date.',
-            );
-          }
-          final active = subs.where((s) => s.active);
-          final outPerMonth = active.where((s) => s.kind.sign < 0).fold<int>(0, (t, s) => t + monthlyCents(s));
-          final inPerMonth = active.where((s) => s.kind.sign > 0).fold<int>(0, (t, s) => t + monthlyCents(s));
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
-            children: [
-              ContentWidth(
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(18),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+      // Rebuilds when a cancel reminder is set or cleared.
+      body: ListenableBuilder(
+        listenable: context.settings,
+        builder: (context, _) => StreamBuilder<List<Subscription>>(
+          stream: context.db.watchSubscriptions(),
+          builder: (context, snap) {
+            final subs = snap.data ?? const <Subscription>[];
+            if (subs.isEmpty) {
+              return const EmptyState(
+                icon: Icons.autorenew_rounded,
+                title: 'No recurring items',
+                message: 'Add rent, Netflix, insurance or your salary. Hub books each payment on its date.',
+              );
+            }
+            final active = subs.where((s) => s.active);
+            final now = DateTime.now();
+            final bills = billCalendar(subs, now);
+            final outPerMonth = active.where((s) => s.kind.sign < 0).fold<int>(0, (t, s) => t + monthlyCents(s));
+            final inPerMonth = active.where((s) => s.kind.sign > 0).fold<int>(0, (t, s) => t + monthlyCents(s));
+            return StreamBuilder<List<Entry>>(
+              stream: context.db.watchEntries(addMonths(dateOnly(now), -13), addDays(dateOnly(now), 1)),
+              builder: (context, booked) {
+                final history = <int, List<Entry>>{};
+                for (final e in booked.data ?? const <Entry>[]) {
+                  if (e.subscriptionId != null) (history[e.subscriptionId!] ??= []).add(e);
+                }
+                final changes = {for (final s in subs) s.id: ?priceChangeOf(s.amountCents, history[s.id] ?? const [])};
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
+                  children: [
+                    ContentWidth(
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(18),
+                          child: Row(
                             children: [
-                              Text('Fixed costs per month', style: TextStyle(color: p.muted, fontSize: 13.5)),
-                              BigAmount(money(outPerMonth, currency), size: 30),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Fixed costs per month', style: TextStyle(color: p.muted, fontSize: 13.5)),
+                                    BigAmount(money(outPerMonth, currency), size: 30),
+                                  ],
+                                ),
+                              ),
+                              if (inPerMonth > 0)
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text('Recurring income', style: TextStyle(color: p.muted, fontSize: 13.5)),
+                                    Text(
+                                      money(inPerMonth, currency),
+                                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: p.positive),
+                                    ),
+                                  ],
+                                ),
                             ],
                           ),
                         ),
-                        if (inPerMonth > 0)
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text('Recurring income', style: TextStyle(color: p.muted, fontSize: 13.5)),
-                              Text(
-                                money(inPerMonth, currency),
-                                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: p.positive),
-                              ),
-                            ],
-                          ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              ContentWidth(
-                child: Card(
-                  clipBehavior: Clip.antiAlias,
-                  child: Column(
-                    children: [
-                      for (var i = 0; i < subs.length; i++) ...[
-                        if (i > 0) const Divider(indent: 64),
-                        Builder(
-                          builder: (context) {
-                            final s = subs[i];
-                            final info = categoryInfo(s.category);
-                            return Opacity(
-                              opacity: s.active ? 1 : 0.5,
-                              child: ListTile(
-                                onTap: () => _edit(context, s),
-                                leading: Container(
-                                  width: 38,
-                                  height: 38,
-                                  decoration: BoxDecoration(
-                                    color: info.color.withValues(alpha: 0.16),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(info.icon, size: 20, color: info.color),
-                                ),
-                                title: Text(s.name),
-                                subtitle: Text(
-                                  s.active
-                                      ? '${periodLabel(s.periodMonths)} · next ${friendlyDay(s.nextDate)}'
-                                      : 'Paused',
-                                  style: TextStyle(color: p.muted, fontSize: 13.5),
-                                ),
-                                trailing: Text(
-                                  money(s.kind.sign * s.amountCents, currency, signed: true),
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    color: s.kind.sign > 0 ? p.positive : p.ink,
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
+                    if (bills.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      ContentWidth(
+                        child: _BillStrip(bills: bills, currency: currency),
+                      ),
                     ],
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
+                    const SizedBox(height: 12),
+                    ContentWidth(
+                      child: Card(
+                        clipBehavior: Clip.antiAlias,
+                        child: Column(
+                          children: [
+                            for (var i = 0; i < subs.length; i++) ...[
+                              if (i > 0) const Divider(indent: 64),
+                              Builder(
+                                builder: (context) {
+                                  final s = subs[i];
+                                  final info = categoryInfo(s.category);
+                                  final change = changes[s.id];
+                                  final cancelBy = DateTime.tryParse(
+                                    context.settings.raw('$cancelReminderKey${s.id}') ?? '',
+                                  );
+                                  return Opacity(
+                                    opacity: s.active ? 1 : 0.5,
+                                    child: ListTile(
+                                      onTap: () => _edit(context, s),
+                                      leading: Container(
+                                        width: 38,
+                                        height: 38,
+                                        decoration: BoxDecoration(
+                                          color: info.color.withValues(alpha: 0.16),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(info.icon, size: 20, color: info.color),
+                                      ),
+                                      title: Text(s.name),
+                                      subtitle: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            s.active
+                                                ? '${periodLabel(s.periodMonths)} · next ${friendlyDay(s.nextDate)}'
+                                                : 'Paused',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(color: p.muted, fontSize: 13.5),
+                                          ),
+                                          if (change != null && s.active)
+                                            Text(
+                                              change.up
+                                                  ? 'Went up by ${money(change.diff, currency)} (was ${money(change.before, currency)})'
+                                                  : 'Went down by ${money(-change.diff, currency)} (was ${money(change.before, currency)})',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: change.up == (s.kind.sign < 0) ? p.danger : p.positive,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          if (cancelBy != null && s.active)
+                                            Text(
+                                              'Cancel by ${friendlyDay(cancelBy)}',
+                                              style: TextStyle(
+                                                color: p.danger,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      trailing: Text(
+                                        money(s.kind.sign * s.amountCents, currency, signed: true),
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: s.kind.sign > 0 ? p.positive : p.ink,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -200,6 +256,50 @@ class _SubscriptionEditorState extends State<_SubscriptionEditor> {
     if (!mounted) return;
     await context.db.bookDueSubscriptions();
     if (mounted) Navigator.pop(context);
+  }
+
+  /// Thinking of cancelling? Adds a to-do with a reminder a few days before the next payment.
+  Widget _cancelReminder(BuildContext context) {
+    final p = Palette.of(context);
+    final settings = context.settings;
+    final key = '$cancelReminderKey${widget.sub!.id}';
+    final set = DateTime.tryParse(settings.raw(key) ?? '');
+    if (set != null) {
+      return ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(Icons.alarm_on_rounded, color: p.danger),
+        title: Text('Cancel by ${friendlyDay(set)}'),
+        subtitle: const Text('It is on your to-do list'),
+        trailing: TextButton(
+          onPressed: () async {
+            await settings.setRaw(key, '');
+            if (mounted) setState(() {});
+          },
+          child: const Text('Clear'),
+        ),
+      );
+    }
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: () async {
+          final s = widget.sub!;
+          final messenger = ScaffoldMessenger.of(context);
+          final now = DateTime.now();
+          final due = addDays(dateOnly(s.nextDate), -1);
+          var remind = DateTime(due.year, due.month, due.day - 2, 9);
+          if (remind.isBefore(now)) remind = now.add(const Duration(hours: 1));
+          await context.db.addTodo('Cancel ${s.name}', due: due, remindAt: remind, important: true);
+          await settings.setRaw(key, due.toIso8601String());
+          messenger.showSnackBar(
+            SnackBar(content: Text('Added to your to-dos. Hub will remind you on ${friendlyDay(remind)}.')),
+          );
+          if (mounted) setState(() {});
+        },
+        icon: const Icon(Icons.alarm_add_rounded, size: 18),
+        label: const Text('Remind me to cancel'),
+      ),
+    );
   }
 
   @override
@@ -299,6 +399,7 @@ class _SubscriptionEditorState extends State<_SubscriptionEditor> {
                 ),
               ],
             ),
+            if (widget.sub != null && _kind != EntryKind.income) _cancelReminder(context),
             if (widget.sub != null)
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -323,6 +424,84 @@ class _SubscriptionEditorState extends State<_SubscriptionEditor> {
                 FilledButton(onPressed: _save, child: Text(widget.sub == null ? 'Add' : 'Save')),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The next 30 days of bills as a row of day cards, Revolut style.
+class _BillStrip extends StatelessWidget {
+  const _BillStrip({required this.bills, required this.currency});
+  final List<BillDay> bills;
+  final String currency;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final byDay = <DateTime, List<BillDay>>{};
+    for (final b in bills) {
+      (byDay[b.date] ??= []).add(b);
+    }
+    final out = bills.where((b) => b.sub.kind.sign < 0).fold<int>(0, (t, b) => t + b.sub.amountCents);
+    return Section(
+      title: 'Coming up',
+      trailing: Padding(
+        padding: const EdgeInsets.only(right: 12),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 150),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text('${money(out, currency)} in 30 days', style: TextStyle(color: p.muted, fontSize: 13)),
+          ),
+        ),
+      ),
+      child: SizedBox(
+        height: 118,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(12, 2, 12, 14),
+          children: [
+            for (final d in byDay.keys)
+              Tooltip(
+                message: byDay[d]!.map((b) => b.sub.name).join(', '),
+                child: Container(
+                  width: 84,
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                  decoration: BoxDecoration(color: p.raised, borderRadius: BorderRadius.circular(18)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        DateFormat.E().format(d),
+                        style: TextStyle(color: p.muted, fontSize: 12, fontWeight: FontWeight.w500),
+                      ),
+                      Text('${d.day}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, height: 1.15)),
+                      const Spacer(),
+                      Text(
+                        byDay[d]!.length == 1 ? byDay[d]!.first.sub.name : '${byDay[d]!.length} payments',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: p.muted, fontSize: 11.5),
+                      ),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          money(
+                            byDay[d]!.fold<int>(0, (t, b) => t + b.sub.kind.sign * b.sub.amountCents),
+                            currency,
+                            signed: true,
+                          ),
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       ),

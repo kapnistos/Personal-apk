@@ -26,12 +26,15 @@ class WeatherPage extends StatefulWidget {
 }
 
 class _WeatherPageState extends State<WeatherPage> {
+  // Kept so a redraw doesn't start a new database query.
+  late final _cities = context.db.watchCities();
+
   void _select(int id) => context.settings.setRaw('weather.city', '$id');
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<City>>(
-      stream: context.db.watchCities(),
+      stream: _cities,
       builder: (context, snap) {
         final cities = snap.data ?? const <City>[];
         final city = selectedCity(context, cities);
@@ -42,12 +45,15 @@ class _WeatherPageState extends State<WeatherPage> {
               onTap: () => showLocationPicker(context),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.place_outlined, size: 20),
-                  const SizedBox(width: 6),
-                  Flexible(child: Text(city?.name ?? 'Weather', overflow: TextOverflow.ellipsis)),
-                  const Icon(Icons.arrow_drop_down_rounded),
-                ]),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.place_outlined, size: 20),
+                    const SizedBox(width: 6),
+                    Flexible(child: Text(city?.name ?? 'Weather', overflow: TextOverflow.ellipsis)),
+                    const Icon(Icons.arrow_drop_down_rounded),
+                  ],
+                ),
               ),
             ),
             actions: [
@@ -67,42 +73,44 @@ class _WeatherPageState extends State<WeatherPage> {
           body: !snap.hasData
               ? const SizedBox.shrink()
               : cities.isEmpty
-                  ? EmptyState(
-                      icon: Icons.location_city_rounded,
-                      title: 'No cities yet',
-                      message: 'Add a city to see its forecast.',
-                      action: FilledButton.icon(
-                        onPressed: () => showCityManager(context),
-                        icon: const Icon(Icons.add_rounded),
-                        label: const Text('Add city'),
+              ? EmptyState(
+                  icon: Icons.location_city_rounded,
+                  title: 'No cities yet',
+                  message: 'Add a city to see its forecast.',
+                  action: FilledButton.icon(
+                    onPressed: () => showCityManager(context),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Add city'),
+                  ),
+                )
+              : Column(
+                  children: [
+                    if (cities.length > 1)
+                      SizedBox(
+                        height: 48,
+                        child: ListView.separated(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          scrollDirection: Axis.horizontal,
+                          itemCount: cities.length,
+                          separatorBuilder: (_, _) => const SizedBox(width: 8),
+                          itemBuilder: (context, i) {
+                            final c = cities[i];
+                            return Center(
+                              child: ChoiceChip(
+                                label: Text(c.name),
+                                selected: c.id == city!.id,
+                                showCheckmark: false,
+                                onSelected: (_) => _select(c.id),
+                              ),
+                            );
+                          },
+                        ),
                       ),
-                    )
-                  : Column(
-                      children: [
-                        if (cities.length > 1)
-                          SizedBox(
-                            height: 48,
-                            child: ListView.separated(
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              scrollDirection: Axis.horizontal,
-                              itemCount: cities.length,
-                              separatorBuilder: (_, _) => const SizedBox(width: 8),
-                              itemBuilder: (context, i) {
-                                final c = cities[i];
-                                return Center(
-                                  child: ChoiceChip(
-                                    label: Text(c.name),
-                                    selected: c.id == city!.id,
-                                    showCheckmark: false,
-                                    onSelected: (_) => _select(c.id),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        Expanded(child: _CityForecast(key: ValueKey(city!.id), city: city)),
-                      ],
+                    Expanded(
+                      child: _CityForecast(key: ValueKey(city!.id), city: city),
                     ),
+                  ],
+                ),
         );
       },
     );
@@ -133,8 +141,7 @@ class _CityForecastState extends State<_CityForecast> {
   Future<void> _load({bool force = false}) async {
     if (force) _nowcastKey.currentState?.reload();
     try {
-      final f = await WeatherService.instance
-          .forecast(widget.city.latitude, widget.city.longitude, force: force);
+      final f = await WeatherService.instance.forecast(widget.city.latitude, widget.city.longitude, force: force);
       if (mounted) {
         setState(() {
           _forecast = f;
@@ -143,6 +150,8 @@ class _CityForecastState extends State<_CityForecast> {
       }
     } on WeatherException catch (e) {
       if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Something went wrong loading the forecast.');
     }
   }
 
@@ -172,24 +181,31 @@ class _CityForecastState extends State<_CityForecast> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          ContentWidth(child: _NowCard(city: widget.city, f: f, unit: unit)),
+          ContentWidth(
+            child: _NowCard(city: widget.city, f: f, unit: unit),
+          ),
           const SizedBox(height: 16),
-          ContentWidth(child: RainNowcastCard(key: _nowcastKey, city: widget.city)),
+          ContentWidth(
+            child: RainNowcastCard(key: _nowcastKey, city: widget.city),
+          ),
           const SizedBox(height: 16),
-          ContentWidth(child: _HourlyStrip(f: f, unit: unit)),
+          ContentWidth(
+            child: _HourlyStrip(f: f, unit: unit),
+          ),
           const SizedBox(height: 16),
-          ContentWidth(child: _DailyList(f: f, unit: unit)),
+          ContentWidth(
+            child: _DailyList(f: f, unit: unit),
+          ),
           const SizedBox(height: 16),
-          ContentWidth(child: _Details(f: f, unit: unit)),
+          ContentWidth(
+            child: _Details(f: f, unit: unit),
+          ),
           const SizedBox(height: 16),
           const ContentWidth(child: WeatherSourcesCard()),
           const SizedBox(height: 12),
           ContentWidth(
             child: Text(
-              [
-                'Updated ${DateFormat.Hm().format(f.fetchedAt)} · ${f.source}',
-                ?f.note,
-              ].join('\n'),
+              ['Updated ${DateFormat.Hm().format(f.fetchedAt)} · ${f.source}', ?f.note].join('\n'),
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Palette.of(context).muted),
             ),
@@ -232,15 +248,23 @@ class _NowCard extends StatelessWidget {
             children: [
               Text(
                 formatTemp(f.temperature, unit),
-                style: const TextStyle(fontSize: 76, height: 0.95, fontWeight: FontWeight.w300, color: white, letterSpacing: -3),
+                style: const TextStyle(
+                  fontSize: 76,
+                  height: 0.95,
+                  fontWeight: FontWeight.w300,
+                  color: white,
+                  letterSpacing: -3,
+                ),
               ),
               const Spacer(),
               Icon(WeatherCode.icon(f.code, isDay: f.isDay), size: 56, color: white),
             ],
           ),
           const SizedBox(height: 10),
-          Text(WeatherCode.label(f.code),
-              style: const TextStyle(color: white, fontSize: 17, fontWeight: FontWeight.w600)),
+          Text(
+            WeatherCode.label(f.code),
+            style: const TextStyle(color: white, fontSize: 17, fontWeight: FontWeight.w600),
+          ),
           if (today != null)
             Text(
               'High ${formatTemp(today.max, unit)} · Low ${formatTemp(today.min, unit)} · Feels like ${formatTemp(f.feelsLike, unit)}',
@@ -278,19 +302,29 @@ class _HourlyStrip extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(i == 0 ? 'Now' : DateFormat.H().format(h.time),
-                      style: TextStyle(color: p.muted, fontSize: 13, fontWeight: FontWeight.w500)),
+                  Text(
+                    i == 0 ? 'Now' : DateFormat.H().format(h.time),
+                    style: TextStyle(color: p.muted, fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
                   const SizedBox(height: 8),
                   Icon(WeatherCode.icon(h.code, isDay: isDay), size: 22, color: p.ink),
                   SizedBox(
                     height: 16,
                     child: h.rainChance >= 20
-                        ? Text('${h.rainChance}%',
-                            style: const TextStyle(fontSize: 12, color: TileColors.weather, fontWeight: FontWeight.w600))
+                        ? Text(
+                            '${h.rainChance}%',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: TileColors.weather,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          )
                         : null,
                   ),
-                  Text(formatTemp(h.temperature, unit),
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                  Text(
+                    formatTemp(h.temperature, unit),
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                  ),
                 ],
               ),
             );
@@ -330,38 +364,54 @@ class _DailyList extends StatelessWidget {
                   SizedBox(
                     width: 40,
                     child: d.rainChance >= 20
-                        ? Text(' ${d.rainChance}%',
-                            style: const TextStyle(fontSize: 12, color: TileColors.weather, fontWeight: FontWeight.w600))
+                        ? Text(
+                            ' ${d.rainChance}%',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: TileColors.weather,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          )
                         : null,
                   ),
                   SizedBox(
                     width: 36,
-                    child: Text(formatTemp(d.min, unit), textAlign: TextAlign.right, style: TextStyle(color: p.muted)),
+                    child: Text(
+                      formatTemp(d.min, unit),
+                      textAlign: TextAlign.right,
+                      style: TextStyle(color: p.muted),
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: LayoutBuilder(builder: (context, c) {
-                      final left = (d.min - lo) / span * c.maxWidth;
-                      final width = math.max(6.0, (d.max - d.min) / span * c.maxWidth);
-                      return SizedBox(
-                        height: 6,
-                        child: Stack(children: [
-                          Container(decoration: BoxDecoration(color: p.raised, borderRadius: BorderRadius.circular(3))),
-                          Positioned(
-                            left: left,
-                            width: math.min(width, c.maxWidth - left),
-                            top: 0,
-                            bottom: 0,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(3),
-                                gradient: const LinearGradient(colors: [Color(0xFF6FB1E8), Color(0xFFE9A23B)]),
+                    child: LayoutBuilder(
+                      builder: (context, c) {
+                        final left = (d.min - lo) / span * c.maxWidth;
+                        final width = math.max(6.0, (d.max - d.min) / span * c.maxWidth);
+                        return SizedBox(
+                          height: 6,
+                          child: Stack(
+                            children: [
+                              Container(
+                                decoration: BoxDecoration(color: p.raised, borderRadius: BorderRadius.circular(3)),
                               ),
-                            ),
+                              Positioned(
+                                left: left,
+                                width: math.min(width, c.maxWidth - left),
+                                top: 0,
+                                bottom: 0,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(3),
+                                    gradient: const LinearGradient(colors: [Color(0xFF6FB1E8), Color(0xFFE9A23B)]),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ]),
-                      );
-                    }),
+                        );
+                      },
+                    ),
                   ),
                   const SizedBox(width: 10),
                   SizedBox(
@@ -395,35 +445,42 @@ class _Details extends StatelessWidget {
       if (today != null) (Icons.umbrella_outlined, 'Rain today', '${today.rainChance}%'),
     ];
     final p = Palette.of(context);
-    return LayoutBuilder(builder: (context, c) {
-      final cols = c.maxWidth > 560 ? 3 : 2;
-      final w = (c.maxWidth - (cols - 1) * 10) / cols;
-      return Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: [
-          for (final (icon, label, value) in items)
-            SizedBox(
-              width: w,
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(children: [
-                    Icon(icon, size: 20, color: p.muted),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(label, style: TextStyle(color: p.muted, fontSize: 13)),
-                        Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                      ]),
+    return LayoutBuilder(
+      builder: (context, c) {
+        final cols = c.maxWidth > 560 ? 3 : 2;
+        final w = (c.maxWidth - (cols - 1) * 10) / cols;
+        return Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            for (final (icon, label, value) in items)
+              SizedBox(
+                width: w,
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        Icon(icon, size: 20, color: p.muted),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(label, style: TextStyle(color: p.muted, fontSize: 13)),
+                              Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ]),
+                  ),
                 ),
               ),
-            ),
-        ],
-      );
-    });
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -431,11 +488,7 @@ Future<void> showCityManager(BuildContext context) {
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    builder: (_) => Hub(
-      db: context.db,
-      settings: context.settings,
-      child: const _CityManager(),
-    ),
+    builder: (_) => Hub(db: context.db, settings: context.settings, child: const _CityManager()),
   );
 }
 
@@ -484,6 +537,8 @@ class _CityManagerState extends State<_CityManager> {
       }
     } on WeatherException catch (e) {
       if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Search is not working right now. Try again in a moment.');
     } finally {
       if (mounted) setState(() => _searching = false);
     }
@@ -549,7 +604,11 @@ class _CityManagerState extends State<_CityManager> {
                         if (_results.isEmpty && !_searching && _error == null)
                           Padding(
                             padding: const EdgeInsets.all(24),
-                            child: Text('No matches', textAlign: TextAlign.center, style: TextStyle(color: p.muted)),
+                            child: Text(
+                              'No matches',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: p.muted),
+                            ),
                           ),
                       ],
                     )
@@ -645,8 +704,7 @@ class RainNowcastCardState extends State<RainNowcastCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(n.summary(DateFormat.Hm().format),
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+            Text(n.summary(DateFormat.Hm().format), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
             const SizedBox(height: 12),
             SizedBox(
               height: 64,
@@ -672,14 +730,18 @@ class RainNowcastCardState extends State<RainNowcastCard> {
             ),
             const SizedBox(height: 6),
             if (n.points.isNotEmpty)
-              Row(children: [
-                Text('Now', style: TextStyle(color: p.muted, fontSize: 12.5)),
-                const Spacer(),
-                Text(DateFormat.Hm().format(n.points[n.points.length ~/ 2].time),
-                    style: TextStyle(color: p.muted, fontSize: 12.5)),
-                const Spacer(),
-                Text(DateFormat.Hm().format(n.points.last.time), style: TextStyle(color: p.muted, fontSize: 12.5)),
-              ]),
+              Row(
+                children: [
+                  Text('Now', style: TextStyle(color: p.muted, fontSize: 12.5)),
+                  const Spacer(),
+                  Text(
+                    DateFormat.Hm().format(n.points[n.points.length ~/ 2].time),
+                    style: TextStyle(color: p.muted, fontSize: 12.5),
+                  ),
+                  const Spacer(),
+                  Text(DateFormat.Hm().format(n.points.last.time), style: TextStyle(color: p.muted, fontSize: 12.5)),
+                ],
+              ),
             const SizedBox(height: 4),
             Text(n.source, style: TextStyle(color: p.muted, fontSize: 12)),
           ],
@@ -688,7 +750,6 @@ class RainNowcastCardState extends State<RainNowcastCard> {
     );
   }
 }
-
 
 /// The city the person picked last, or the first one.
 City? selectedCity(BuildContext context, List<City> cities) {
@@ -727,7 +788,15 @@ Future<void> useMyLocation(BuildContext context) async {
       await settings.setRaw('weather.city', '${added.id}');
     }
   } catch (e) {
-    messenger.showSnackBar(SnackBar(content: Text('Could not get your location: $e')));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          e is TimeoutException
+              ? 'Finding your location took too long. Try again outside.'
+              : 'Could not get your location.',
+        ),
+      ),
+    );
   }
 }
 
@@ -747,38 +816,41 @@ void showLocationPicker(BuildContext context) {
           final cities = snap.data ?? const <City>[];
           final current = selectedCity(sheet, cities);
           return SafeArea(
-            child: ListView(shrinkWrap: true, children: [
-              ListTile(
-                leading: const Icon(Icons.my_location_rounded),
-                title: const Text('Use my location'),
-                onTap: () {
-                  Navigator.pop(sheet);
-                  useMyLocation(context);
-                },
-              ),
-              const Divider(),
-              for (final c in cities)
+            child: ListView(
+              shrinkWrap: true,
+              children: [
                 ListTile(
-                  leading: Icon(
-                    c.id == current?.id ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                    color: c.id == current?.id ? TileColors.weather : null,
-                  ),
-                  title: Text(c.name),
-                  subtitle: c.region.isEmpty ? null : Text(c.region),
+                  leading: const Icon(Icons.my_location_rounded),
+                  title: const Text('Use my location'),
                   onTap: () {
-                    settings.setRaw('weather.city', '${c.id}');
                     Navigator.pop(sheet);
+                    useMyLocation(context);
                   },
                 ),
-              ListTile(
-                leading: const Icon(Icons.add_location_alt_outlined),
-                title: const Text('Add or remove cities'),
-                onTap: () {
-                  Navigator.pop(sheet);
-                  showCityManager(context);
-                },
-              ),
-            ]),
+                const Divider(),
+                for (final c in cities)
+                  ListTile(
+                    leading: Icon(
+                      c.id == current?.id ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                      color: c.id == current?.id ? TileColors.weather : null,
+                    ),
+                    title: Text(c.name),
+                    subtitle: c.region.isEmpty ? null : Text(c.region),
+                    onTap: () {
+                      settings.setRaw('weather.city', '${c.id}');
+                      Navigator.pop(sheet);
+                    },
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.add_location_alt_outlined),
+                  title: const Text('Add or remove cities'),
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    showCityManager(context);
+                  },
+                ),
+              ],
+            ),
           );
         },
       ),
@@ -796,41 +868,53 @@ class WeatherSourcesCard extends StatelessWidget {
     final settings = context.settings;
     final hasGoogle = settings.googleWeatherKey.isNotEmpty;
     Widget row(IconData icon, String title, String body) => Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Icon(icon, size: 20, color: TileColors.weather),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: TileColors.weather),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
                 Text(body, style: TextStyle(color: p.muted, fontSize: 14, height: 1.35)),
-              ]),
+              ],
             ),
-          ]),
-        );
+          ),
+        ],
+      ),
+    );
     return Section(
       title: 'Where the forecast comes from',
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          row(Icons.grain_rounded, 'Next 4 hours: Buienradar',
-              'Rain radar for the next 2 hours (Netherlands and Belgium), then 15-minute steps up to 4 hours.'),
-          row(
-            Icons.calendar_view_week_rounded,
-            hasGoogle ? 'Hours and days ahead: Google Weather' : 'Hours and days ahead: Open-Meteo',
-            hasGoogle
-                ? 'Google Weather API with your own key. If Google fails, Hub falls back to Open-Meteo.'
-                : 'Free and good. Add a Google Weather API key to use Google\'s forecast instead.',
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () => editGoogleWeatherKey(context),
-              icon: const Icon(Icons.key_rounded, size: 18),
-              label: Text(hasGoogle ? 'Change Google key' : 'Add Google key'),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            row(
+              Icons.grain_rounded,
+              'Next 4 hours: Buienradar',
+              'Rain radar for the next 2 hours (Netherlands and Belgium), then 15-minute steps up to 4 hours.',
             ),
-          ),
-        ]),
+            row(
+              Icons.calendar_view_week_rounded,
+              hasGoogle ? 'Hours and days ahead: Google Weather' : 'Hours and days ahead: Open-Meteo',
+              hasGoogle
+                  ? 'Google Weather API with your own key. If Google fails, Hub falls back to Open-Meteo.'
+                  : 'Free and good. Add a Google Weather API key to use Google\'s forecast instead.',
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => editGoogleWeatherKey(context),
+                icon: const Icon(Icons.key_rounded, size: 18),
+                label: Text(hasGoogle ? 'Change Google key' : 'Add Google key'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -843,15 +927,22 @@ Future<void> editGoogleWeatherKey(BuildContext context) async {
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('Google Weather API key'),
-      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text(
-          'In Google Cloud Console: create a project, enable "Weather API", then '
-          'APIs & Services → Credentials → Create API key. Google gives a free monthly allowance.',
-          style: TextStyle(height: 1.4),
-        ),
-        const SizedBox(height: 12),
-        TextField(controller: c, decoration: const InputDecoration(labelText: 'API key')),
-      ]),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'In Google Cloud Console: create a project, enable "Weather API", then '
+            'APIs & Services → Credentials → Create API key. Google gives a free monthly allowance.',
+            style: TextStyle(height: 1.4),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: c,
+            decoration: const InputDecoration(labelText: 'API key'),
+          ),
+        ],
+      ),
       actions: [
         if (settings.googleWeatherKey.isNotEmpty)
           TextButton(

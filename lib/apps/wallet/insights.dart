@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
@@ -6,6 +9,7 @@ import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'accounts_page.dart' show AccountState;
+import 'wallet_logic.dart';
 import 'wallet_model.dart';
 
 /// Raw settings keys for the wallet's targets.
@@ -558,5 +562,247 @@ class RoundUpTile extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Which days of the week money goes out, and the places it goes most.
+class PatternsCard extends StatelessWidget {
+  const PatternsCard({super.key, required this.entries, required this.currency});
+  final List<Entry> entries;
+  final String currency;
+
+  @override
+  Widget build(BuildContext context) {
+    final expenses = entries.where((e) => e.kind == EntryKind.expense).toList();
+    if (expenses.length < 5) return const SizedBox.shrink();
+    final p = Palette.of(context);
+    final days = weekdayTotals(expenses);
+    final places = topMerchants(expenses);
+    final maxDay = days.fold<int>(1, math.max);
+    final busiest = days.indexOf(days.reduce(math.max));
+    // 5 Jan 2026 is a Monday, so +i gives each weekday's short name in the user's locale.
+    String dayName(int i, {bool long = false}) =>
+        (long ? DateFormat.EEEE() : DateFormat.E()).format(DateTime(2026, 1, 5 + i));
+    return Section(
+      title: 'Your patterns',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${dayName(busiest, long: true)} is your biggest spending day this month',
+              style: TextStyle(color: p.muted, fontSize: 13.5),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 72,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  for (var i = 0; i < 7; i++)
+                    Expanded(
+                      child: Tooltip(
+                        message: money(days[i], currency),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Container(
+                              height: math.max(3, 44 * days[i] / maxDay),
+                              margin: const EdgeInsets.symmetric(horizontal: 6),
+                              decoration: BoxDecoration(
+                                color: i == busiest ? TileColors.finance : TileColors.finance.withValues(alpha: 0.25),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              dayName(i),
+                              maxLines: 1,
+                              overflow: TextOverflow.clip,
+                              style: TextStyle(fontSize: 12, color: i == busiest ? p.ink : p.muted),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (places.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Text('Where you spend most', style: TextStyle(color: p.muted, fontSize: 13.5)),
+              const SizedBox(height: 4),
+              for (final m in places)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 15,
+                        backgroundColor: p.raised,
+                        child: Text(
+                          m.name.characters.first.toUpperCase(),
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: p.ink),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(m.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      Text(m.count == 1 ? 'once' : '${m.count} times', style: TextStyle(color: p.muted, fontSize: 13)),
+                      const SizedBox(width: 10),
+                      Text(money(m.cents, currency), style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "Pay yourself first": a set amount for a goal each time salary comes in, offered as a one-tap move.
+class PaydayTile extends StatelessWidget {
+  const PaydayTile({super.key, required this.goals, required this.moves});
+  final List<SavingsGoal> goals;
+  final List<SavingsMove> moves;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.settings;
+    final db = context.db;
+    final now = DateTime.now();
+    return ListenableBuilder(
+      listenable: settings,
+      builder: (context, _) {
+        final p = Palette.of(context);
+        final currency = settings.currency;
+        final rule = parsePaydayRule(settings.raw(paydayKey));
+        final goal = goals.where((g) => g.id == rule?.goalId && !g.archived).firstOrNull;
+        return StreamBuilder<List<Entry>>(
+          stream: db.watchEntries(addDays(dateOnly(now), -11), addDays(dateOnly(now), 1)),
+          builder: (context, snap) {
+            final payday = goal == null
+                ? null
+                : pendingPayday(
+                    entries: snap.data ?? const <Entry>[],
+                    moves: moves,
+                    goalId: goal.id,
+                    now: now,
+                    skipped: DateTime.tryParse(settings.raw(paydaySkipKey) ?? ''),
+                  );
+            return Card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ListTile(
+                    contentPadding: const EdgeInsets.fromLTRB(16, 6, 12, 6),
+                    leading: CircleAvatar(
+                      backgroundColor: p.positive.withValues(alpha: 0.16),
+                      child: Icon(Icons.event_repeat_rounded, color: p.positive),
+                    ),
+                    title: const Text('Save on payday'),
+                    subtitle: Text(
+                      goal == null
+                          ? 'Put a set amount aside when your salary lands'
+                          : '${money(rule!.cents, currency)} into ${goal.name} each payday',
+                    ),
+                    onTap: goal == null ? null : () => _setUp(context),
+                    trailing: Switch(
+                      value: goal != null,
+                      onChanged: (on) => on ? _setUp(context) : settings.setRaw(paydayKey, ''),
+                    ),
+                  ),
+                  if (payday != null && goal != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            'Salary came in ${friendlyDay(payday).toLowerCase()}.',
+                            style: TextStyle(color: p.muted, fontSize: 13.5),
+                          ),
+                          FilledButton(
+                            onPressed: () async {
+                              await db.addMove(goal.id, rule.cents, note: 'Payday');
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('${money(rule.cents, currency)} put into ${goal.name}')),
+                                );
+                              }
+                            },
+                            child: Text('Put ${money(rule!.cents, currency)} aside'),
+                          ),
+                          TextButton(
+                            onPressed: () => settings.setRaw(paydaySkipKey, payday.toIso8601String()),
+                            child: const Text('Not this time'),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _setUp(BuildContext context) async {
+    final settings = context.settings;
+    final active = goals.where((g) => !g.archived).toList();
+    if (active.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Make a savings goal first')));
+      return;
+    }
+    final rule = parsePaydayRule(settings.raw(paydayKey));
+    var goalId = active.any((g) => g.id == rule?.goalId) ? rule!.goalId : active.first.id;
+    final amount = TextEditingController(text: rule == null ? '' : (rule.cents / 100).toStringAsFixed(0));
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => StatefulBuilder(
+        builder: (d, setState) => AlertDialog(
+          title: const Text('Save on payday'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: amount,
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(hintText: 'Amount', prefixText: '${currencySymbol(settings.currency)} '),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final g in active)
+                    ChoiceChip(
+                      showCheckmark: false,
+                      label: Text(g.name),
+                      selected: goalId == g.id,
+                      onSelected: (_) => setState(() => goalId = g.id),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('Save')),
+          ],
+        ),
+      ),
+    );
+    final cents = parseMoney(amount.text);
+    amount.dispose();
+    if (ok == true && cents != null && cents > 0) await settings.setRaw(paydayKey, '$goalId:${cents.abs()}');
   }
 }

@@ -43,27 +43,31 @@ class Forecast {
     for (var i = 0; i < hTimes.length; i++) {
       final t = DateTime.parse(hTimes[i]);
       if (t.isBefore(now.subtract(const Duration(minutes: 59)))) continue;
-      hours.add(HourForecast(
-        time: t,
-        temperature: _num(h['temperature_2m'][i]),
-        code: (h['weather_code'][i] as num?)?.toInt() ?? 0,
-        rainChance: (h['precipitation_probability'][i] as num?)?.toInt() ?? 0,
-      ));
+      hours.add(
+        HourForecast(
+          time: t,
+          temperature: _num(h['temperature_2m'][i]),
+          code: (h['weather_code'][i] as num?)?.toInt() ?? 0,
+          rainChance: (h['precipitation_probability'][i] as num?)?.toInt() ?? 0,
+        ),
+      );
       if (hours.length == 24) break;
     }
 
     final days = <DayForecast>[];
     final dTimes = (d['time'] as List).cast<String>();
     for (var i = 0; i < dTimes.length; i++) {
-      days.add(DayForecast(
-        date: DateTime.parse(dTimes[i]),
-        max: _num(d['temperature_2m_max'][i]),
-        min: _num(d['temperature_2m_min'][i]),
-        code: (d['weather_code'][i] as num?)?.toInt() ?? 0,
-        rainChance: (d['precipitation_probability_max'][i] as num?)?.toInt() ?? 0,
-        sunrise: DateTime.parse(d['sunrise'][i] as String),
-        sunset: DateTime.parse(d['sunset'][i] as String),
-      ));
+      days.add(
+        DayForecast(
+          date: DateTime.parse(dTimes[i]),
+          max: _num(d['temperature_2m_max'][i]),
+          min: _num(d['temperature_2m_min'][i]),
+          code: (d['weather_code'][i] as num?)?.toInt() ?? 0,
+          rainChance: (d['precipitation_probability_max'][i] as num?)?.toInt() ?? 0,
+          sunrise: DateTime.parse(d['sunrise'][i] as String),
+          sunset: DateTime.parse(d['sunset'][i] as String),
+        ),
+      );
     }
 
     return Forecast(
@@ -216,7 +220,14 @@ class WeatherService {
       'timezone': 'auto',
       'forecast_days': '10',
     });
-    final f = Forecast.fromJson(await _getJson(uri));
+    final json = await _getJson(uri);
+    final Forecast f;
+    try {
+      f = Forecast.fromJson(json);
+    } catch (_) {
+      // A changed or truncated answer should show a message, not an endless spinner.
+      throw WeatherException('The forecast came back in a form Hub could not read. Try again later.');
+    }
     f.source = 'Open-Meteo';
     return f;
   }
@@ -241,10 +252,7 @@ class WeatherService {
     final points = [...radar];
     final radarEnd = radar.isEmpty ? null : radar.last.time;
     points.addAll(model.where((p) => radarEnd == null || p.time.isAfter(radarEnd)));
-    final n = Nowcast(
-      points: points,
-      source: radar.isEmpty ? 'Open-Meteo' : 'Buienradar + Open-Meteo',
-    );
+    final n = Nowcast(points: points, source: radar.isEmpty ? 'Open-Meteo' : 'Buienradar + Open-Meteo');
     _nowcastCache[key] = (DateTime.now(), n);
     return n;
   }
@@ -274,11 +282,13 @@ class WeatherService {
   /// The town at a position, from BigDataCloud's free lookup (no key). Null if unknown.
   Future<String?> placeName(double lat, double lon) async {
     try {
-      final j = await _getJson(Uri.https('api.bigdatacloud.net', '/data/reverse-geocode-client', {
-        'latitude': '$lat',
-        'longitude': '$lon',
-        'localityLanguage': 'en',
-      }));
+      final j = await _getJson(
+        Uri.https('api.bigdatacloud.net', '/data/reverse-geocode-client', {
+          'latitude': '$lat',
+          'longitude': '$lon',
+          'localityLanguage': 'en',
+        }),
+      );
       final name = [j['city'], j['locality']].whereType<String>().where((s) => s.isNotEmpty).firstOrNull;
       return name;
     } catch (_) {
@@ -308,8 +318,14 @@ class WeatherService {
     }).toList();
   }
 
-  Future<Map<String, dynamic>> _getJson(Uri uri) async =>
-      jsonDecode(await fetchText(_client, uri)) as Map<String, dynamic>;
+  Future<Map<String, dynamic>> _getJson(Uri uri) async {
+    final text = await fetchText(_client, uri);
+    try {
+      return jsonDecode(text) as Map<String, dynamic>;
+    } catch (_) {
+      throw WeatherException('The weather service sent something Hub could not read.');
+    }
+  }
 
   String _key(double lat, double lon) => '${lat.toStringAsFixed(3)},${lon.toStringAsFixed(3)}';
 }
@@ -372,14 +388,11 @@ class GoogleWeather {
   final http.Client _client;
   final String _key;
 
-  Uri _uri(String path, double lat, double lon, Map<String, String> extra) =>
-      Uri.https('weather.googleapis.com', path, {
-        'key': _key,
-        'location.latitude': '$lat',
-        'location.longitude': '$lon',
-        'unitsSystem': 'METRIC',
-        ...extra,
-      });
+  Uri _uri(String path, double lat, double lon, Map<String, String> extra) => Uri.https(
+    'weather.googleapis.com',
+    path,
+    {'key': _key, 'location.latitude': '$lat', 'location.longitude': '$lon', 'unitsSystem': 'METRIC', ...extra},
+  );
 
   Future<Forecast> forecast(double lat, double lon) async {
     final res = await Future.wait([
@@ -409,12 +422,14 @@ class GoogleWeather {
       final m = h as Map<String, dynamic>;
       final d = m['displayDateTime'] as Map<String, dynamic>;
       offset = _offset(d['utcOffset']);
-      hours.add(HourForecast(
-        time: DateTime(d['year'], d['month'], d['day'], d['hours'] ?? 0, d['minutes'] ?? 0),
-        temperature: deg(m['temperature']),
-        code: code(m['weatherCondition']),
-        rainChance: rain(m['precipitation']),
-      ));
+      hours.add(
+        HourForecast(
+          time: DateTime(d['year'], d['month'], d['day'], d['hours'] ?? 0, d['minutes'] ?? 0),
+          temperature: deg(m['temperature']),
+          code: code(m['weatherCondition']),
+          rainChance: rain(m['precipitation']),
+        ),
+      );
     }
 
     DateTime local(String? iso, DateTime fallback) {
@@ -431,15 +446,17 @@ class GoogleWeather {
       final dayPart = m['daytimeForecast'] as Map<String, dynamic>? ?? const {};
       final night = m['nighttimeForecast'] as Map<String, dynamic>? ?? const {};
       final sun = m['sunEvents'] as Map<String, dynamic>? ?? const {};
-      days.add(DayForecast(
-        date: date,
-        max: deg(m['maxTemperature']),
-        min: deg(m['minTemperature']),
-        code: code(dayPart['weatherCondition']),
-        rainChance: math.max(rain(dayPart['precipitation']), rain(night['precipitation'])),
-        sunrise: local(sun['sunriseTime'] as String?, date.add(const Duration(hours: 7))),
-        sunset: local(sun['sunsetTime'] as String?, date.add(const Duration(hours: 19))),
-      ));
+      days.add(
+        DayForecast(
+          date: date,
+          max: deg(m['maxTemperature']),
+          min: deg(m['minTemperature']),
+          code: code(dayPart['weatherCondition']),
+          rainChance: math.max(rain(dayPart['precipitation']), rain(night['precipitation'])),
+          sunrise: local(sun['sunriseTime'] as String?, date.add(const Duration(hours: 7))),
+          sunset: local(sun['sunsetTime'] as String?, date.add(const Duration(hours: 19))),
+        ),
+      );
     }
 
     final f = Forecast(
@@ -464,65 +481,73 @@ class GoogleWeather {
 
   /// Maps Google condition types onto WMO codes so the UI has one vocabulary.
   static int googleToWmo(String type) => switch (type) {
-        'CLEAR' => 0,
-        'MOSTLY_CLEAR' => 1,
-        'PARTLY_CLOUDY' => 2,
-        'MOSTLY_CLOUDY' || 'CLOUDY' || 'WINDY' => 3,
-        'LIGHT_RAIN' || 'LIGHT_TO_MODERATE_RAIN' => 61,
-        'RAIN' || 'MODERATE_TO_HEAVY_RAIN' || 'WIND_AND_RAIN' => 63,
-        'HEAVY_RAIN' || 'RAIN_PERIODICALLY_HEAVY' => 65,
-        'LIGHT_RAIN_SHOWERS' || 'CHANCE_OF_SHOWERS' || 'SCATTERED_SHOWERS' => 80,
-        'RAIN_SHOWERS' => 81,
-        'HEAVY_RAIN_SHOWERS' => 82,
-        'LIGHT_SNOW' || 'LIGHT_TO_MODERATE_SNOW' => 71,
-        'SNOW' || 'MODERATE_TO_HEAVY_SNOW' => 73,
-        'HEAVY_SNOW' || 'SNOWSTORM' || 'SNOW_PERIODICALLY_HEAVY' || 'HEAVY_SNOW_STORM' || 'BLOWING_SNOW' => 75,
-        'LIGHT_SNOW_SHOWERS' || 'CHANCE_OF_SNOW_SHOWERS' || 'SCATTERED_SNOW_SHOWERS' || 'SNOW_SHOWERS' || 'HEAVY_SNOW_SHOWERS' => 85,
-        'RAIN_AND_SNOW' => 66,
-        'HAIL' || 'HAIL_SHOWERS' => 96,
-        'THUNDERSTORM' || 'THUNDERSHOWER' || 'LIGHT_THUNDERSTORM_RAIN' || 'SCATTERED_THUNDERSTORMS' || 'HEAVY_THUNDERSTORM' => 95,
-        _ => 3,
-      };
+    'CLEAR' => 0,
+    'MOSTLY_CLEAR' => 1,
+    'PARTLY_CLOUDY' => 2,
+    'MOSTLY_CLOUDY' || 'CLOUDY' || 'WINDY' => 3,
+    'LIGHT_RAIN' || 'LIGHT_TO_MODERATE_RAIN' => 61,
+    'RAIN' || 'MODERATE_TO_HEAVY_RAIN' || 'WIND_AND_RAIN' => 63,
+    'HEAVY_RAIN' || 'RAIN_PERIODICALLY_HEAVY' => 65,
+    'LIGHT_RAIN_SHOWERS' || 'CHANCE_OF_SHOWERS' || 'SCATTERED_SHOWERS' => 80,
+    'RAIN_SHOWERS' => 81,
+    'HEAVY_RAIN_SHOWERS' => 82,
+    'LIGHT_SNOW' || 'LIGHT_TO_MODERATE_SNOW' => 71,
+    'SNOW' || 'MODERATE_TO_HEAVY_SNOW' => 73,
+    'HEAVY_SNOW' || 'SNOWSTORM' || 'SNOW_PERIODICALLY_HEAVY' || 'HEAVY_SNOW_STORM' || 'BLOWING_SNOW' => 75,
+    'LIGHT_SNOW_SHOWERS' ||
+    'CHANCE_OF_SNOW_SHOWERS' ||
+    'SCATTERED_SNOW_SHOWERS' ||
+    'SNOW_SHOWERS' ||
+    'HEAVY_SNOW_SHOWERS' => 85,
+    'RAIN_AND_SNOW' => 66,
+    'HAIL' || 'HAIL_SHOWERS' => 96,
+    'THUNDERSTORM' ||
+    'THUNDERSHOWER' ||
+    'LIGHT_THUNDERSTORM_RAIN' ||
+    'SCATTERED_THUNDERSTORMS' ||
+    'HEAVY_THUNDERSTORM' => 95,
+    _ => 3,
+  };
 }
 
 /// WMO weather interpretation codes.
 class WeatherCode {
   static String label(int code) => switch (code) {
-        0 => 'Clear',
-        1 => 'Mostly clear',
-        2 => 'Partly cloudy',
-        3 => 'Overcast',
-        45 || 48 => 'Fog',
-        51 || 53 || 55 => 'Drizzle',
-        56 || 57 => 'Freezing drizzle',
-        61 => 'Light rain',
-        63 => 'Rain',
-        65 => 'Heavy rain',
-        66 || 67 => 'Freezing rain',
-        71 => 'Light snow',
-        73 => 'Snow',
-        75 => 'Heavy snow',
-        77 => 'Snow grains',
-        80 || 81 => 'Showers',
-        82 => 'Heavy showers',
-        85 || 86 => 'Snow showers',
-        95 => 'Thunderstorm',
-        96 || 99 => 'Thunderstorm, hail',
-        _ => 'Unknown',
-      };
+    0 => 'Clear',
+    1 => 'Mostly clear',
+    2 => 'Partly cloudy',
+    3 => 'Overcast',
+    45 || 48 => 'Fog',
+    51 || 53 || 55 => 'Drizzle',
+    56 || 57 => 'Freezing drizzle',
+    61 => 'Light rain',
+    63 => 'Rain',
+    65 => 'Heavy rain',
+    66 || 67 => 'Freezing rain',
+    71 => 'Light snow',
+    73 => 'Snow',
+    75 => 'Heavy snow',
+    77 => 'Snow grains',
+    80 || 81 => 'Showers',
+    82 => 'Heavy showers',
+    85 || 86 => 'Snow showers',
+    95 => 'Thunderstorm',
+    96 || 99 => 'Thunderstorm, hail',
+    _ => 'Unknown',
+  };
 
   static IconData icon(int code, {bool isDay = true}) => switch (code) {
-        0 || 1 => isDay ? Icons.wb_sunny_rounded : Icons.nightlight_round,
-        2 => isDay ? Icons.wb_cloudy_rounded : Icons.nights_stay_rounded,
-        3 => Icons.cloud_rounded,
-        45 || 48 => Icons.foggy,
-        >= 51 && <= 67 => Icons.water_drop_rounded,
-        >= 71 && <= 77 => Icons.ac_unit_rounded,
-        80 || 81 || 82 => Icons.grain_rounded,
-        85 || 86 => Icons.ac_unit_rounded,
-        >= 95 => Icons.thunderstorm_rounded,
-        _ => Icons.cloud_queue_rounded,
-      };
+    0 || 1 => isDay ? Icons.wb_sunny_rounded : Icons.nightlight_round,
+    2 => isDay ? Icons.wb_cloudy_rounded : Icons.nights_stay_rounded,
+    3 => Icons.cloud_rounded,
+    45 || 48 => Icons.foggy,
+    >= 51 && <= 67 => Icons.water_drop_rounded,
+    >= 71 && <= 77 => Icons.ac_unit_rounded,
+    80 || 81 || 82 => Icons.grain_rounded,
+    85 || 86 => Icons.ac_unit_rounded,
+    >= 95 => Icons.thunderstorm_rounded,
+    _ => Icons.cloud_queue_rounded,
+  };
 
   /// Background gradient for the current conditions card.
   static List<Color> gradient(int code, bool isDay) {

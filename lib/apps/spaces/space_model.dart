@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'my_spaces.dart' show mySpaceIcons;
+
 /// Icons a space can use, stored by key.
 const spaceIcons = <String, IconData>{
   'work': Icons.work_rounded,
@@ -10,7 +12,7 @@ const spaceIcons = <String, IconData>{
   'home': Icons.home_rounded,
 };
 
-IconData spaceIcon(String key) => spaceIcons[key] ?? Icons.folder_rounded;
+IconData spaceIcon(String key) => spaceIcons[key] ?? mySpaceIcons[key] ?? Icons.folder_rounded;
 
 /// What each kind of space calls its parts, so University reads like a study planner
 /// and Job like a work log.

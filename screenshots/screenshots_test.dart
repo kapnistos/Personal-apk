@@ -153,7 +153,7 @@ Future<void> seed(AppDatabase db, AppSettings settings) async {
     await db.setAccountBalance(accounts[i].id, cents, at: month);
   }
 
-  // University, Lab and Job.
+  // University and Job.
   final spaces = await db.watchSpaces().first;
   final allCals = await db.watchCalendars().first;
   int space(String n) => spaces.firstWhere((x) => x.name == n).id;
@@ -174,7 +174,7 @@ Future<void> seed(AppDatabase db, AppSettings settings) async {
   await spaceEvent('Study', 'Fluid mechanics lecture', addDays(today, 1).add(const Duration(hours: 10, minutes: 45)),
       const Duration(hours: 2), where: 'Atlas 0.710');
   await spaceEvent('Study', 'Study group', addDays(today, 3).add(const Duration(hours: 14)), const Duration(hours: 2));
-  await spaceEvent('Lab', 'Supervisor meeting', addDays(today, 2).add(const Duration(hours: 9, minutes: 30)),
+  await spaceEvent('Study', 'Supervisor meeting', addDays(today, 2).add(const Duration(hours: 9, minutes: 30)),
       const Duration(minutes: 45));
   await spaceEvent('Work', 'Shift', addDays(today, 1).add(const Duration(hours: 17)), const Duration(hours: 5));
   final uni = space('University');
@@ -314,7 +314,7 @@ Future<void> seed(AppDatabase db, AppSettings settings) async {
 }
 
 void main() {
-  // Pictures in the docs show the public build: no Job, Lab or Internships.
+  // Pictures in the docs show the public build: no Lab or Internships.
   personalEdition = false;
   setUpAll(loadFonts);
 

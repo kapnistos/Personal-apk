@@ -59,6 +59,9 @@ class DashItem {
     this.style = 'card',
     this.color,
     this.shortcuts = const [],
+    this.label,
+    this.text,
+    this.date,
   });
 
   final String id;
@@ -71,6 +74,13 @@ class DashItem {
   /// For a shortcuts widget: the apps it opens.
   List<Shortcut> shortcuts;
 
+  /// For a countdown: what it counts down to, and when.
+  String? label;
+  DateTime? date;
+
+  /// For a focus note: the words it shows.
+  String? text;
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'type': type,
@@ -79,6 +89,9 @@ class DashItem {
     'style': style,
     if (color != null) 'color': color,
     if (shortcuts.isNotEmpty) 'shortcuts': [for (final s in shortcuts) s.toJson()],
+    if (label != null) 'label': label,
+    if (text != null) 'text': text,
+    if (date != null) 'date': DateFormat('yyyy-MM-dd').format(date!),
   };
 
   static DashItem fromJson(Map<String, dynamic> j) => DashItem(
@@ -91,6 +104,9 @@ class DashItem {
     shortcuts: [
       for (final s in (j['shortcuts'] as List?) ?? const []) Shortcut.fromJson((s as Map).cast<String, dynamic>()),
     ],
+    label: j['label'] as String?,
+    text: j['text'] as String?,
+    date: DateTime.tryParse(j['date'] as String? ?? ''),
   );
 }
 
@@ -121,7 +137,10 @@ class DashKind {
 }
 
 /// Widget kinds this build offers.
-final dashKinds = [for (final k in _allKinds) if (personalEdition || !personalOnlyWidgets.contains(k.type)) k];
+final dashKinds = [
+  for (final k in _allKinds)
+    if (personalEdition || !personalOnlyWidgets.contains(k.type)) k,
+];
 
 const _allKinds = [
   DashKind('search', 'Search', 'Search notes, tasks, events and mail', Icons.search_rounded, 0xFF5F6B7A, [
@@ -199,6 +218,29 @@ const _allKinds = [
   ], 's'),
   DashKind('news', 'Headlines', 'The news that matters now', Icons.newspaper_rounded, 0xFF8A5A44, ['s', 'm', 'l'], 'l'),
   DashKind('notes', 'Notes', 'Your latest notes', Icons.sticky_note_2_outlined, 0xFFCF9418, ['s', 'm', 'l'], 'm'),
+  DashKind(
+    'month',
+    'Month',
+    'This month at a glance, with days that have plans',
+    Icons.calendar_month_rounded,
+    0xFF3A78C9,
+    ['m', 'l'],
+    'm',
+  ),
+  DashKind(
+    'countdown',
+    'Countdown',
+    'Days left until a date you care about',
+    Icons.hourglass_bottom_rounded,
+    0xFFB5487A,
+    ['s', 'm'],
+    's',
+  ),
+  DashKind('focus', 'Focus', 'One line to keep in mind today', Icons.center_focus_strong_rounded, 0xFFD9822B, [
+    's',
+    'm',
+    'l',
+  ], 'm'),
 ];
 
 DashKind kindOf(String type) => dashKinds.firstWhere((k) => k.type == type, orElse: () => dashKinds.first);
@@ -231,6 +273,10 @@ List<DashItem> defaultDashboard() => [
 ];
 
 const _layoutKey = 'home.layout';
+
+/// Home preferences kept in raw settings.
+const homeGreetingKey = 'home.greeting';
+const homeDensityKey = 'home.density';
 
 List<DashItem> loadDashboard(AppSettings s) {
   final raw = s.raw(_layoutKey);
@@ -266,13 +312,48 @@ class DashboardState extends State<Dashboard> {
     saveDashboard(context.settings, _items);
   }
 
-  void _move(String id, String beforeId) {
-    if (id == beforeId) return;
-    final item = _items.firstWhere((i) => i.id == id);
-    _items.remove(item);
-    final at = beforeId == '_end' ? _items.length : _items.indexWhere((i) => i.id == beforeId);
-    _items.insert(at < 0 ? _items.length : at, item);
+  /// Moves the dragged widget to where the finger is, right away, so the rest reflow around it.
+  bool _moveLive(String id, String targetId) {
+    if (id == targetId) return false;
+    final from = _items.indexWhere((i) => i.id == id);
+    final to = _items.indexWhere((i) => i.id == targetId);
+    if (from < 0 || to < 0) return false;
+    setState(() => _items.insert(to, _items.removeAt(from)));
+    HapticFeedback.selectionClick();
+    return true;
+  }
+
+  void _moveToEnd(String id) {
+    final from = _items.indexWhere((i) => i.id == id);
+    if (from < 0 || from == _items.length - 1) return;
+    _items.add(_items.removeAt(from));
+    HapticFeedback.selectionClick();
     _save();
+  }
+
+  void _remove(DashItem item) {
+    final at = _items.indexOf(item);
+    if (at < 0) return;
+    HapticFeedback.lightImpact();
+    _items.removeAt(at);
+    _save();
+    showUndo(context, '${kindOf(item.type).title} removed', () {
+      if (!mounted || _items.contains(item)) return;
+      _items.insert(at.clamp(0, _items.length), item);
+      _save();
+    });
+  }
+
+  /// Scrolls the page while a widget is dragged near the top or bottom edge.
+  void _autoScroll(DragUpdateDetails d) {
+    final position = Scrollable.maybeOf(context)?.position;
+    if (position == null) return;
+    final h = MediaQuery.sizeOf(context).height;
+    const edge = 80.0;
+    final y = d.globalPosition.dy;
+    final step = y < edge ? -(edge - y) / 4 : (y > h - edge ? (y - (h - edge)) / 4 : 0.0);
+    if (step == 0) return;
+    position.jumpTo((position.pixels + step).clamp(position.minScrollExtent, position.maxScrollExtent));
   }
 
   Future<void> addWidget() async {
@@ -289,6 +370,12 @@ class DashboardState extends State<Dashboard> {
       if (picked == null || picked.isEmpty) return;
       item.shortcuts = picked;
     }
+    if (!mounted) return;
+    if (kind.type == 'countdown' && !await editCountdown(context, item)) return;
+    if (!mounted) return;
+    if (kind.type == 'focus' && !await editFocus(context, item)) return;
+    if (!mounted) return;
+    HapticFeedback.lightImpact();
     _items.add(item);
     _save();
   }
@@ -376,22 +463,38 @@ class DashboardState extends State<Dashboard> {
                     ),
                     const SizedBox(height: 16),
                     const _Label('Colour'),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        for (final c in dashColors)
-                          GestureDetector(
-                            onTap: () => change(() => item.color = c),
-                            child: CircleAvatar(
-                              radius: 16,
-                              backgroundColor: Color(c),
-                              child: (item.color ?? kind.color) == c
-                                  ? const Icon(Icons.check_rounded, size: 17, color: Colors.white)
-                                  : null,
-                            ),
-                          ),
-                      ],
+                    ColorDots(
+                      colors: [for (final c in dashColors) Color(c)],
+                      selected: dashColors.indexOf(item.color ?? kind.color),
+                      onSelected: (i) => change(() => item.color = dashColors[i]),
+                    ),
+                  ],
+                  if (item.type == 'countdown') ...[
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        if (await editCountdown(context, item)) change(() {});
+                      },
+                      icon: const Icon(Icons.event_rounded, size: 18),
+                      label: const Text('Change name and date'),
+                    ),
+                  ],
+                  if (item.type == 'focus') ...[
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        if (await editFocus(context, item)) change(() {});
+                      },
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      label: const Text('Change the words'),
+                    ),
+                  ],
+                  if (item.type == 'apps') ...[
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: () => pickVisibleApps(context),
+                      icon: const Icon(Icons.apps_rounded, size: 18),
+                      label: const Text('Choose apps'),
                     ),
                   ],
                   if (item.type == 'shortcuts') ...[
@@ -440,9 +543,8 @@ class DashboardState extends State<Dashboard> {
                       TextButton.icon(
                         style: TextButton.styleFrom(foregroundColor: Palette.of(context).danger),
                         onPressed: () {
-                          _items.remove(item);
-                          _save();
                           Navigator.pop(context);
+                          _remove(item);
                         },
                         icon: const Icon(Icons.delete_outline_rounded, size: 18),
                         label: const Text('Remove'),
@@ -462,54 +564,62 @@ class DashboardState extends State<Dashboard> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, c) {
-        const gap = 12.0;
-        final wide = c.maxWidth >= 600;
-        final cols = wide ? 6 : 2;
-        final unit = (c.maxWidth - gap * (cols - 1)) / cols;
-        double widthOf(String size) {
-          final span = switch (size) {
-            's' => wide ? 2 : 1,
-            'm' => wide ? 3 : 2,
-            _ => cols,
-          };
-          return unit * span + gap * (span - 1);
-        }
+    return SettingSelector<bool>(
+      select: (s) => s.raw(homeDensityKey) == 'compact',
+      builder: (context, compact) => LayoutBuilder(
+        builder: (context, c) {
+          final gap = compact ? 8.0 : 12.0;
+          final wide = c.maxWidth >= 600;
+          final cols = wide ? 6 : 2;
+          final unit = (c.maxWidth - gap * (cols - 1)) / cols;
+          double widthOf(String size) {
+            final span = switch (size) {
+              's' => wide ? 2 : 1,
+              'm' => wide ? 3 : 2,
+              _ => cols,
+            };
+            return unit * span + gap * (span - 1);
+          }
 
-        return Wrap(
-          spacing: gap,
-          runSpacing: gap,
-          children: [
-            for (final item in _items)
-              SizedBox(
-                key: ValueKey(item.id),
-                width: widthOf(kindOf(item.type).sizes.contains(item.size) ? item.size : kindOf(item.type).size),
-                child: _slot(item),
-              ),
-            if (widget.editing)
-              SizedBox(
-                width: c.maxWidth,
-                child: DragTarget<String>(
-                  onAcceptWithDetails: (d) => _move(d.data, '_end'),
-                  builder: (context, hover, _) => _AddButton(onTap: addWidget, highlight: hover.isNotEmpty),
+          return Wrap(
+            spacing: gap,
+            runSpacing: widget.editing ? gap + 4 : gap,
+            children: [
+              for (final item in _items)
+                SizedBox(
+                  key: ValueKey(item.id),
+                  width: widthOf(_sizeOf(item)),
+                  child: _slot(item, widthOf(_sizeOf(item)), compact ? 150 : 164),
                 ),
-              ),
-          ],
-        );
-      },
+              if (widget.editing)
+                SizedBox(
+                  width: c.maxWidth,
+                  child: DragTarget<String>(
+                    onAcceptWithDetails: (d) => _moveToEnd(d.data),
+                    builder: (context, hover, _) => _AddButton(onTap: addWidget, highlight: hover.isNotEmpty),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
     );
   }
 
-  Widget _slot(DashItem item) {
+  String _sizeOf(DashItem item) {
     final kind = kindOf(item.type);
-    final size = kind.sizes.contains(item.size) ? item.size : kind.size;
+    return kind.sizes.contains(item.size) ? item.size : kind.size;
+  }
+
+  Widget _slot(DashItem item, double width, double smallHeight) {
+    final kind = kindOf(item.type);
+    final size = _sizeOf(item);
     Widget body = DashFrame(
       item: item,
       kind: kind,
       child: _DashBody(item: item, size: size),
     );
-    if (size == 's') body = SizedBox(height: 164, child: body);
+    if (size == 's') body = SizedBox(height: smallHeight, child: body);
     if (!widget.editing) {
       // Like an Android home screen: hold any widget to start arranging.
       return GestureDetector(
@@ -521,95 +631,80 @@ class DashboardState extends State<Dashboard> {
       );
     }
     final p = Palette.of(context);
-    final radius = dashShapes[item.shape] ?? 22;
+    final dragging = _dragging == item.id;
     // Controls sit in a bar above the widget, never on top of its content.
+    final bar = SizedBox(
+      height: 34,
+      child: Row(
+        children: [
+          Icon(Icons.drag_indicator_rounded, size: 18, color: p.muted),
+          const SizedBox(width: 2),
+          Expanded(
+            child: Text(
+              kind.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: p.muted),
+            ),
+          ),
+          _Badge(icon: Icons.tune_rounded, tooltip: 'Customise', onTap: () => _customise(item)),
+          const SizedBox(width: 6),
+          _Badge(icon: Icons.close_rounded, tooltip: 'Remove', onTap: () => _remove(item)),
+        ],
+      ),
+    );
     final editingBody = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          height: 34,
-          child: Row(
-            children: [
-              Icon(Icons.drag_indicator_rounded, size: 18, color: p.muted),
-              const SizedBox(width: 2),
-              Expanded(
-                child: Text(
-                  kind.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: p.muted),
-                ),
-              ),
-              _Badge(icon: Icons.tune_rounded, tooltip: 'Customise', onTap: () => _customise(item)),
-              const SizedBox(width: 6),
-              _Badge(
-                icon: Icons.close_rounded,
-                tooltip: 'Remove',
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  _items.remove(item);
-                  _save();
-                },
-              ),
-            ],
-          ),
-        ),
+        bar,
         GestureDetector(
           onTap: () => _customise(item),
-          child: Container(
-            foregroundDecoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(radius),
-              border: Border.all(color: p.accent.withValues(alpha: 0.55), width: 1.5),
-            ),
+          child: AnimatedScale(
+            // A slight shrink tells you the widgets can be moved.
+            scale: 0.97,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
             child: IgnorePointer(child: body),
           ),
         ),
       ],
     );
     return DragTarget<String>(
-      onWillAcceptWithDetails: (d) => d.data != item.id,
-      onAcceptWithDetails: (d) => _move(d.data, item.id),
-      builder: (context, hover, _) => AnimatedOpacity(
-        duration: const Duration(milliseconds: 150),
-        opacity: _dragging == item.id ? 0.3 : 1,
-        child: Container(
-          decoration: hover.isEmpty
-              ? null
-              : BoxDecoration(
-                  border: Border(left: BorderSide(color: Palette.of(context).accent, width: 4)),
-                ),
-          child: LongPressDraggable<String>(
-            data: item.id,
-            delay: const Duration(milliseconds: 250),
-            onDragStarted: () {
-              HapticFeedback.selectionClick();
-              setState(() => _dragging = item.id);
-            },
-            onDragEnd: (_) => setState(() => _dragging = null),
-            feedback: Material(
-              color: Colors.transparent,
-              child: Opacity(
-                opacity: 0.85,
-                child: SizedBox(
-                  width: 160,
-                  height: 90,
-                  child: Card(
-                    child: Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(kind.icon, color: Color(item.color ?? kind.color)),
-                          const SizedBox(width: 8),
-                          Text(kind.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+      onWillAcceptWithDetails: (d) {
+        if (d.data == item.id) return false;
+        _moveLive(d.data, item.id);
+        return true;
+      },
+      onAcceptWithDetails: (_) => _save(),
+      builder: (context, hover, _) => LongPressDraggable<String>(
+        data: item.id,
+        delay: const Duration(milliseconds: 180),
+        hapticFeedbackOnStart: true,
+        onDragStarted: () => setState(() => _dragging = item.id),
+        onDragUpdate: _autoScroll,
+        onDragEnd: (_) {
+          _dragging = null;
+          _save();
+        },
+        feedback: Material(
+          color: Colors.transparent,
+          child: Transform.scale(
+            scale: 1.03,
+            child: Container(
+              width: width,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(dashShapes[item.shape] ?? 22),
+                boxShadow: const [BoxShadow(color: Color(0x55000000), blurRadius: 24, offset: Offset(0, 10))],
               ),
+              child: IgnorePointer(child: body),
             ),
-            child: editingBody,
           ),
+        ),
+        childWhenDragging: Opacity(opacity: 0.25, child: IgnorePointer(child: editingBody)),
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 150),
+          opacity: dragging ? 0.25 : 1,
+          child: editingBody,
         ),
       ),
     );
@@ -659,28 +754,30 @@ class _AddButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    return Material(
-      color: highlight ? p.accent.withValues(alpha: 0.12) : Colors.transparent,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
-        child: Container(
-          height: 72,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: p.line, width: 1.5),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.add_rounded, color: p.accent),
-              const SizedBox(width: 8),
-              Text(
-                'Add a widget',
-                style: TextStyle(color: p.accent, fontWeight: FontWeight.w600),
-              ),
-            ],
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      decoration: BoxDecoration(
+        color: p.accent.withValues(alpha: highlight ? 0.24 : 0.12),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTap: onTap,
+          child: SizedBox(
+            height: 64,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.add_rounded, color: p.accent),
+                const SizedBox(width: 8),
+                Text(
+                  highlight ? 'Drop to move it to the end' : 'Add a widget',
+                  style: TextStyle(color: p.accent, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -688,40 +785,131 @@ class _AddButton extends StatelessWidget {
   }
 }
 
-/// Picks a widget to add.
+/// Picks a widget to add, with a live preview of each.
 class _Gallery extends StatelessWidget {
   const _Gallery();
+
+  static DashItem _sample(DashKind k) => DashItem(
+    id: 'preview-${k.type}',
+    type: k.type,
+    size: k.size,
+    label: k.type == 'countdown' ? 'Holidays' : null,
+    date: k.type == 'countdown' ? addDays(dateOnly(DateTime.now()), 24) : null,
+    text: k.type == 'focus' ? 'Finish the report before lunch' : null,
+    shortcuts: k.type == 'shortcuts'
+        ? [
+            for (final s in shortcutCatalog)
+              if (['X', 'Instagram', 'Reddit', 'Gmail'].contains(s.name)) s,
+          ]
+        : const [],
+  );
 
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     return SafeArea(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.85),
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.88),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
               child: Text('Add a widget', style: Theme.of(context).textTheme.titleLarge),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Text('Tap one to put it at the end of Home.', style: TextStyle(color: p.muted)),
+            ),
             Flexible(
-              child: ListView(
-                shrinkWrap: true,
-                padding: const EdgeInsets.only(bottom: 12),
-                children: [
-                  for (final k in dashKinds)
-                    ListTile(
-                      leading: AppGlyph(icon: k.icon, color: Color(k.color), size: 40),
-                      title: Text(k.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text(k.description, style: TextStyle(color: p.muted)),
-                      trailing: Text(
-                        k.sizes.map((s) => s.toUpperCase()).join(' '),
-                        style: TextStyle(color: p.muted, fontSize: 12.5, fontWeight: FontWeight.w600),
-                      ),
-                      onTap: () => Navigator.pop(context, k),
+              child: LayoutBuilder(
+                builder: (context, c) {
+                  final cols = c.maxWidth >= 640 ? 2 : 1;
+                  return GridView.builder(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: cols,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      mainAxisExtent: 236,
                     ),
+                    itemCount: dashKinds.length,
+                    itemBuilder: (context, i) => _GalleryTile(kind: dashKinds[i], item: _sample(dashKinds[i])),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GalleryTile extends StatelessWidget {
+  const _GalleryTile({required this.kind, required this.item});
+  final DashKind kind;
+  final DashItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    // The preview is drawn at phone width, then scaled down to fit.
+    final previewWidth = item.size == 's' ? 180.0 : 360.0;
+    Widget preview = DashFrame(
+      item: item,
+      kind: kind,
+      child: _DashBody(item: item, size: item.size),
+    );
+    if (item.size == 's') preview = SizedBox(height: 164, child: preview);
+    return Material(
+      color: p.raised,
+      borderRadius: BorderRadius.circular(22),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.pop(context, kind),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+                child: ClipRect(
+                  child: IgnorePointer(
+                    child: ExcludeSemantics(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.topCenter,
+                        child: SizedBox(width: previewWidth, child: preview),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+              child: Row(
+                children: [
+                  AppGlyph(icon: kind.icon, color: Color(kind.color), size: 32),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(kind.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        Text(
+                          kind.description,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: p.muted, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.add_circle_rounded, color: p.accent, size: 26),
                 ],
               ),
             ),
@@ -749,8 +937,7 @@ class DashFrame extends StatelessWidget {
       borderRadius: BorderRadius.circular(radius),
       side: switch (item.style) {
         'outline' => BorderSide(color: accent.withValues(alpha: 0.6), width: 1.5),
-        'plain' => BorderSide.none,
-        _ => BorderSide(color: p.line),
+        _ => BorderSide.none,
       },
     );
     final color = switch (item.style) {
@@ -813,6 +1000,9 @@ class _DashBody extends StatelessWidget {
       'work' => _Work(small: small),
       'news' => small ? const _NewsSmall() : const HeadlinesCard(),
       'notes' => small ? const _NoteSmall() : const RecentNotesCard(),
+      'month' => _MonthView(large: size == 'l'),
+      'countdown' => _Countdown(item: item, small: small),
+      'focus' => _Focus(item: item, size: size),
       _ => const SizedBox.shrink(),
     };
   }
@@ -1050,10 +1240,7 @@ class _QuickAdd extends StatelessWidget {
                             Container(
                               width: small ? 40 : 46,
                               height: small ? 40 : 46,
-                              decoration: BoxDecoration(
-                                color: color.withValues(alpha: 0.16),
-                                shape: BoxShape.circle,
-                              ),
+                              decoration: BoxDecoration(color: color.withValues(alpha: 0.16), shape: BoxShape.circle),
                               child: Icon(icon, color: color),
                             ),
                             const SizedBox(height: 5),
@@ -1868,6 +2055,343 @@ class _HabitsWidget extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+/// Asks what a countdown counts down to. Returns false if the person backs out.
+Future<bool> editCountdown(BuildContext context, DashItem item) async {
+  final name = TextEditingController(text: item.label ?? '');
+  var date = item.date ?? addDays(dateOnly(DateTime.now()), 7);
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (d) => StatefulBuilder(
+      builder: (d, setD) => AlertDialog(
+        title: const Text('Count down to'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: name,
+              autofocus: true,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(hintText: 'Name, e.g. Holidays'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.event_rounded, size: 18),
+              label: Text(DateFormat('EEE d MMMM y').format(date)),
+              onPressed: () async {
+                final picked = await showDatePicker(
+                  context: d,
+                  initialDate: date,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2100),
+                );
+                if (picked != null) setD(() => date = picked);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('Save')),
+        ],
+      ),
+    ),
+  );
+  if (ok != true) return false;
+  item.label = name.text.trim().isEmpty ? null : name.text.trim();
+  item.date = date;
+  return true;
+}
+
+/// Asks for the words a focus widget shows. Returns false if the person backs out.
+Future<bool> editFocus(BuildContext context, DashItem item) async {
+  final c = TextEditingController(text: item.text ?? '');
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (d) => AlertDialog(
+      title: const Text('Your focus'),
+      content: TextField(
+        controller: c,
+        autofocus: true,
+        maxLines: 3,
+        minLines: 1,
+        maxLength: 140,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: const InputDecoration(hintText: 'What matters most today?'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('Save')),
+      ],
+    ),
+  );
+  if (ok != true) return false;
+  item.text = c.text.trim();
+  return true;
+}
+
+/// Saves a change made to one widget from inside it (a countdown date, focus words).
+void _saveItem(BuildContext context, DashItem item) => context.findAncestorStateOfType<DashboardState>()?._save();
+
+class _Countdown extends StatelessWidget {
+  const _Countdown({required this.item, required this.small});
+  final DashItem item;
+  final bool small;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final date = item.date;
+    final days = date == null ? null : daysBetween(dateOnly(DateTime.now()), date);
+    final value = switch (days) {
+      null => 'Pick a date',
+      0 => 'Today',
+      1 => '1 day',
+      -1 => '1 day ago',
+      final d when d < 0 => '${-d} days ago',
+      final d => '$d days',
+    };
+    final caption = date == null ? 'Tap to choose what to count down to' : DateFormat('EEE d MMMM y').format(date);
+    Future<void> edit() async {
+      if (await editCountdown(context, item) && context.mounted) _saveItem(context, item);
+    }
+
+    if (small) {
+      return StatTile(
+        icon: Icons.hourglass_bottom_rounded,
+        label: item.label ?? 'Countdown',
+        color: Color(kindOf('countdown').color),
+        value: value,
+        caption: caption,
+        onTap: edit,
+      );
+    }
+    final c = DashAccent.of(context, p.accent);
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: edit,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(color: c.withValues(alpha: 0.18), shape: BoxShape.circle),
+                child: Icon(Icons.hourglass_bottom_rounded, color: c),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.label ?? 'Countdown',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: p.muted, fontWeight: FontWeight.w600),
+                    ),
+                    Text(
+                      caption,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: p.muted),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              BigAmount(value, size: 30),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Focus extends StatelessWidget {
+  const _Focus({required this.item, required this.size});
+  final DashItem item;
+  final String size;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final c = DashAccent.of(context, p.accent);
+    final text = (item.text ?? '').trim();
+    final small = size == 's';
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () async {
+          if (await editFocus(context, item) && context.mounted) _saveItem(context, item);
+        },
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(16, 14, 16, small ? 12 : 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.center_focus_strong_rounded, size: 18, color: c),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Focus',
+                    style: TextStyle(color: p.muted, fontWeight: FontWeight.w600, fontSize: 13.5),
+                  ),
+                ],
+              ),
+              SizedBox(height: small ? 8 : 10),
+              Flexible(
+                child: Text(
+                  text.isEmpty ? 'Tap to write what matters today' : text,
+                  maxLines: small ? 4 : 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: small ? 17 : (size == 'l' ? 24 : 20),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                    height: 1.25,
+                    color: text.isEmpty ? p.muted : null,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A small month calendar; days with plans get a dot in the calendar's colour.
+class _MonthView extends StatelessWidget {
+  const _MonthView({required this.large});
+  final bool large;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final db = context.db;
+    final now = DateTime.now();
+    final today = dateOnly(now);
+    final first = DateTime(now.year, now.month);
+    final next = DateTime(now.year, now.month + 1);
+    final days = daysBetween(first, next);
+    final lead = first.weekday - 1;
+    final c = DashAccent.of(context, p.accent);
+    return StreamBuilder<List<Calendar>>(
+      stream: db.watchCalendars(),
+      builder: (context, cSnap) {
+        final cals = {for (final c in cSnap.data ?? const <Calendar>[]) c.id: c};
+        return StreamBuilder<List<Event>>(
+          stream: db.watchEventsBetween(first, next),
+          builder: (context, snap) {
+            final occ = expand(snap.data ?? const [], cals, first, next);
+            final dots = <int, Color>{};
+            for (var d = 1; d <= days; d++) {
+              final day = DateTime(now.year, now.month, d);
+              final o = occ.where((o) => o.touches(day)).firstOrNull;
+              if (o != null) dots[d] = o.color;
+            }
+            final cell = large ? 40.0 : 32.0;
+            return Card(
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () => _push(context, const CalendarPage()),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              DateFormat('MMMM y').format(now),
+                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                            ),
+                          ),
+                          Text(
+                            dots.isEmpty
+                                ? 'Nothing planned'
+                                : '${dots.length} busy ${dots.length == 1 ? 'day' : 'days'}',
+                            style: TextStyle(color: p.muted, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          for (final d in const ['M', 'T', 'W', 'T', 'F', 'S', 'S'])
+                            Expanded(
+                              child: Text(
+                                d,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: p.muted, fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      for (var w = 0; w * 7 < lead + days; w++)
+                        Row(
+                          children: [
+                            for (var i = 0; i < 7; i++)
+                              Expanded(
+                                child: SizedBox(
+                                  height: cell,
+                                  child: Builder(
+                                    builder: (context) {
+                                      final d = w * 7 + i - lead + 1;
+                                      if (d < 1 || d > days) return const SizedBox.shrink();
+                                      final isToday = DateTime(now.year, now.month, d) == today;
+                                      final past = d < today.day;
+                                      return Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Container(
+                                            width: cell - 8,
+                                            height: cell - 12,
+                                            alignment: Alignment.center,
+                                            decoration: isToday
+                                                ? BoxDecoration(color: c, borderRadius: BorderRadius.circular(99))
+                                                : null,
+                                            child: Text(
+                                              '$d',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
+                                                color: isToday ? Colors.white : (past ? p.muted : null),
+                                                fontFeatures: const [FontFeature.tabularFigures()],
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          CircleAvatar(radius: 2, backgroundColor: dots[d] ?? Colors.transparent),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

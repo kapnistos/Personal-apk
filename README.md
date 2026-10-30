@@ -32,7 +32,7 @@ your phone and PC to share data, one of your own computers acts as the server (s
 | **Notes** | Coloured notes in a masonry grid, checklists you can tick from the preview, pinning, search. |
 | **Wallet** | A monthly spending target with what is left and a daily allowance, net worth, round-ups into savings, "compared with your usual month" insights, spending by month, budgets, recurring payments and income, bank cards with live balances, savings goals, an investment portfolio with live prices, year overview and CSV import/export. |
 | **Shopping** | Type everything in one line. Each item goes under the shop where it is usually cheapest, with an integrated AI price check against current offers. |
-| **University** | Important dates with countdowns, meetings, a study plan with progress, saved notes, links and files. |
+| **Job / University / your own** | A space each: important dates with countdowns, meetings, a plan with progress, saved notes, links and files. Job adds a work-day log with holidays left. Create your own spaces too. |
 | **News** | Headlines from public RSS feeds across General, Netherlands, Greece, Politics, AI, Tech, Investing, Economy, Sports and Science. Add any feed. |
 | **Mail** | Gmail, Outlook and Proton Mail (through Proton Mail Bridge) over IMAP/SMTP. |
 | **Claude** | Opens the Claude app with a prompt ready. Uses your own Claude plan. |

@@ -157,85 +157,47 @@ class Reminders {
     if (_db != null) await resync(_db!);
   }
 
+  Future<void>? _running;
+  bool _again = false;
+  String? _lastPlan;
+
   /// Rebuilds all pending reminders for the next 30 days.
+  ///
+  /// Calls that arrive while one is running are folded into a single rerun,
+  /// and nothing is touched when the plan is the same as last time.
   Future<void> resync(AppDatabase db) async {
     if (!_ready) return;
-    try {
-      await _plugin.cancelAll();
-      final now = DateTime.now();
-      final horizon = addDays(now, 30);
-      var count = 0;
-
-      for (final t in await db.todosWithReminders()) {
-        final at = t.remindAt!;
-        if (at.isBefore(now) || at.isAfter(horizon)) continue;
-        await _schedule(
-          100000 + t.id,
-          at,
-          t.title,
-          t.due == null ? 'To-do' : 'Due ${friendlyDay(t.due!)}',
-          payload: 'todo:${t.id}',
-          todo: true,
-        );
-        count++;
-      }
-
-      for (final a in await db.applicationsWithReminders()) {
-        if (a.status == 'rejected' || a.status == 'offer') continue;
-        final name = [a.company, if (a.role.isNotEmpty) a.role].join(' · ');
-        if (a.remindAt != null && a.remindAt!.isAfter(now) && a.remindAt!.isBefore(horizon)) {
-          await _schedule(
-            300000 + a.id,
-            a.remindAt!,
-            'Internship: $name',
-            a.deadline == null ? 'Time to work on this application' : 'Deadline ${friendlyDay(a.deadline!)}',
-            payload: 'application:${a.id}',
-          );
-        }
-        // Two days before an open deadline, at 9:00.
-        final d = a.deadline;
-        if (d != null && (a.status == 'wishlist' || a.status == 'preparing')) {
-          final warn = DateTime(d.year, d.month, d.day - 2, 9);
-          if (warn.isAfter(now) && warn.isBefore(horizon)) {
-            await _schedule(
-              400000 + a.id,
-              warn,
-              'Apply soon: $name',
-              'Deadline ${friendlyDay(d)}',
-              payload: 'application:${a.id}',
-            );
-          }
-        }
-      }
-
-      // Briefings, bill reminders, low-balance warnings, weekly review, habits.
-      for (final p in await planAutomations(db, now: now)) {
-        await _schedule(p.id, p.at, p.title, p.body, payload: p.payload, quiet: true);
-        count++;
-      }
-
-      var n = 0;
-      for (final e in await db.eventsWithReminders()) {
-        for (final start in occurrences(e, now, horizon)) {
-          final at = start.subtract(Duration(minutes: e.remindMinutes!));
-          if (at.isBefore(now)) continue;
-          final when = e.allDay ? friendlyDay(start) : '${friendlyDay(start)} ${_hm(start)}';
-          await _schedule(
-            200000 + n,
-            at,
-            e.title,
-            [when, if (e.location.isNotEmpty) e.location].join(' · '),
-            payload: 'event:${e.id}',
-          );
-          n++;
-          count++;
-          // Android allows each app about 500 pending alarms; stay well below.
-          if (count > 400) return;
-        }
-      }
-    } catch (e) {
-      debugPrint('Could not schedule reminders: $e');
+    if (_running != null) {
+      _again = true;
+      return _running;
     }
+    final run = _resyncLoop(db);
+    _running = run;
+    try {
+      await run;
+    } finally {
+      _running = null;
+    }
+  }
+
+  Future<void> _resyncLoop(AppDatabase db) async {
+    do {
+      _again = false;
+      try {
+        final plan = await planReminders(db, DateTime.now());
+        final key = '$_exact\n${plan.join('\n')}';
+        if (key == _lastPlan) continue;
+        await _plugin.cancelAll();
+        _lastPlan = null;
+        for (final r in plan) {
+          await _schedule(r.id, r.at, r.title, r.body, payload: r.payload, todo: r.todo, quiet: r.quiet);
+        }
+        _lastPlan = key;
+      } catch (e) {
+        _lastPlan = null;
+        debugPrint('Could not schedule reminders: $e');
+      }
+    } while (_again);
   }
 
   Future<void> _schedule(
@@ -255,8 +217,103 @@ class Reminders {
     body: body,
     payload: payload,
   );
+}
 
-  static String _hm(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+/// One notification to schedule.
+class PlannedReminder {
+  const PlannedReminder(this.id, this.at, this.title, this.body, this.payload, {this.todo = false, this.quiet = false});
+  final int id;
+  final DateTime at;
+  final String title;
+  final String body;
+  final String payload;
+  final bool todo;
+  final bool quiet;
+
+  @override
+  String toString() => '$id $at $title $body $payload $todo $quiet';
+}
+
+String _hm(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+
+/// Every reminder for the next 30 days, worked out from the database.
+Future<List<PlannedReminder>> planReminders(AppDatabase db, DateTime now) async {
+  final horizon = addDays(now, 30);
+  final out = <PlannedReminder>[];
+
+  for (final t in await db.todosWithReminders()) {
+    final at = t.remindAt!;
+    if (at.isBefore(now) || at.isAfter(horizon)) continue;
+    out.add(
+      PlannedReminder(
+        100000 + t.id,
+        at,
+        t.title,
+        t.due == null ? 'To-do' : 'Due ${friendlyDay(t.due!, now: now)}',
+        'todo:${t.id}',
+        todo: true,
+      ),
+    );
+  }
+
+  for (final a in await db.applicationsWithReminders()) {
+    if (a.status == 'rejected' || a.status == 'offer') continue;
+    final name = [a.company, if (a.role.isNotEmpty) a.role].join(' · ');
+    if (a.remindAt != null && a.remindAt!.isAfter(now) && a.remindAt!.isBefore(horizon)) {
+      out.add(
+        PlannedReminder(
+          300000 + a.id,
+          a.remindAt!,
+          'Internship: $name',
+          a.deadline == null ? 'Time to work on this application' : 'Deadline ${friendlyDay(a.deadline!, now: now)}',
+          'application:${a.id}',
+        ),
+      );
+    }
+    // Two days before an open deadline, at 9:00.
+    final d = a.deadline;
+    if (d != null && (a.status == 'wishlist' || a.status == 'preparing')) {
+      final warn = DateTime(d.year, d.month, d.day - 2, 9);
+      if (warn.isAfter(now) && warn.isBefore(horizon)) {
+        out.add(
+          PlannedReminder(
+            400000 + a.id,
+            warn,
+            'Apply soon: $name',
+            'Deadline ${friendlyDay(d, now: now)}',
+            'application:${a.id}',
+          ),
+        );
+      }
+    }
+  }
+
+  // Briefings, bill reminders, low-balance warnings, weekly review, habits.
+  for (final p in await planAutomations(db, now: now)) {
+    out.add(PlannedReminder(p.id, p.at, p.title, p.body, p.payload, quiet: true));
+  }
+
+  var n = 0;
+  for (final e in await db.eventsWithReminders()) {
+    for (final start in occurrences(e, now, horizon)) {
+      final at = start.subtract(Duration(minutes: e.remindMinutes!));
+      if (at.isBefore(now)) continue;
+      final when = e.allDay ? friendlyDay(start, now: now) : '${friendlyDay(start, now: now)} ${_hm(start)}';
+      out.add(
+        PlannedReminder(
+          200000 + n,
+          at,
+          e.title,
+          [when, if (e.location.isNotEmpty) e.location].join(' · '),
+          'event:${e.id}',
+        ),
+      );
+      n++;
+      // Android allows each app about 500 pending alarms; stay well below.
+      if (out.length > 400) return out;
+    }
+  }
+  return out;
 }
 
 /// Start times of [e] that fall in [from, to), expanding repeats.

@@ -4,6 +4,16 @@ Builds are numbered by the CI run. Notable changes, newest first.
 
 ## October 2026
 
+### Spaces, customization and polish
+- Spaces: make your own sections with a name, icon and colour; each gets dates, meetings, a plan, saved items and its own calendar, and appears on Home. Choose which apps Home shows.
+- Home: widgets move out of the way as you drag, undo after removing, live previews in the gallery, new Month, Countdown and Focus widgets.
+- Appearance: six accent colours, black or dark grey background, compact spacing, hide the greeting.
+- To-do: hold a task to move it to today, tomorrow or next week, duplicate or delete; undo after ticking; sort options; quick add shows what it understood.
+- Notes: hold a card to pin, recolour, copy or delete; list or grid; sort options.
+- Habits: hold for a month view and tick any past day.
+- Wallet: budgets on track or over, search, swipe to delete, spending patterns, upcoming bills strip, price-change notes, "remind me to cancel", save on payday.
+- Faster start and lighter redraws; fixes for Weather and Mail spinners, calendar times on clock-change days, and small-screen overflows.
+
 ### AI tab and easier editing
 - AI replaces Me in the bottom bar. Settings now open from your profile picture on Home.
 - AI tab: what works today (shopping price check, Claude) and what is coming: DeepSeek, a model picker with a recommendation for each, your own API key, a Hub agent and personal agents.
@@ -39,7 +49,7 @@ Builds are numbered by the CI run. Notable changes, newest first.
 - Month picker with "Now", swipe between months, year overview, CSV export.
 
 ### Planning
-- University space with dates, meetings, plans and saved items.
+- Job and University spaces with dates, meetings, plans and saved items; Job has a work-day log.
 - To-do: quick add in plain words, repeating tasks, Done and Snooze from the notification.
 - Notes: colours, checklists, masonry layout.
 - Calendar: swipe between periods and an endless agenda.

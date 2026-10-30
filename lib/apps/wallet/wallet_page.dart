@@ -19,6 +19,7 @@ import 'month_bar.dart';
 import 'savings_page.dart';
 import 'year_page.dart';
 import 'subscriptions_page.dart';
+import 'wallet_logic.dart';
 import 'wallet_model.dart';
 
 class WalletPage extends StatefulWidget {
@@ -117,9 +118,37 @@ class _SpendingTab extends StatefulWidget {
 class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClientMixin {
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
   EntryKind? _filter;
+  bool _searching = false;
+  final _search = TextEditingController();
 
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  void _closeSearch() => setState(() {
+    _searching = false;
+    _search.clear();
+  });
+
+  Widget _searchField(Palette p) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+    child: TextField(
+      controller: _search,
+      autofocus: true,
+      textInputAction: TextInputAction.search,
+      onChanged: (_) => setState(() {}),
+      decoration: InputDecoration(
+        hintText: 'Search notes, categories or amounts',
+        prefixIcon: const Icon(Icons.search_rounded),
+        suffixIcon: IconButton(tooltip: 'Close search', icon: const Icon(Icons.close_rounded), onPressed: _closeSearch),
+      ),
+    ),
+  );
 
   void _go(DateTime m) {
     final latest = DateTime(DateTime.now().year, DateTime.now().month + 12);
@@ -143,7 +172,9 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
             .where((e) => !e.date.isBefore(_month) && e.date.isBefore(next))
             .toList();
         final summary = MonthSummary(all);
-        final shown = _filter == null ? all : all.where((e) => e.kind == _filter).toList();
+        final query = _search.text;
+        final shown = all.where((e) => (_filter == null || e.kind == _filter) && entryMatches(e, query)).toList();
+        final p = Palette.of(context);
         final byDay = <DateTime, List<Entry>>{};
         for (final e in shown) {
           (byDay[dateOnly(e.date)] ??= []).add(e);
@@ -182,7 +213,9 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    child: ContentWidth(child: LeftToSpendCard(monthEntries: all, currency: currency)),
+                    child: ContentWidth(
+                      child: LeftToSpendCard(monthEntries: all, currency: currency),
+                    ),
                   ),
                 ),
               if (isCurrent)
@@ -211,7 +244,7 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                   child: ContentWidth(
-                    child: _Breakdown(summary: summary, currency: currency),
+                    child: _Breakdown(summary: summary, month: _month, currency: currency),
                   ),
                 ),
               ),
@@ -224,6 +257,15 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
                 ),
               ),
               SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: ContentWidth(
+                    child: PatternsCard(entries: all, currency: currency),
+                  ),
+                ),
+              ),
+              if (_searching) SliverToBoxAdapter(child: ContentWidth(child: _searchField(p))),
+              SliverToBoxAdapter(
                 child: SizedBox(
                   height: 44,
                   child: ContentWidth(
@@ -231,6 +273,15 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       children: [
+                        if (!_searching)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ActionChip(
+                              avatar: const Icon(Icons.search_rounded, size: 18),
+                              label: const Text('Search'),
+                              onPressed: () => setState(() => _searching = true),
+                            ),
+                          ),
                         for (final k in [
                           null,
                           EntryKind.expense,
@@ -256,9 +307,11 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
                 SliverToBoxAdapter(
                   child: EmptyState(
                     icon: Icons.receipt_long_rounded,
-                    title: 'No entries',
+                    title: query.trim().isNotEmpty ? 'No matches' : 'No entries',
                     message: all.isEmpty
                         ? 'Add an expense, or import a CSV from Revolut, ABN AMRO or Eurobank.'
+                        : query.trim().isNotEmpty
+                        ? 'Nothing this month matches "${query.trim()}". Try another month or a shorter word.'
                         : 'Nothing of this type this month.',
                   ),
                 )
@@ -282,7 +335,7 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
                                   Expanded(child: SectionLabel(friendlyDay(d))),
                                   Text(
                                     money(dayTotal, currency, signed: true),
-                                    style: TextStyle(fontSize: 13, color: Palette.of(context).muted),
+                                    style: TextStyle(fontSize: 13, color: p.muted),
                                   ),
                                 ],
                               ),
@@ -293,7 +346,10 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
                                 children: [
                                   for (var j = 0; j < list.length; j++) ...[
                                     if (j > 0) const Divider(indent: 64),
-                                    EntryTile(entry: list[j], currency: currency),
+                                    _SwipeToDelete(
+                                      entry: list[j],
+                                      child: EntryTile(entry: list[j], currency: currency),
+                                    ),
                                   ],
                                 ],
                               ),
@@ -426,36 +482,55 @@ class _Upcoming extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    final limit = DateTime.now().add(const Duration(days: 30));
     return StreamBuilder<List<Subscription>>(
       stream: context.db.watchSubscriptions(),
       builder: (context, snap) {
-        final due = (snap.data ?? const <Subscription>[]).where((s) => s.active && s.nextDate.isBefore(limit)).toList()
-          ..sort((a, b) => a.nextDate.compareTo(b.nextDate));
+        final due = billCalendar(snap.data ?? const <Subscription>[], DateTime.now());
         if (due.isEmpty) return const SizedBox.shrink();
-        final total = due.fold<int>(0, (t, s) => t + s.kind.sign * s.amountCents);
+        final total = due.fold<int>(0, (t, b) => t + b.sub.kind.sign * b.sub.amountCents);
         return Section(
           title: 'Next 30 days',
           trailing: Padding(
             padding: const EdgeInsets.only(right: 10),
-            child: Text(money(total, currency, signed: true), style: TextStyle(color: p.muted, fontSize: 13.5)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 140),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(money(total, currency, signed: true), style: TextStyle(color: p.muted, fontSize: 13.5)),
+              ),
+            ),
           ),
           child: Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Column(
               children: [
-                for (final s in due.take(6))
+                for (final b in due.take(6))
                   ListTile(
                     dense: true,
-                    leading: Icon(categoryInfo(s.category).icon, color: categoryInfo(s.category).color, size: 20),
-                    title: Text(s.name, style: const TextStyle(fontWeight: FontWeight.w500)),
-                    subtitle: Text(friendlyDay(s.nextDate)),
+                    leading: Icon(
+                      categoryInfo(b.sub.category).icon,
+                      color: categoryInfo(b.sub.category).color,
+                      size: 20,
+                    ),
+                    title: Text(
+                      b.sub.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    subtitle: Text(friendlyDay(b.date)),
                     trailing: Text(
-                      money(s.kind.sign * s.amountCents, currency, signed: true),
-                      style: TextStyle(fontWeight: FontWeight.w600, color: s.kind.sign > 0 ? p.positive : p.ink),
+                      money(b.sub.kind.sign * b.sub.amountCents, currency, signed: true),
+                      style: TextStyle(fontWeight: FontWeight.w600, color: b.sub.kind.sign > 0 ? p.positive : p.ink),
                     ),
                     onTap: () =>
                         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SubscriptionsPage())),
+                  ),
+                if (due.length > 6)
+                  TextButton(
+                    onPressed: () =>
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SubscriptionsPage())),
+                    child: Text('See all ${due.length}'),
                   ),
               ],
             ),
@@ -477,28 +552,33 @@ class _SummaryCard extends StatelessWidget {
     return Column(
       children: [
         const SizedBox(height: 8),
-        Text('Net this month', style: TextStyle(color: p.muted, fontWeight: FontWeight.w500)),
+        Text(
+          'Net this month',
+          style: TextStyle(color: p.muted, fontWeight: FontWeight.w500),
+        ),
         const SizedBox(height: 2),
         BigAmount(money(summary.net, currency, signed: true), size: 44),
         const SizedBox(height: 18),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _action(context, Icons.add_rounded, 'Add', () => editEntry(context)),
-            _action(
-              context,
-              Icons.autorenew_rounded,
-              'Recurring',
-              () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SubscriptionsPage())),
-            ),
-            _action(
-              context,
-              Icons.bar_chart_rounded,
-              'Year',
-              () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YearPage())),
-            ),
-            _action(context, Icons.file_download_outlined, 'Import', () => importBankFile(context)),
-          ],
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 380),
+          child: Row(
+            children: [
+              _action(context, Icons.add_rounded, 'Add', () => editEntry(context)),
+              _action(
+                context,
+                Icons.autorenew_rounded,
+                'Recurring',
+                () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SubscriptionsPage())),
+              ),
+              _action(
+                context,
+                Icons.bar_chart_rounded,
+                'Year',
+                () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YearPage())),
+              ),
+              _action(context, Icons.file_download_outlined, 'Import', () => importBankFile(context)),
+            ],
+          ),
         ),
         const SizedBox(height: 18),
         Row(
@@ -515,8 +595,7 @@ class _SummaryCard extends StatelessWidget {
   /// A round action button with its name underneath.
   Widget _action(BuildContext context, IconData icon, String label, VoidCallback onTap) {
     final p = Palette.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+    return Expanded(
       child: Column(
         children: [
           Material(
@@ -529,7 +608,12 @@ class _SummaryCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
         ],
       ),
     );
@@ -543,10 +627,17 @@ class _SummaryCard extends StatelessWidget {
         Icon(icon, size: 18, color: p.muted),
         const SizedBox(width: 8),
         Text(label, style: TextStyle(color: p.muted, fontSize: 14)),
-        const Spacer(),
-        Text(
-          value,
-          style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 15),
+        const SizedBox(width: 8),
+        Expanded(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 15),
+            ),
+          ),
         ),
       ],
     ),
@@ -554,91 +645,99 @@ class _SummaryCard extends StatelessWidget {
 }
 
 class _Breakdown extends StatelessWidget {
-  const _Breakdown({required this.summary, required this.currency});
+  const _Breakdown({required this.summary, required this.month, required this.currency});
   final MonthSummary summary;
+  final DateTime month;
   final String currency;
 
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    if (summary.out == 0) return const SizedBox.shrink();
-    final cats = summary.byCategory.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
     return StreamBuilder<List<Budget>>(
       stream: context.db.watchBudgets(),
       builder: (context, snap) {
         final budgets = {for (final b in snap.data ?? const <Budget>[]) b.category: b.monthlyCents};
+        if (summary.out == 0 && budgets.isEmpty) return const SizedBox.shrink();
+        final spent = {...summary.byCategory, for (final k in budgets.keys) k: summary.byCategory[k] ?? 0};
+        final cats = spent.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+        final now = DateTime.now();
+        final status = {
+          for (final k in budgets.keys) k: budgetStatus(spent: spent[k]!, budget: budgets[k]!, month: month, now: now),
+        };
+        final overCount = status.values.where((s) => s.state == BudgetState.over).length;
+        final watchCount = status.values.where((s) => s.state == BudgetState.watch).length;
+        // Budgeted categories first so their progress is easy to find, then the rest by size.
+        final ordered = [
+          ...cats.where((c) => budgets.containsKey(c.key)),
+          ...cats.where((c) => !budgets.containsKey(c.key) && c.value > 0).take(8),
+        ];
         return Section(
           title: 'Where it went',
+          trailing: budgets.isEmpty
+              ? null
+              : Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: _StatusPill(
+                    text: overCount > 0
+                        ? '$overCount over'
+                        : watchCount > 0
+                        ? '$watchCount ahead of pace'
+                        : 'Budgets on track',
+                    color: overCount > 0
+                        ? p.danger
+                        : watchCount > 0
+                        ? _amber
+                        : p.positive,
+                  ),
+                ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
             child: Column(
               children: [
-                // Stacked bar of the month's outgoings.
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(5),
-                  child: SizedBox(
-                    height: 10,
-                    child: Row(
-                      children: [
-                        for (final c in cats)
-                          Expanded(
-                            flex: math.max(1, (c.value * 1000 / summary.out).round()),
-                            child: Container(
-                              color: categoryInfo(c.key).color,
-                              margin: const EdgeInsets.only(right: 1.5),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                for (final c in cats.take(8))
-                  InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () => _editBudget(context, c.key, budgets[c.key]),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Column(
+                if (summary.out > 0) ...[
+                  // Stacked bar of the month's outgoings.
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(5),
+                    child: SizedBox(
+                      height: 10,
+                      child: Row(
                         children: [
-                          Row(
-                            children: [
-                              Icon(categoryInfo(c.key).icon, size: 18, color: categoryInfo(c.key).color),
-                              const SizedBox(width: 10),
-                              Expanded(child: Text(c.key)),
-                              if (budgets[c.key] != null)
-                                Text(
-                                  '${money(c.value, currency)} of ${money(budgets[c.key]!, currency)}',
-                                  style: TextStyle(
-                                    fontSize: 13.5,
-                                    color: c.value > budgets[c.key]! ? p.danger : p.muted,
-                                  ),
-                                )
-                              else
-                                Text(money(c.value, currency), style: const TextStyle(fontWeight: FontWeight.w600)),
-                            ],
-                          ),
-                          if (budgets[c.key] != null)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 28, top: 6),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(3),
-                                child: LinearProgressIndicator(
-                                  minHeight: 5,
-                                  value: (c.value / budgets[c.key]!).clamp(0, 1).toDouble(),
-                                  backgroundColor: p.raised,
-                                  color: c.value > budgets[c.key]! ? p.danger : categoryInfo(c.key).color,
-                                ),
+                          for (final c in cats.where((c) => c.value > 0))
+                            Expanded(
+                              flex: math.max(1, (c.value * 1000 / summary.out).round()),
+                              child: Container(
+                                color: categoryInfo(c.key).color,
+                                margin: const EdgeInsets.only(right: 1.5),
                               ),
                             ),
                         ],
                       ),
                     ),
                   ),
+                  const SizedBox(height: 10),
+                ],
+                for (final c in ordered)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => _editBudget(context, c.key, budgets[c.key]),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: status[c.key] == null
+                          ? Row(
+                              children: [
+                                Icon(categoryInfo(c.key).icon, size: 18, color: categoryInfo(c.key).color),
+                                const SizedBox(width: 10),
+                                Expanded(child: Text(c.key, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                Text(money(c.value, currency), style: const TextStyle(fontWeight: FontWeight.w600)),
+                              ],
+                            )
+                          : _BudgetRow(category: c.key, status: status[c.key]!, currency: currency),
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
-                    'Tap a category to set a monthly budget',
+                    budgets.isEmpty ? 'Tap a category to set a monthly budget' : 'Tap a category to change its budget',
                     style: TextStyle(fontSize: 12.5, color: p.muted),
                   ),
                 ),
@@ -670,6 +769,98 @@ class _Breakdown extends StatelessWidget {
       ),
     );
     if (v != null) await db.setBudget(category, parseMoney(v));
+  }
+}
+
+/// Amber for "ahead of pace": a heads-up, not yet a problem.
+const _amber = Color(0xFFE08A1E);
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.text, required this.color});
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    constraints: const BoxConstraints(maxWidth: 150),
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+    decoration: BoxDecoration(color: color.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(20)),
+    child: Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+    ),
+  );
+}
+
+/// A budgeted category: spent against budget, where an even pace would be today, and a plain verdict.
+class _BudgetRow extends StatelessWidget {
+  const _BudgetRow({required this.category, required this.status, required this.currency});
+  final String category;
+  final BudgetStatus status;
+  final String currency;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final info = categoryInfo(category);
+    final color = switch (status.state) {
+      BudgetState.over => p.danger,
+      BudgetState.watch => _amber,
+      BudgetState.onTrack => p.positive,
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(info.icon, size: 18, color: info.color),
+            const SizedBox(width: 10),
+            Expanded(child: Text(category, maxLines: 1, overflow: TextOverflow.ellipsis)),
+            const SizedBox(width: 8),
+            _StatusPill(text: status.label, color: color),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 28, top: 8),
+          child: LayoutBuilder(
+            builder: (context, box) => Stack(
+              clipBehavior: Clip.none,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    minHeight: 7,
+                    value: status.fraction,
+                    backgroundColor: p.raised,
+                    color: status.state == BudgetState.over ? p.danger : info.color,
+                  ),
+                ),
+                // Where spending would be today at an even pace.
+                if (status.paceFraction < 1)
+                  Positioned(
+                    left: (box.maxWidth * status.paceFraction - 1).clamp(0, box.maxWidth - 2).toDouble(),
+                    top: -2,
+                    child: Container(width: 2, height: 11, color: p.ink.withValues(alpha: 0.6)),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 28, top: 6),
+          child: Text(
+            status.left >= 0
+                ? '${money(status.spent, currency)} of ${money(status.budget, currency)} · ${money(status.left, currency)} left'
+                : '${money(status.spent, currency)} of ${money(status.budget, currency)} · ${money(-status.left, currency)} over',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 13, color: p.muted),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -710,6 +901,35 @@ class EntryTile extends StatelessWidget {
           color: sign > 0 ? p.positive : p.ink,
         ),
       ),
+    );
+  }
+}
+
+/// Swipe an entry left to delete it, with a moment to undo.
+class _SwipeToDelete extends StatelessWidget {
+  const _SwipeToDelete({required this.entry, required this.child});
+  final Entry entry;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return Dismissible(
+      key: ValueKey('entry-${entry.id}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        color: p.danger,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 22),
+        child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
+      ),
+      onDismissed: (_) {
+        final db = context.db;
+        db.deleteEntry(entry.id);
+        final label = entry.note.isEmpty ? entry.category : entry.note;
+        showUndo(context, '$label deleted', () => db.restoreEntry(entry));
+      },
+      child: child,
     );
   }
 }
@@ -856,7 +1076,7 @@ class _EntryEditorState extends State<_EntryEditor> {
                       context: context,
                       initialDate: _date,
                       firstDate: DateTime(2000),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                      lastDate: addDays(DateTime.now(), 365),
                     );
                     if (d != null) setState(() => _date = DateTime(d.year, d.month, d.day, _date.hour, _date.minute));
                   },

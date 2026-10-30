@@ -3,6 +3,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 
 import '../format.dart';
 import '../sync/sync_schema.dart';
+import '../edition.dart';
 import 'my_recurring.dart';
 
 export 'my_recurring.dart';
@@ -436,7 +437,8 @@ class AppDatabase extends _$AppDatabase {
     }
 
     final work = await calendarNamed('Work', 0xFF1F7A5A);
-    final lab = await calendarNamed('Lab', 0xFF7A5BC0);
+    // The public build has no Lab.
+    final lab = personalEdition ? await calendarNamed('Lab', 0xFF7A5BC0) : null;
     final study = await calendarNamed('Study', 0xFFC0563F);
     await batch(
       (b) => b.insertAll(spaces, [
@@ -447,6 +449,7 @@ class AppDatabase extends _$AppDatabase {
           calendarId: Value(work),
           position: const Value(0),
         ),
+        if (lab != null)
         SpacesCompanion.insert(
           name: 'Lab research',
           icon: const Value('science'),

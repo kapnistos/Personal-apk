@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-/// Palette: near-black (or cool grey) ground, flat cards, one confident blue.
-class Palette {
+/// Palette: near-black (or cool grey) ground, flat cards, one confident accent.
+class Palette extends ThemeExtension<Palette> {
   final Color background;
   final Color surface;
   final Color raised;
@@ -52,8 +52,101 @@ class Palette {
     positive: Color(0xFF3DD68C),
   );
 
-  static Palette of(BuildContext context) => Theme.of(context).brightness == Brightness.dark ? dark : light;
+  /// The palette the current theme was built with (accent and background follow the user's choice).
+  static Palette of(BuildContext context) {
+    final theme = Theme.of(context);
+    return theme.extension<Palette>() ?? (theme.brightness == Brightness.dark ? dark : light);
+  }
+
+  @override
+  Palette copyWith({
+    Color? background,
+    Color? surface,
+    Color? raised,
+    Color? ink,
+    Color? muted,
+    Color? line,
+    Color? accent,
+    Color? onAccent,
+    Color? danger,
+    Color? positive,
+  }) => Palette(
+    background: background ?? this.background,
+    surface: surface ?? this.surface,
+    raised: raised ?? this.raised,
+    ink: ink ?? this.ink,
+    muted: muted ?? this.muted,
+    line: line ?? this.line,
+    accent: accent ?? this.accent,
+    onAccent: onAccent ?? this.onAccent,
+    danger: danger ?? this.danger,
+    positive: positive ?? this.positive,
+  );
+
+  @override
+  Palette lerp(Palette? other, double t) {
+    if (other == null) return this;
+    Color l(Color a, Color b) => Color.lerp(a, b, t)!;
+    return Palette(
+      background: l(background, other.background),
+      surface: l(surface, other.surface),
+      raised: l(raised, other.raised),
+      ink: l(ink, other.ink),
+      muted: l(muted, other.muted),
+      line: l(line, other.line),
+      accent: l(accent, other.accent),
+      onAccent: l(onAccent, other.onAccent),
+      danger: l(danger, other.danger),
+      positive: l(positive, other.positive),
+    );
+  }
 }
+
+/// Accent colours people can pick under Appearance. Each has a dark and a light shade.
+class AccentChoice {
+  const AccentChoice(this.id, this.label, this.dark, this.light);
+  final String id;
+  final String label;
+  final Color dark;
+  final Color light;
+
+  Color forBrightness(Brightness b) => b == Brightness.dark ? dark : light;
+}
+
+const accentChoices = [
+  AccentChoice('blue', 'Blue', Color(0xFF4F86FF), Color(0xFF1E5BF0)),
+  AccentChoice('violet', 'Violet', Color(0xFF8B7CFF), Color(0xFF5B45D6)),
+  AccentChoice('pink', 'Pink', Color(0xFFFF6FA8), Color(0xFFC92A6E)),
+  AccentChoice('orange', 'Orange', Color(0xFFFF8A3D), Color(0xFFC75A12)),
+  AccentChoice('green', 'Green', Color(0xFF3DD68C), Color(0xFF128A4E)),
+  AccentChoice('teal', 'Teal', Color(0xFF2EC4C4), Color(0xFF0B7C83)),
+];
+
+/// Dark backgrounds: pure black or a softer dark grey.
+const darkBackgrounds = {'black': 'Black', 'grey': 'Dark grey'};
+
+/// Appearance keys kept in raw settings.
+const accentKey = 'look.accent';
+const darkBackgroundKey = 'look.background';
+
+AccentChoice accentById(String? id) => accentChoices.firstWhere((a) => a.id == id, orElse: () => accentChoices.first);
+
+Palette _paletteFor(Brightness brightness, String accent, String background) {
+  final base = brightness == Brightness.dark ? Palette.dark : Palette.light;
+  final a = accentById(accent).forBrightness(brightness);
+  if (brightness == Brightness.dark && background == 'grey') {
+    return base.copyWith(
+      accent: a,
+      background: const Color(0xFF121316),
+      surface: const Color(0xFF1E1F23),
+      raised: const Color(0xFF2B2C31),
+      line: const Color(0xFF2B2C31),
+    );
+  }
+  return base.copyWith(accent: a);
+}
+
+final _themeCache = <String, ThemeData>{};
 
 /// Accent colours for each mini-app tile.
 class TileColors {
@@ -65,8 +158,13 @@ class TileColors {
   static const claude = Color(0xFFC96442);
 }
 
-ThemeData buildTheme(Brightness brightness) {
-  final p = brightness == Brightness.dark ? Palette.dark : Palette.light;
+/// The app theme. Results are cached, so rebuilding the app with the same choices hands back the same object
+/// and nothing below it has to rebuild.
+ThemeData buildTheme(Brightness brightness, {String accent = 'blue', String background = 'black'}) =>
+    _themeCache.putIfAbsent('${brightness.name}/$accent/$background', () => _build(brightness, accent, background));
+
+ThemeData _build(Brightness brightness, String accent, String background) {
+  final p = _paletteFor(brightness, accent, background);
   final scheme = ColorScheme(
     brightness: brightness,
     primary: p.accent,
@@ -100,6 +198,7 @@ ThemeData buildTheme(Brightness brightness) {
   final text = base.textTheme.apply(bodyColor: p.ink, displayColor: p.ink);
 
   return base.copyWith(
+    extensions: [p],
     textTheme: text.copyWith(
       displaySmall: text.displaySmall?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -1.2),
       headlineLarge: text.headlineLarge?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -1.0),
@@ -224,7 +323,8 @@ ThemeData buildTheme(Brightness brightness) {
       behavior: SnackBarBehavior.floating,
       backgroundColor: p.ink,
       contentTextStyle: TextStyle(fontFamily: 'Inter', color: p.background),
-      actionTextColor: brightness == Brightness.dark ? Palette.light.accent : Palette.dark.accent,
+      actionTextColor: accentById(accent)
+          .forBrightness(brightness == Brightness.dark ? Brightness.light : Brightness.dark),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
     bottomSheetTheme: BottomSheetThemeData(
@@ -241,9 +341,7 @@ ThemeData buildTheme(Brightness brightness) {
     popupMenuTheme: PopupMenuThemeData(
       color: p.surface,
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
     ),
     checkboxTheme: CheckboxThemeData(
       shape: const CircleBorder(),

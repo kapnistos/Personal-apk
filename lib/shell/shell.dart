@@ -19,6 +19,9 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> {
   int _index = 0;
 
+  // Tabs are built the first time they are opened, then kept alive, so start-up only pays for Home.
+  final _visited = <int>{0};
+
   static const _destinations = [
     (Icons.grid_view_outlined, Icons.grid_view_rounded, 'Home'),
     (Icons.calendar_today_outlined, Icons.calendar_today_rounded, 'Calendar'),
@@ -26,16 +29,14 @@ class _ShellState extends State<Shell> {
     (Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'AI'),
   ];
 
-  void select(int i) => setState(() => _index = i);
+  void select(int i) => setState(() {
+    _index = i;
+    _visited.add(i);
+  });
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      HomePage(onOpenTab: select),
-      const CalendarPage(),
-      const TodoPage(),
-      const AiPage(),
-    ];
+    final pages = [HomePage(onOpenTab: select), const CalendarPage(), const TodoPage(), const AiPage()];
     final body = CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
@@ -43,38 +44,48 @@ class _ShellState extends State<Shell> {
         for (var i = 0; i < 4; i++)
           SingleActivator(LogicalKeyboardKey(LogicalKeyboardKey.digit1.keyId + i), control: true): () => select(i),
       },
-      child: Focus(autofocus: true, child: IndexedStack(index: _index, children: pages)),
+      child: Focus(
+        autofocus: true,
+        child: IndexedStack(
+          index: _index,
+          children: [for (var i = 0; i < pages.length; i++) _visited.contains(i) ? pages[i] : const SizedBox.shrink()],
+        ),
+      ),
     );
     final wide = MediaQuery.sizeOf(context).width >= 720;
     final p = Palette.of(context);
 
     if (wide) {
       return Scaffold(
-        body: Row(children: [
-          NavigationRail(
-            selectedIndex: _index,
-            onDestinationSelected: select,
-            labelType: NavigationRailLabelType.all,
-            minWidth: 76,
-            leading: Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 20),
-              child: Image.asset('assets/icon/icon.png', width: 40, height: 40),
+        body: Row(
+          children: [
+            NavigationRail(
+              selectedIndex: _index,
+              onDestinationSelected: select,
+              labelType: NavigationRailLabelType.all,
+              minWidth: 76,
+              leading: Padding(
+                padding: const EdgeInsets.only(top: 8, bottom: 20),
+                child: Image.asset('assets/icon/icon.png', width: 40, height: 40),
+              ),
+              destinations: [
+                for (final (icon, selected, label) in _destinations)
+                  NavigationRailDestination(icon: Icon(icon), selectedIcon: Icon(selected), label: Text(label)),
+              ],
             ),
-            destinations: [
-              for (final (icon, selected, label) in _destinations)
-                NavigationRailDestination(icon: Icon(icon), selectedIcon: Icon(selected), label: Text(label)),
-            ],
-          ),
-          VerticalDivider(width: 1, color: p.line),
-          Expanded(child: body),
-        ]),
+            VerticalDivider(width: 1, color: p.line),
+            Expanded(child: body),
+          ],
+        ),
       );
     }
 
     return Scaffold(
       body: body,
       bottomNavigationBar: DecoratedBox(
-        decoration: BoxDecoration(border: Border(top: BorderSide(color: p.line))),
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: p.line)),
+        ),
         child: NavigationBar(
           selectedIndex: _index,
           onDestinationSelected: select,

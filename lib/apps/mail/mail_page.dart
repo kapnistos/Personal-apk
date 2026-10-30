@@ -28,8 +28,11 @@ class _MailPageState extends State<MailPage> {
   int? _accountFilter;
   bool _loading = false;
 
+  // Kept so a redraw doesn't start a new database query.
+  late final _accountsStream = context.db.watchMailAccounts();
+
   Future<void> _refresh(List<MailboxAccount> accounts) async {
-    if (accounts.isEmpty) return;
+    if (accounts.isEmpty || !mounted) return;
     setState(() => _loading = true);
     final (items, errors) = await MailService.instance.inbox(accounts);
     if (!mounted) return;
@@ -51,7 +54,7 @@ class _MailPageState extends State<MailPage> {
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     return StreamBuilder<List<MailboxAccount>>(
-      stream: context.db.watchMailAccounts(),
+      stream: _accountsStream,
       builder: (context, snap) {
         final accounts = snap.data;
         if (accounts != null && !_sameAccounts(accounts)) {
@@ -68,7 +71,8 @@ class _MailPageState extends State<MailPage> {
               IconButton(
                 tooltip: 'Accounts',
                 icon: const Icon(Icons.manage_accounts_outlined),
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MailAccountsPage())),
+                onPressed: () =>
+                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MailAccountsPage())),
               ),
               const SizedBox(width: 4),
             ],
@@ -83,78 +87,82 @@ class _MailPageState extends State<MailPage> {
           body: accounts == null
               ? const SizedBox.shrink()
               : accounts.isEmpty
-                  ? EmptyState(
-                      icon: Icons.mail_outline_rounded,
-                      title: 'No mail accounts',
-                      message: 'Add Gmail, Proton (through Proton Bridge) or any IMAP account.',
-                      action: FilledButton.icon(
-                        onPressed: () => openAccountSetup(context),
-                        icon: const Icon(Icons.add_rounded),
-                        label: const Text('Add account'),
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: () => _refresh(accounts),
-                      child: ListView(
-                        padding: const EdgeInsets.only(bottom: 96),
-                        children: [
-                          if (accounts.length > 1)
-                            SizedBox(
-                              height: 48,
-                              child: ListView(
-                                scrollDirection: Axis.horizontal,
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              ? EmptyState(
+                  icon: Icons.mail_outline_rounded,
+                  title: 'No mail accounts',
+                  message: 'Add Gmail, Proton (through Proton Bridge) or any IMAP account.',
+                  action: FilledButton.icon(
+                    onPressed: () => openAccountSetup(context),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Add account'),
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: () => _refresh(accounts),
+                  child: ListView(
+                    padding: const EdgeInsets.only(bottom: 96),
+                    children: [
+                      if (accounts.length > 1)
+                        SizedBox(
+                          height: 48,
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            children: [
+                              for (final a in [null, ...accounts])
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: ChoiceChip(
+                                    showCheckmark: false,
+                                    label: Text(a == null ? 'All inboxes' : a.email),
+                                    selected: _accountFilter == a?.id,
+                                    onSelected: (_) => setState(() => _accountFilter = a?.id),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      for (final e in _errors)
+                        ContentWidth(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: p.danger.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
                                 children: [
-                                  for (final a in [null, ...accounts])
-                                    Padding(
-                                      padding: const EdgeInsets.only(right: 8),
-                                      child: ChoiceChip(
-                                        showCheckmark: false,
-                                        label: Text(a == null ? 'All inboxes' : a.email),
-                                        selected: _accountFilter == a?.id,
-                                        onSelected: (_) => setState(() => _accountFilter = a?.id),
-                                      ),
-                                    ),
+                                  Icon(Icons.error_outline_rounded, color: p.danger, size: 20),
+                                  const SizedBox(width: 10),
+                                  Expanded(child: Text('${e.account.email}: ${e.message}')),
                                 ],
                               ),
                             ),
-                          for (final e in _errors)
-                            ContentWidth(
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: p.danger.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Row(children: [
-                                    Icon(Icons.error_outline_rounded, color: p.danger, size: 20),
-                                    const SizedBox(width: 10),
-                                    Expanded(child: Text('${e.account.email}: ${e.message}')),
-                                  ]),
-                                ),
-                              ),
-                            ),
-                          if (_loading && _items == null)
-                            const Padding(
-                              padding: EdgeInsets.all(48),
-                              child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
-                            ),
-                          if (_items != null && items.isEmpty && _errors.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.only(top: 80),
-                              child: EmptyState(
-                                icon: Icons.inbox_outlined,
-                                title: 'Inbox zero',
-                                message: 'Nothing here right now.',
-                              ),
-                            ),
-                          for (final item in items)
-                            ContentWidth(child: _MailRow(item: item, time: _time(item.date), showAccount: accounts.length > 1)),
-                        ],
-                      ),
-                    ),
+                          ),
+                        ),
+                      if (_loading && _items == null)
+                        const Padding(
+                          padding: EdgeInsets.all(48),
+                          child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
+                        ),
+                      if (_items != null && items.isEmpty && _errors.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 80),
+                          child: EmptyState(
+                            icon: Icons.inbox_outlined,
+                            title: 'Inbox zero',
+                            message: 'Nothing here right now.',
+                          ),
+                        ),
+                      for (final item in items)
+                        ContentWidth(
+                          child: _MailRow(item: item, time: _time(item.date), showAccount: accounts.length > 1),
+                        ),
+                    ],
+                  ),
+                ),
         );
       },
     );
@@ -178,50 +186,70 @@ class _MailRow extends StatelessWidget {
       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _MessagePage(item: item))),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: Color(item.account.color).withValues(alpha: 0.16),
-            child: Text(
-              item.sender.characters.first.toUpperCase(),
-              style: TextStyle(color: Color(item.account.color), fontWeight: FontWeight.w700),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: Color(item.account.color).withValues(alpha: 0.16),
+              child: Text(
+                item.sender.characters.first.toUpperCase(),
+                style: TextStyle(color: Color(item.account.color), fontWeight: FontWeight.w700),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Expanded(
-                  child: Text(item.sender,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontWeight: unread ? FontWeight.w700 : FontWeight.w500)),
-                ),
-                Text(time,
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: unread ? p.accent : p.muted,
-                        fontWeight: unread ? FontWeight.w600 : FontWeight.w400)),
-              ]),
-              const SizedBox(height: 2),
-              Row(children: [
-                Expanded(
-                  child: Text(item.subject,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: unread ? p.ink : p.muted, fontWeight: unread ? FontWeight.w600 : FontWeight.w400)),
-                ),
-                if (showAccount)
-                  Container(
-                    width: 8,
-                    height: 8,
-                    margin: const EdgeInsets.only(left: 8),
-                    decoration: BoxDecoration(color: Color(item.account.color), shape: BoxShape.circle),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.sender,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontWeight: unread ? FontWeight.w700 : FontWeight.w500),
+                        ),
+                      ),
+                      Text(
+                        time,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: unread ? p.accent : p.muted,
+                          fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                      ),
+                    ],
                   ),
-              ]),
-            ]),
-          ),
-        ]),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.subject,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: unread ? p.ink : p.muted,
+                            fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                      if (showAccount)
+                        Container(
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(left: 8),
+                          decoration: BoxDecoration(color: Color(item.account.color), shape: BoxShape.circle),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -242,11 +270,16 @@ class _MessagePageState extends State<_MessagePage> {
   @override
   void initState() {
     super.initState();
-    MailService.instance.open(widget.item).then((m) {
-      if (mounted) setState(() => _full = m);
-    }, onError: (e) {
-      if (mounted) setState(() => _error = '$e');
-    });
+    MailService.instance
+        .open(widget.item)
+        .then(
+          (m) {
+            if (mounted) setState(() => _full = m);
+          },
+          onError: (e) {
+            if (mounted) setState(() => _error = '$e');
+          },
+        );
   }
 
   @override
@@ -283,32 +316,43 @@ class _MessagePageState extends State<_MessagePage> {
           children: [
             SelectableText(item.subject, style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 14),
-            Row(children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: Color(item.account.color).withValues(alpha: 0.16),
-                child: Text(item.sender.characters.first.toUpperCase(),
-                    style: TextStyle(color: Color(item.account.color), fontWeight: FontWeight.w700)),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(item.sender, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  Text(
-                    '${from?.email ?? ''} · to ${item.account.email}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: p.muted, fontSize: 13.5),
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: Color(item.account.color).withValues(alpha: 0.16),
+                  child: Text(
+                    item.sender.characters.first.toUpperCase(),
+                    style: TextStyle(color: Color(item.account.color), fontWeight: FontWeight.w700),
                   ),
-                ]),
-              ),
-              Text(DateFormat('d MMM, HH:mm').format(item.date), style: TextStyle(color: p.muted, fontSize: 13.5)),
-            ]),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item.sender, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      Text(
+                        '${from?.email ?? ''} · to ${item.account.email}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: p.muted, fontSize: 13.5),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(DateFormat('d MMM, HH:mm').format(item.date), style: TextStyle(color: p.muted, fontSize: 13.5)),
+              ],
+            ),
             const SizedBox(height: 20),
             if (_error != null) Text(_error!, style: TextStyle(color: p.danger)),
             if (text == null && _error == null)
-              const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(strokeWidth: 2.5))),
-            if (text != null) SelectableText(text.isEmpty ? '(no text)' : text, style: const TextStyle(fontSize: 15.5, height: 1.55)),
+              const Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
+              ),
+            if (text != null)
+              SelectableText(text.isEmpty ? '(no text)' : text, style: const TextStyle(fontSize: 15.5, height: 1.55)),
           ],
         ),
       ),
@@ -317,10 +361,12 @@ class _MessagePageState extends State<_MessagePage> {
 }
 
 Future<void> openCompose(BuildContext context, List<MailboxAccount> accounts, {MimeMessage? replyTo}) {
-  return Navigator.of(context).push(MaterialPageRoute(
-    fullscreenDialog: true,
-    builder: (_) => _Compose(accounts: accounts, replyTo: replyTo),
-  ));
+  return Navigator.of(context).push(
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => _Compose(accounts: accounts, replyTo: replyTo),
+    ),
+  );
 }
 
 class _Compose extends StatefulWidget {
@@ -349,7 +395,8 @@ class _ComposeState extends State<_Compose> {
       final s = r.decodeSubject() ?? '';
       _subject.text = s.toLowerCase().startsWith('re:') ? s : 'Re: $s';
       final quoted = messageText(r).split('\n').map((l) => '> $l').join('\n');
-      _body.text = '\n\nOn ${DateFormat('d MMM y, HH:mm').format(r.decodeDate()?.toLocal() ?? DateTime.now())}, '
+      _body.text =
+          '\n\nOn ${DateFormat('d MMM y, HH:mm').format(r.decodeDate()?.toLocal() ?? DateTime.now())}, '
           '${sender?.personalName ?? sender?.email ?? ''} wrote:\n$quoted';
     }
   }
@@ -392,7 +439,7 @@ class _ComposeState extends State<_Compose> {
       navigator.pop();
       messenger.showSnackBar(const SnackBar(content: Text('Sent')));
     } catch (e) {
-      setState(() => _sending = false);
+      if (mounted) setState(() => _sending = false);
       messenger.showSnackBar(SnackBar(content: Text('Not sent: $e')));
     }
   }
@@ -604,36 +651,38 @@ class _AccountSetupState extends State<_AccountSetup> {
   }
 
   void _pick(MailPreset p) => setState(() {
-        _preset = p;
-        _imapHost.text = p.imapHost;
-        _imapPort.text = '${p.imapPort}';
-        _smtpHost.text = p.smtpHost;
-        _smtpPort.text = '${p.smtpPort}';
-        _advanced = p.id == 'imap' || p.id == 'proton';
-        _error = null;
-      });
+    _preset = p;
+    _imapHost.text = p.imapHost;
+    _imapPort.text = '${p.imapPort}';
+    _smtpHost.text = p.smtpHost;
+    _smtpPort.text = '${p.smtpPort}';
+    _advanced = p.id == 'imap' || p.id == 'proton';
+    _error = null;
+  });
 
   MailboxAccount _draft(int id) => MailboxAccount(
-        id: id,
-        provider: _preset.id,
-        name: _name.text.trim().isEmpty ? _email.text.trim() : _name.text.trim(),
-        email: _email.text.trim(),
-        imapHost: _imapHost.text.trim(),
-        imapPort: int.tryParse(_imapPort.text) ?? _preset.imapPort,
-        imapSecurity: _preset.imapSecurity,
-        smtpHost: _smtpHost.text.trim(),
-        smtpPort: int.tryParse(_smtpPort.text) ?? _preset.smtpPort,
-        smtpSecurity: _preset.smtpSecurity,
-        color: _preset.color,
-        allowSelfSigned: _preset.allowSelfSigned,
-      );
+    id: id,
+    provider: _preset.id,
+    name: _name.text.trim().isEmpty ? _email.text.trim() : _name.text.trim(),
+    email: _email.text.trim(),
+    imapHost: _imapHost.text.trim(),
+    imapPort: int.tryParse(_imapPort.text) ?? _preset.imapPort,
+    imapSecurity: _preset.imapSecurity,
+    smtpHost: _smtpHost.text.trim(),
+    smtpPort: int.tryParse(_smtpPort.text) ?? _preset.smtpPort,
+    smtpSecurity: _preset.smtpSecurity,
+    color: _preset.color,
+    allowSelfSigned: _preset.allowSelfSigned,
+  );
 
   Future<void> _save() async {
     final secret = _isOutlook ? _oauthSecret : _password.text;
     if (!_email.text.contains('@') || secret == null || secret.isEmpty || _imapHost.text.trim().isEmpty) {
-      setState(() => _error = _isOutlook
-          ? 'Fill in the email address, then sign in with Microsoft.'
-          : 'Fill in the email address, ${_preset.passwordLabel.toLowerCase()} and server.');
+      setState(
+        () => _error = _isOutlook
+            ? 'Fill in the email address, then sign in with Microsoft.'
+            : 'Fill in the email address, ${_preset.passwordLabel.toLowerCase()} and server.',
+      );
       return;
     }
     setState(() {
@@ -645,6 +694,7 @@ class _AccountSetupState extends State<_AccountSetup> {
     try {
       await MailService.instance.test(draft, secret);
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _busy = false;
         _error = '$e';
@@ -669,15 +719,19 @@ class _AccountSetupState extends State<_AccountSetup> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
           children: [
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              for (final preset in mailPresets)
-                ChoiceChip(
-                  showCheckmark: false,
-                  label: Text(preset.label),
-                  selected: _preset.id == preset.id,
-                  onSelected: preset.available ? (_) => _pick(preset) : null,
-                ),
-            ]),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final preset in mailPresets)
+                  ChoiceChip(
+                    showCheckmark: false,
+                    label: Text(preset.label),
+                    selected: _preset.id == preset.id,
+                    onSelected: preset.available ? (_) => _pick(preset) : null,
+                  ),
+              ],
+            ),
             const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.all(14),
@@ -689,13 +743,20 @@ class _AccountSetupState extends State<_AccountSetup> {
               controller: _email,
               keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
-                  hintText: _preset.id == 'proton' ? 'Email (as shown in Bridge)' : 'Email address'),
+                hintText: _preset.id == 'proton' ? 'Email (as shown in Bridge)' : 'Email address',
+              ),
             ),
             const SizedBox(height: 10),
-            TextField(controller: _name, decoration: const InputDecoration(hintText: 'Your name, shown to recipients')),
+            TextField(
+              controller: _name,
+              decoration: const InputDecoration(hintText: 'Your name, shown to recipients'),
+            ),
             const SizedBox(height: 10),
             if (_isOutlook)
-              TextField(controller: _clientId, decoration: const InputDecoration(hintText: 'Application (client) ID'))
+              TextField(
+                controller: _clientId,
+                decoration: const InputDecoration(hintText: 'Application (client) ID'),
+              )
             else
               TextField(
                 controller: _password,
@@ -706,15 +767,25 @@ class _AccountSetupState extends State<_AccountSetup> {
               Container(
                 margin: const EdgeInsets.only(top: 12),
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: p.accent.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-                child: Column(children: [
-                  Text('Enter this code at ${_code!.url}', textAlign: TextAlign.center),
-                  const SizedBox(height: 8),
-                  SelectableText(_code!.userCode,
-                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: 4)),
-                  const SizedBox(height: 4),
-                  Text('Copied to the clipboard. Waiting for you to approve…', style: TextStyle(color: p.muted, fontSize: 13.5)),
-                ]),
+                decoration: BoxDecoration(
+                  color: p.accent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    Text('Enter this code at ${_code!.url}', textAlign: TextAlign.center),
+                    const SizedBox(height: 8),
+                    SelectableText(
+                      _code!.userCode,
+                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: 4),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Copied to the clipboard. Waiting for you to approve…',
+                      style: TextStyle(color: p.muted, fontSize: 13.5),
+                    ),
+                  ],
+                ),
               ),
             const SizedBox(height: 6),
             Align(
@@ -725,17 +796,45 @@ class _AccountSetupState extends State<_AccountSetup> {
               ),
             ),
             if (_advanced) ...[
-              Row(children: [
-                Expanded(flex: 3, child: TextField(controller: _imapHost, decoration: const InputDecoration(labelText: 'IMAP server'))),
-                const SizedBox(width: 10),
-                Expanded(child: TextField(controller: _imapPort, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Port'))),
-              ]),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: TextField(
+                      controller: _imapHost,
+                      decoration: const InputDecoration(labelText: 'IMAP server'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _imapPort,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Port'),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 10),
-              Row(children: [
-                Expanded(flex: 3, child: TextField(controller: _smtpHost, decoration: const InputDecoration(labelText: 'SMTP server'))),
-                const SizedBox(width: 10),
-                Expanded(child: TextField(controller: _smtpPort, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Port'))),
-              ]),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: TextField(
+                      controller: _smtpHost,
+                      decoration: const InputDecoration(labelText: 'SMTP server'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _smtpPort,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Port'),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 6),
             ],
             if (_error != null)

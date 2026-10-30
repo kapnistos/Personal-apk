@@ -3,6 +3,7 @@ import '../apps/wallet/accounts_page.dart' show AccountState;
 import '../apps/wallet/wallet_model.dart';
 import 'db/database.dart';
 import 'format.dart';
+import 'settings.dart';
 
 /// A notification an automation wants to show at a set time.
 class PlannedNote {
@@ -42,6 +43,10 @@ class AutomationSettings {
     return m == null ? null : (int.parse(m[1]!), int.parse(m[2]!));
   }
 }
+
+/// The automation settings as one string, to tell when any of them changed.
+String automationSignature(AppSettings s) =>
+    const ['briefing', 'bills', 'lowBalance', 'weekly', 'overdue', 'habits'].map((k) => s.raw('auto.$k')).join('|');
 
 String _hm(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'settings.dart';
 import 'theme.dart';
 
 /// Caps content width so pages read well on a wide Windows window.
@@ -10,11 +11,11 @@ class ContentWidth extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxWidth),
-          child: child,
-        ),
-      );
+    child: ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: child,
+    ),
+  );
 }
 
 /// A card with a small heading, used to group content on a page.
@@ -33,10 +34,12 @@ class Section extends StatelessWidget {
         children: [
           Padding(
             padding: EdgeInsets.fromLTRB(16, 14, trailing == null ? 16 : 6, 6),
-            child: Row(children: [
-              Expanded(child: SectionLabel(title)),
-              ?trailing,
-            ]),
+            child: Row(
+              children: [
+                Expanded(child: SectionLabel(title)),
+                ?trailing,
+              ],
+            ),
           ),
           child,
         ],
@@ -51,9 +54,9 @@ class SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        text,
-        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Palette.of(context).muted),
-      );
+    text,
+    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Palette.of(context).muted),
+  );
 }
 
 class EmptyState extends StatelessWidget {
@@ -83,7 +86,11 @@ class EmptyState extends StatelessWidget {
               const SizedBox(height: 16),
               Text(title, style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
               const SizedBox(height: 6),
-              Text(message, style: TextStyle(color: p.muted, height: 1.4), textAlign: TextAlign.center),
+              Text(
+                message,
+                style: TextStyle(color: p.muted, height: 1.4),
+                textAlign: TextAlign.center,
+              ),
               if (action != null) ...[const SizedBox(height: 18), action!],
             ],
           ),
@@ -105,10 +112,7 @@ class AppGlyph extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-      ),
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       child: Icon(icon, color: Colors.white, size: size * 0.48),
     );
   }
@@ -138,7 +142,10 @@ class BigAmount extends StatelessWidget {
       TextSpan(
         children: [
           TextSpan(text: m[1]),
-          TextSpan(text: '${m[2]}${m[3]}', style: style.copyWith(fontSize: size * 0.6, letterSpacing: 0)),
+          TextSpan(
+            text: '${m[2]}${m[3]}',
+            style: style.copyWith(fontSize: size * 0.6, letterSpacing: 0),
+          ),
         ],
       ),
       style: style,
@@ -150,8 +157,95 @@ class BigAmount extends StatelessWidget {
 void showUndo(BuildContext context, String message, VoidCallback onUndo) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(
-      content: Text(message),
-      action: SnackBarAction(label: 'Undo', onPressed: onUndo),
-    ));
+    ..showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: SnackBarAction(label: 'Undo', onPressed: onUndo),
+      ),
+    );
+}
+
+/// Rebuilds its builder only when the picked setting changes, not on every settings write.
+class SettingSelector<T> extends StatefulWidget {
+  const SettingSelector({super.key, required this.select, required this.builder});
+  final T Function(AppSettings s) select;
+  final Widget Function(BuildContext context, T value) builder;
+
+  @override
+  State<SettingSelector<T>> createState() => _SettingSelectorState<T>();
+}
+
+class _SettingSelectorState<T> extends State<SettingSelector<T>> {
+  AppSettings? _settings;
+  late T _value;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final s = context.settings;
+    if (s == _settings) return;
+    _settings?.removeListener(_changed);
+    _settings = s..addListener(_changed);
+    _value = widget.select(s);
+  }
+
+  void _changed() {
+    final v = widget.select(_settings!);
+    if (v != _value) setState(() => _value = v);
+  }
+
+  @override
+  void dispose() {
+    _settings?.removeListener(_changed);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _value);
+}
+
+/// A row of colour dots; the chosen one gets a ring.
+class ColorDots extends StatelessWidget {
+  const ColorDots({super.key, required this.colors, required this.selected, required this.onSelected, this.labels});
+  final List<Color> colors;
+  final int selected;
+  final ValueChanged<int> onSelected;
+  final List<String>? labels;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        for (final (i, c) in colors.indexed)
+          Tooltip(
+            message: labels?[i] ?? '',
+            child: Semantics(
+              button: true,
+              selected: i == selected,
+              label: labels?[i],
+              child: GestureDetector(
+                onTap: () => onSelected(i),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 40,
+                  height: 40,
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: i == selected ? p.ink : Colors.transparent, width: 2),
+                  ),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+                    child: i == selected ? const Icon(Icons.check_rounded, size: 18, color: Colors.white) : null,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }

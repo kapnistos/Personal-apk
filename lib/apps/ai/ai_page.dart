@@ -166,11 +166,15 @@ class ModelPicker extends StatelessWidget {
 
   static const settingKey = 'ai.model';
 
+  /// 'plan' uses a subscription you already pay for; 'api' pays per use on your own key.
+  static const billingKey = 'ai.billing';
+
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     final settings = context.settings;
     final chosen = settings.raw(settingKey) ?? 'anthropic.haiku';
+    final billing = settings.raw(billingKey) ?? 'plan';
     String? lastProvider;
     return Section(
       title: 'Model',
@@ -196,18 +200,51 @@ class ModelPicker extends StatelessWidget {
               RadioListTile<String>(value: m.id, title: Text(m.name), subtitle: Text(m.bestFor)),
             ],
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: TextField(
-                enabled: false,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.key_rounded),
-                  hintText: 'Your API key (coming soon)',
-                  helperText: 'Calls go straight from this device to the provider, on your own key.',
-                  helperMaxLines: 2,
-                  helperStyle: TextStyle(color: p.muted),
-                ),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+              child: Text(
+                'How to pay',
+                style: TextStyle(color: p.muted, fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SegmentedButton<String>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: 'plan', label: Text('My subscription')),
+                  ButtonSegment(value: 'api', label: Text('API key')),
+                ],
+                selected: {billing},
+                onSelectionChanged: (v) => settings.setRaw(billingKey, v.first),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Text(
+                billing == 'plan'
+                    ? 'Uses the plan you already pay for, such as Claude Pro or ChatGPT Plus, through its own app. '
+                          'No extra cost per question. Works today for Claude.'
+                    : 'Pay per use with your own key. Costs depend on the model; Haiku, GPT mini and DeepSeek '
+                          'cost the least.',
+                style: TextStyle(color: p.muted, height: 1.4),
+              ),
+            ),
+            if (billing == 'api')
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: TextField(
+                  enabled: false,
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.key_rounded),
+                    hintText: 'Your API key (coming soon)',
+                    helperText: 'Calls go straight from this device to the provider, on your own key.',
+                    helperMaxLines: 2,
+                    helperStyle: TextStyle(color: p.muted),
+                  ),
+                ),
+              )
+            else
+              const SizedBox(height: 16),
           ],
         ),
       ),

@@ -12,6 +12,7 @@ import 'news/news_page.dart';
 import 'notes/notes_page.dart';
 import 'shopping/shopping_model.dart';
 import 'shopping/shopping_page.dart';
+import 'spaces/my_spaces.dart';
 import 'spaces/space_page.dart';
 import 'todo/todo_page.dart';
 import 'wallet/wallet_page.dart';
@@ -100,6 +101,14 @@ final _allApps = <MiniApp>[
     icon: Icons.school_rounded,
     color: const Color(0xFFC0563F),
     builder: (_) => const SpaceLauncher(gid: 'seed-uni', fallbackName: 'University'),
+  ),
+  MiniApp(
+    id: 'spaces',
+    title: 'Spaces',
+    subtitle: 'Make your own sections',
+    icon: Icons.dashboard_customize_rounded,
+    color: const Color(0xFF5F6B7A),
+    builder: (_) => const SpacesPage(),
   ),
   MiniApp(
     id: 'internships',
