@@ -1,0 +1,19 @@
+name: Keep signing key
+
+# GitHub drops caches nobody has used for 7 days. The Android build signs with a
+# key kept in the cache, and a new key would stop updates installing over the
+# old app. Touching it twice a week keeps it alive between releases.
+on:
+  schedule:
+    - cron: '17 6 * * 1,4'
+  workflow_dispatch:
+
+jobs:
+  touch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: hub-debug-keystore
+          fail-on-cache-miss: false
