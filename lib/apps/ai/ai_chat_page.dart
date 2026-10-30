@@ -354,6 +354,11 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
           proposed = tools.proposals;
         } on AiToolsUnsupported {
           await ai.markNoTools();
+        } on AiException catch (e) {
+          // A request the provider rejected mid-way through the tool rounds: answer from the snapshot this time
+          // rather than showing an error, without giving up on tools for later questions.
+          if (e is ClaudePlanUnavailable || !(e.status == 400 || e.status == 422)) rethrow;
+          proposed = const [];
         }
       }
       if (!mounted || gen != _gen) return;
