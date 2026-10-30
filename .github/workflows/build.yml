@@ -87,10 +87,33 @@ jobs:
           name: Hub-windows
           path: Hub-windows.zip
 
+  ios:
+    # Unsigned on purpose: no Apple developer account needed. Sideloadly or AltStore signs it
+    # with a free Apple ID when it is installed.
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter pub get
+      - run: flutter build ios --release --no-codesign --build-number=${{ github.run_number }}
+      - run: |
+          mkdir Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qry Hub.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Hub-ios
+          path: Hub.ipa
+
   release:
     # Keeps one "latest" release with the newest builds, easy to grab on a phone.
-    if: github.event_name == 'push'
-    needs: [android, windows]
+    # iPhone builds are a bonus: a failed one never holds back Android and Windows.
+    if: always() && github.event_name == 'push' && needs.android.result == 'success' && needs.windows.result == 'success'
+    needs: [android, windows, ios]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -106,6 +129,9 @@ jobs:
             Build ${{ github.run_number }} from ${{ github.sha }}.
             Android: download Hub.apk on your phone and open it.
             Windows: unzip Hub-windows.zip and run hub.exe.
+            iPhone: install Hub.ipa with Sideloadly or AltStore and a free Apple ID; refresh it every 7 days.
+          fail_on_unmatched_files: false
           files: |
             Hub.apk
             Hub-windows.zip
+            Hub.ipa

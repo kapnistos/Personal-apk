@@ -1,6 +1,6 @@
 # Hub
 
-**One app for the everyday stuff.** Hub is a personal "super app" for Android and Windows, in the spirit of
+**One app for the everyday stuff.** Hub is a personal "super app" for Android, Windows and iPhone, in the spirit of
 WeChat's mini-apps: weather, calendar, tasks, notes, money, mail, news, shopping, work and study, plus a
 shortcut into Claude, all behind one home screen you arrange yourself.
 
@@ -48,6 +48,11 @@ Every push to `main` builds the app on GitHub Actions. The newest builds are on 
 - **Android:** download `Hub.apk` on the phone and open it. Allow "install unknown apps" for your browser the
   first time. New versions install over the old one and keep your data.
 - **Windows:** download `Hub-windows.zip`, unzip it anywhere and run `hub.exe`.
+- **iPhone:** no App Store or paid developer account needed. Download `Hub.ipa` on a computer and install it
+  with [Sideloadly](https://sideloadly.io) or [AltStore](https://altstore.io), signing in with a free Apple ID.
+  On the iPhone, trust your Apple ID under Settings > General > VPN & Device Management, and turn on
+  Developer Mode when iOS asks. Apps signed with a free Apple ID run for 7 days; re-install (or let AltStore
+  refresh it) to keep going. Your data stays.
 
 ## Build it yourself
 
@@ -65,7 +70,7 @@ More in **[docs/BUILDING.md](docs/BUILDING.md)**, including release signing.
 
 ## How it is put together
 
-- **Flutter** for one codebase on Android and Windows.
+- **Flutter** for one codebase on Android, Windows and iOS.
 - **SQLite through drift** for all data, with migrations tested against real older databases.
 - **Sync** without a cloud: triggers stamp every row with a global id and edit time; devices exchange changes
   with a server you run, and the newest edit wins.

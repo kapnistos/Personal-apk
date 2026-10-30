@@ -74,20 +74,29 @@ const shortcutCatalog = [
   Shortcut('NS', 'https://www.ns.nl/en', 0xFFFFC917, label: 'NS'),
 ];
 
+/// Starts an activity for [url]; tests swap it for a fake.
+typedef UrlLauncher = Future<bool> Function(Uri url, LaunchMode mode);
+
+@visibleForTesting
+UrlLauncher shortcutLauncher = (url, mode) => launchUrl(url, mode: mode);
+
 /// Opens the app if it is installed, otherwise the website.
 Future<void> openShortcut(Shortcut s) async {
+  final launch = shortcutLauncher;
   final app = s.appUrl;
   if (app != null) {
     try {
-      if (await launchUrl(Uri.parse(app), mode: LaunchMode.externalNonBrowserApplication)) return;
+      if (await launch(Uri.parse(app), LaunchMode.externalNonBrowserApplication)) return;
     } catch (_) {}
   }
   final web = Uri.parse(s.url);
   try {
     // An https link the app has claimed (reddit.com, github.com) opens in the app.
-    if (await launchUrl(web, mode: LaunchMode.externalNonBrowserApplication)) return;
+    if (await launch(web, LaunchMode.externalNonBrowserApplication)) return;
   } catch (_) {}
-  await launchUrl(web, mode: LaunchMode.externalApplication).catchError((_) => false);
+  try {
+    await launch(web, LaunchMode.externalApplication);
+  } catch (_) {}
 }
 
 class ShortcutGlyph extends StatelessWidget {

@@ -187,7 +187,7 @@ class AppGrid extends StatelessWidget {
     final p = Palette.of(context);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
         child: LayoutBuilder(
           builder: (context, c) {
             final perRow = c.maxWidth >= 640 ? 6 : 4;
@@ -195,8 +195,8 @@ class AppGrid extends StatelessWidget {
             final hidden = hiddenApps(context.settings);
             return StreamBuilder<List<Space>>(
               stream: context.db.watchSpaces(),
+              // No gap between rows: the space between tiles belongs to the tiles, so every tap lands.
               builder: (context, snap) => Wrap(
-                runSpacing: 12,
                 children: [
                   for (final app in [...miniApps, ...customSpaceApps(snap.data ?? const [])])
                     if (!hidden.contains(app.id))
@@ -224,11 +224,13 @@ class _AppTile extends StatelessWidget {
     return Tooltip(
       message: app.subtitle,
       waitDuration: const Duration(milliseconds: 600),
+      // Hover only: on a phone a hold must reach Home, which starts arranging, instead of showing a tooltip.
+      triggerMode: TooltipTriggerMode.manual,
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: () => app.open(context),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.symmetric(vertical: 12),
           child: Column(
             children: [
               Opacity(

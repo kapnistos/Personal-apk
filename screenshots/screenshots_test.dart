@@ -7,13 +7,17 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hub/apps/ai/ai_chat_page.dart';
 import 'package:hub/apps/ai/ai_page.dart';
+import 'package:hub/apps/ai/chat_memory.dart';
 import 'package:hub/core/edition.dart';
 import 'package:hub/apps/calendar/calendar_page.dart';
 import 'package:hub/apps/claude/claude_page.dart';
 import 'package:hub/apps/news/news_page.dart';
 import 'package:hub/apps/news/news_service.dart';
 import 'package:hub/apps/spaces/space_page.dart';
+import 'package:hub/apps/spaces/my_spaces.dart';
+import 'package:hub/apps/habits/habits_page.dart';
 import 'package:hub/apps/mail/mail_page.dart';
 import 'package:hub/apps/notes/notes_page.dart';
 import 'package:hub/apps/todo/todo_page.dart';
@@ -50,6 +54,20 @@ Future<void> seed(AppDatabase db, AppSettings settings) async {
   await db.delete(db.todos).go(); // The owner's own tasks stay out of the pictures.
   await settings.setName('Alex');
   await settings.setRaw('wallet.target', '180000');
+  await settings.setRaw(ChatMemory.contextKey, 'on');
+  await settings.setRaw(
+    ChatMemory.keyFor(false),
+    ChatMemory.encode(const [
+      SavedTurn('user', 'Plan my day'),
+      SavedTurn(
+        'assistant',
+        'You have a lecture at 10:00 and the report is due today. Do the report first thing, '
+            'then the lecture. Groceries after 17:00, and you are under budget this week.',
+      ),
+      SavedTurn('user', 'What did I spend this week?'),
+      SavedTurn('assistant', 'About €86 since Monday. Most of it on groceries and one dinner out.'),
+    ]),
+  );
   final now = DateTime.now();
   final today = dateOnly(now);
   final week = today.subtract(Duration(days: today.weekday - 1));
@@ -177,6 +195,10 @@ Future<void> seed(AppDatabase db, AppSettings settings) async {
   await spaceEvent('Study', 'Supervisor meeting', addDays(today, 2).add(const Duration(hours: 9, minutes: 30)),
       const Duration(minutes: 45));
   await spaceEvent('Work', 'Shift', addDays(today, 1).add(const Duration(hours: 17)), const Duration(hours: 5));
+  // One space of the user's own, to show that spaces are not fixed.
+  final gymCal = await db.saveCalendar(CalendarsCompanion.insert(name: 'Gym', color: 0xFF1F9D6B));
+  await db.saveSpace(SpacesCompanion.insert(
+      name: 'Gym', icon: const Value('sport'), color: 0xFF1F9D6B, calendarId: Value(gymCal), position: Value(spaces.length)));
   final uni = space('University');
   for (final (t, d, done) in [
     ('Revise chapter 4: entropy', 1, false),
@@ -329,8 +351,13 @@ void main() {
     'claude': () => const ClaudePage(),
     'me': () => const MePage(),
     'ai': () => const AiPage(),
+    'chat': () => const AiChatPage(),
     'mail': () => const MailPage(),
     'university': () => const SpacePage(spaceId: 2),
+    'job': () => const SpaceLauncher(gid: 'seed-job', fallbackName: 'Job'),
+    'spaces': () => const SpacesPage(),
+    'habits': () => const HabitsPage(),
+    'agent': () => const AiChatPage(agent: true),
     'news': () => const NewsPage(),
     'savings': () => const WalletPage(initialTab: 1),
     'investing': () => const WalletPage(initialTab: 2),
@@ -343,7 +370,7 @@ void main() {
       for (final e in shots.entries) {
         if (device == 'desktop' && !['home', 'calendar', 'wallet', 'weather'].contains(e.key)) continue;
         if (e.key == 'dashboard' && device == 'desktop') continue;
-        if (dark && !['home', 'calendar', 'wallet', 'todo', 'subscriptions', 'dashboard', 'me', 'ai', 'savings'].contains(e.key)) continue;
+        if (dark && !['home', 'calendar', 'wallet', 'todo', 'subscriptions', 'dashboard', 'me', 'ai', 'chat', 'savings'].contains(e.key)) continue;
         testWidgets('$device ${dark ? 'dark' : 'light'} ${e.key}', (tester) async {
           // The whole home screen, top to bottom.
           tester.view.physicalSize = e.key == 'dashboard' ? Size(size.width, 7200) : size;

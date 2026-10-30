@@ -1175,7 +1175,7 @@ class _ShortcutsWidget extends StatelessWidget {
     final list = item.shortcuts;
     return Card(
       child: Padding(
-        padding: EdgeInsets.symmetric(vertical: size == 's' ? 10 : 14, horizontal: 6),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
         child: list.isEmpty
             ? Center(
                 child: Text('Hold to choose apps', style: TextStyle(color: p.muted)),
@@ -1185,8 +1185,8 @@ class _ShortcutsWidget extends StatelessWidget {
                   final perRow = size == 's' ? 2 : (c.maxWidth >= 640 ? 6 : 4);
                   final w = c.maxWidth / perRow;
                   final shown = size == 's' ? list.take(4) : list;
+                  // No gap between rows: the space between tiles belongs to the tiles, so every tap lands.
                   return Wrap(
-                    runSpacing: size == 's' ? 4 : 12,
                     children: [
                       for (final s in shown)
                         SizedBox(
@@ -1195,7 +1195,7 @@ class _ShortcutsWidget extends StatelessWidget {
                             borderRadius: BorderRadius.circular(14),
                             onTap: () => openShortcut(s),
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              padding: EdgeInsets.symmetric(vertical: size == 's' ? 6 : 10),
                               child: Column(
                                 children: [
                                   ShortcutGlyph(shortcut: s, size: size == 's' ? 44 : 50),

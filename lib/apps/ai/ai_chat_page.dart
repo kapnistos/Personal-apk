@@ -4,6 +4,7 @@ import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../claude/claude_bridge.dart';
 import 'ai_service.dart';
+import 'chat_memory.dart';
 import 'hub_agent.dart';
 
 const _aiColor = Color(0xFF4D6BFE);
@@ -19,6 +20,11 @@ class _Turn {
   final List<AgentAction> actions;
   final bool error;
   final done = <int, String>{}; // action index to 'added' or 'skipped'
+
+  SavedTurn get saved => SavedTurn(role, text, raw: raw, error: error);
+
+  /// Old proposals come back as text only, so nothing can be added twice.
+  static _Turn restore(SavedTurn t) => _Turn(t.role, t.text, raw: t.raw, error: t.error);
 }
 
 /// A conversation with the chosen model, or the Hub agent that proposes changes to your data.
@@ -37,6 +43,49 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
   late bool _agent = widget.agent;
   bool _busy = false;
   bool _answerForAgent = false;
+  bool _loaded = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_loaded) return;
+    _loaded = true;
+    _restore();
+  }
+
+  ChatMemory get _memory => ChatMemory(context.settings);
+
+  void _restore() => _turns
+    ..clear()
+    ..addAll(_memory.load(_agent).map(_Turn.restore));
+
+  void _save([bool? agent]) => _memory.save(agent ?? _agent, [for (final t in _turns) t.saved]);
+
+  void _switchMode(bool agent) {
+    if (agent == _agent) return;
+    setState(() {
+      _agent = agent;
+      _restore();
+    });
+    _toBottom();
+  }
+
+  Future<void> _clear() async {
+    await _memory.clear(_agent);
+    if (mounted) setState(_turns.clear);
+  }
+
+  /// The system prompt, with today's summary when the user allowed it.
+  Future<String?> _system(bool agent) async {
+    final base = agent
+        ? agentSystemPrompt(DateTime.now())
+        : 'You are a helpful assistant inside Hub, the user\'s personal app. Answer plainly and briefly.';
+    if (!_memory.shareContext) return agent ? base : null;
+    final db = context.db;
+    final currency = context.settings.currency;
+    final data = await hubContext(db, currency: currency);
+    return '$base\n\nWhat Hub knows about the user right now:\n$data';
+  }
 
   @override
   void dispose() {
@@ -64,11 +113,12 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
   @override
   Future<void> onClaudeAnswer(String text) async {
     setState(() => _turns.add(_assistant(text, agent: _answerForAgent)));
+    _save(_answerForAgent);
     _toBottom();
   }
 
-  Future<void> _send() async {
-    final text = _input.text.trim();
+  Future<void> _send([String? preset]) async {
+    final text = (preset ?? _input.text).trim();
     if (text.isEmpty || _busy) return;
     final ai = AiSetup(context.settings);
     final agent = _agent;
@@ -82,14 +132,18 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
             _Turn('assistant', 'Add your ${ai.model.provider.label} key in the AI tab first.', error: true),
           ),
         );
+        _save(agent);
         return;
       }
       _answerForAgent = agent;
-      final prompt = agent ? '${agentSystemPrompt(DateTime.now())}\n\nMy request: $text' : text;
+      if (!mounted) return;
+      final system = await _system(agent);
+      final prompt = system == null ? text : '$system\n\nMy request: $text';
       if (!mounted) return;
       setState(
         () => _turns.add(_Turn('note', 'Sent to Claude. Copy its answer, then come back to Hub to use it here.')),
       );
+      _save(agent);
       await askClaude(prompt);
       return;
     }
@@ -99,13 +153,17 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
         if (!t.error && t.role != 'note') AiMessage(t.role, t.raw ?? t.text),
     ];
     try {
-      final reply = await ai.ask(history, system: agent ? agentSystemPrompt(DateTime.now()) : null);
+      final system = await _system(agent);
+      final reply = await ai.ask(history, system: system);
       if (!mounted) return;
       setState(() => _turns.add(_assistant(reply.text, usage: reply.usage, agent: agent)));
     } on AiException catch (e) {
       if (mounted) setState(() => _turns.add(_Turn('assistant', e.message, error: true)));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        if (_agent == agent) _save(agent);
+      }
       _toBottom();
     }
   }
@@ -124,6 +182,28 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
     }
     if (mounted) setState(() => t.done[i] = add ? 'added' : 'skipped');
   }
+
+  Future<void> _contextSheet() => showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheet) => ListenableBuilder(
+      listenable: context.settings,
+      builder: (sheet, _) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+          child: SwitchListTile(
+            title: const Text('Use my day'),
+            subtitle: const Text(
+              'Send a short summary with each question: today\'s tasks and events, what you spent this week and '
+              'month, and your latest notes. Without it the model knows nothing about you.',
+            ),
+            value: _memory.shareContext,
+            onChanged: _memory.setShareContext,
+          ),
+        ),
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -144,23 +224,36 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
                     selected: _agent == agent,
                     showCheckmark: false,
                     shape: const StadiumBorder(),
-                    onSelected: (_) => setState(() => _agent = agent),
+                    onSelected: _busy ? null : (_) => _switchMode(agent),
                   ),
                   const SizedBox(width: 8),
                 ],
                 const Spacer(),
+                IconButton(
+                  tooltip: _memory.shareContext ? 'Using your day' : 'Not using your data',
+                  isSelected: _memory.shareContext,
+                  onPressed: _contextSheet,
+                  icon: Icon(Icons.insights_outlined, color: p.muted),
+                  selectedIcon: const Icon(Icons.insights_rounded, color: _aiColor),
+                ),
                 if (_turns.isNotEmpty)
                   IconButton(
-                    tooltip: 'New chat',
-                    onPressed: () => setState(_turns.clear),
-                    icon: const Icon(Icons.refresh_rounded),
+                    tooltip: 'Clear chat',
+                    onPressed: _busy ? null : _clear,
+                    icon: const Icon(Icons.delete_sweep_outlined),
                   ),
               ],
             ),
           ),
           Expanded(
             child: _turns.isEmpty
-                ? _Empty(agent: _agent, where: where)
+                ? _Empty(
+                    agent: _agent,
+                    where: where,
+                    onSuggestion: _send,
+                    usingDay: _memory.shareContext,
+                    onUseDay: () => _memory.setShareContext(true),
+                  )
                 : ListView.builder(
                     controller: _scroll,
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
@@ -223,9 +316,18 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
 }
 
 class _Empty extends StatelessWidget {
-  const _Empty({required this.agent, required this.where});
+  const _Empty({
+    required this.agent,
+    required this.where,
+    required this.onSuggestion,
+    required this.usingDay,
+    required this.onUseDay,
+  });
   final bool agent;
   final String where;
+  final void Function(String) onSuggestion;
+  final bool usingDay;
+  final VoidCallback onUseDay;
 
   @override
   Widget build(BuildContext context) {
@@ -257,6 +359,24 @@ class _Empty extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(color: p.muted, height: 1.4),
             ),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                for (final q in agent ? agentSuggestions : chatSuggestions)
+                  ActionChip(label: Text(q), shape: const StadiumBorder(), onPressed: () => onSuggestion(q)),
+              ],
+            ),
+            if (!agent && !usingDay) ...[
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: onUseDay,
+                icon: const Icon(Icons.insights_rounded, size: 18),
+                label: const Text('Let it see my tasks, events and spending'),
+              ),
+            ],
           ],
         ),
       ),

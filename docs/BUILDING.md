@@ -36,8 +36,12 @@ The demo data is made up; no real account or payment appears in the screenshots.
 `.github/workflows/build.yml` runs on every push to `main`:
 
 1. `flutter analyze` and `flutter test`.
-2. Android APK (arm64) and a Windows zip.
-3. Both are attached to a single release tagged `latest`.
+2. Android APK (arm64), a Windows zip and an unsigned iPhone `Hub.ipa` (built on macOS).
+3. All three are attached to a single release tagged `latest`. If only the iPhone build fails, the release
+   still goes out with the other two.
+
+The iPhone build is deliberately unsigned (`--no-codesign`), so it needs no Apple developer account.
+Sideloadly or AltStore signs it with a free Apple ID at install time; such a signature lasts 7 days.
 
 `.github/workflows/keep-key.yml` runs twice a week so the cached Android signing key is not evicted.
 

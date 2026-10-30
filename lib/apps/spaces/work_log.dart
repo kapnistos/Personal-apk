@@ -128,7 +128,7 @@ class _WorkLogCardState extends State<WorkLogCard> {
               Row(children: [
                 _Count('Worked', '${month.worked}', workStatusColors['work']!,
                     month.hours > 0 ? '${_h(month.hours)} h' : null),
-                _Count('Days off', '${month.of('off')}', workStatusColors['off']!, null),
+                _Count('Off', '${month.of('off')}', workStatusColors['off']!, null),
                 _Count('Holiday', '${month.of('holiday')}', workStatusColors['holiday']!, null),
                 _Count('Sick', '${month.of('sick')}', workStatusColors['sick']!, null),
               ].expand((w) => [const SizedBox(width: 8), Expanded(child: w)]).skip(1).toList()),

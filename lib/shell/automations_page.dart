@@ -59,6 +59,7 @@ class _AutomationsPageState extends State<AutomationsPage> {
     final a = AutomationSettings({
       for (final k in [
         'auto.briefing',
+        'auto.evening',
         'auto.bills',
         'auto.lowBalance',
         'auto.weekly',
@@ -69,6 +70,7 @@ class _AutomationsPageState extends State<AutomationsPage> {
         if (s.raw(k) != null) k: s.raw(k)!,
     });
     final briefing = s.raw('auto.briefing') ?? '07:30';
+    final evening = s.raw('auto.evening') ?? 'off';
     final threshold = a.lowBalanceCents;
 
     Widget toggle(String key, bool on, IconData icon, String title, String subtitle, {VoidCallback? onTap}) =>
@@ -115,6 +117,21 @@ class _AutomationsPageState extends State<AutomationsPage> {
                       ),
                       value: a.briefing != null,
                       onChanged: (v) => _set('auto.briefing', v ? '07:30' : 'off'),
+                    ),
+                    SwitchListTile(
+                      secondary: Icon(Icons.nightlight_outlined, color: a.evening != null ? p.accent : p.muted),
+                      title: const Text('End of day summary'),
+                      subtitle: GestureDetector(
+                        onTap: a.evening == null ? null : () => _pickTime('auto.evening', evening),
+                        child: Text(
+                          a.evening == null
+                              ? 'What you got done and spent, and what tomorrow holds'
+                              : 'Every day at $evening · tap to change',
+                          style: TextStyle(color: a.evening == null ? p.muted : p.accent),
+                        ),
+                      ),
+                      value: a.evening != null,
+                      onChanged: (v) => _set('auto.evening', v ? '21:00' : 'off'),
                     ),
                     toggle(
                       'auto.bills',
@@ -260,11 +277,7 @@ class _BackupPageState extends State<BackupPage> {
     setState(() => _busy = true);
     try {
       final bytes = utf8.encode(await backupJson(db));
-      final where = await FilePicker.saveFile(
-        dialogTitle: 'Save Hub backup',
-        fileName: backupFileName(),
-        bytes: bytes,
-      );
+      final where = await FilePicker.saveFile(dialogTitle: 'Save Hub backup', fileName: backupFileName(), bytes: bytes);
       messenger.showSnackBar(SnackBar(content: Text(where == null ? 'Not saved' : 'Backup saved')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Could not save: $e')));

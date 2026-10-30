@@ -36,7 +36,8 @@ class SpaceLauncher extends StatelessWidget {
         return spaces.where((s) => s.id == id).firstOrNull ?? spaces.where((s) => s.name == fallbackName).firstOrNull;
       }(),
       builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) return const Scaffold();
+        // Keep a back button while the space loads, so the page is never a dead end.
+        if (snap.connectionState != ConnectionState.done) return Scaffold(appBar: AppBar(title: Text(fallbackName)));
         final space = snap.data;
         if (space == null) {
           return Scaffold(

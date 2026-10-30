@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:flutter/services.dart';
 
+import '../core/app_info.dart';
 import '../core/reminders.dart';
 import '../core/sync/sync_service.dart';
 import '../core/settings.dart';
@@ -119,10 +120,25 @@ class MePage extends StatelessWidget {
             const SizedBox(height: 16),
             ContentWidth(
               child: Section(
-                title: 'Weather',
+                title: 'Units and keys',
                 child: Column(
                   children: [
                     ListTile(
+                      leading: const Icon(Icons.payments_outlined),
+                      title: const Text('Currency'),
+                      trailing: DropdownButton<String>(
+                        value: s.currency,
+                        underline: const SizedBox.shrink(),
+                        items: [
+                          // A currency set elsewhere (sync, a restore) is kept in the list so the menu can show it.
+                          for (final c in {'EUR', 'USD', 'GBP', 'CHF', s.currency})
+                            DropdownMenuItem(value: c, child: Text(c)),
+                        ],
+                        onChanged: (v) => s.setCurrency(v ?? 'EUR'),
+                      ),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.thermostat_outlined),
                       title: const Text('Temperature'),
                       trailing: PillToggle<TempUnit>(
                         dense: true,
@@ -132,13 +148,14 @@ class MePage extends StatelessWidget {
                       ),
                     ),
                     ListTile(
+                      leading: const Icon(Icons.key_rounded),
                       title: const Text('Google Weather key'),
                       subtitle: Text(
                         s.googleWeatherKey.isEmpty
                             ? 'Not set. Using Open-Meteo for the long-term forecast.'
                             : 'Set. Google Weather is used for the forecast.',
                       ),
-                      trailing: const Icon(Icons.key_rounded, size: 20),
+                      trailing: const Icon(Icons.chevron_right_rounded),
                       onTap: () async {
                         final v = await _prompt(
                           context,
@@ -157,36 +174,42 @@ class MePage extends StatelessWidget {
             const SizedBox(height: 16),
             ContentWidth(
               child: Section(
-                title: 'Wallet',
-                child: ListTile(
-                  title: const Text('Currency'),
-                  trailing: DropdownButton<String>(
-                    value: s.currency,
-                    underline: const SizedBox.shrink(),
-                    items: [
-                      // A currency set elsewhere (sync, a restore) is kept in the list so the menu can show it.
-                      for (final c in {'EUR', 'USD', 'GBP', 'CHF', s.currency})
-                        DropdownMenuItem(value: c, child: Text(c)),
-                    ],
-                    onChanged: (v) => s.setCurrency(v ?? 'EUR'),
-                  ),
+                title: 'Notifications',
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.auto_mode_rounded),
+                      title: const Text('Automations'),
+                      subtitle: const Text('Morning briefing, end of day, bills, low balance, weekly review'),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () =>
+                          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AutomationsPage())),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.notifications_active_outlined),
+                      title: const Text('Allow reminders'),
+                      subtitle: Text(
+                        Reminders.instance.supported
+                            ? 'Needed for task, calendar and automation alerts'
+                            : 'Not available on this device',
+                      ),
+                      onTap: () async {
+                        final db = context.db;
+                        await Reminders.instance.requestPermission();
+                        await Reminders.instance.resync(db);
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                  ],
                 ),
               ),
             ),
             const SizedBox(height: 16),
             ContentWidth(
               child: Section(
-                title: 'Automations and backup',
+                title: 'Your data',
                 child: Column(
                   children: [
-                    ListTile(
-                      leading: const Icon(Icons.auto_mode_rounded),
-                      title: const Text('Automations'),
-                      subtitle: const Text('Morning briefing, bill reminders, low balance, weekly review'),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: () =>
-                          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AutomationsPage())),
-                    ),
                     ListTile(
                       leading: const Icon(Icons.backup_outlined),
                       title: const Text('Backup and restore'),
@@ -204,30 +227,39 @@ class MePage extends StatelessWidget {
             const SizedBox(height: 16),
             ContentWidth(
               child: Section(
-                title: 'Notifications',
-                child: ListTile(
-                  title: const Text('Allow reminders'),
-                  subtitle: Text(
-                    Reminders.instance.supported
-                        ? 'Needed for to-do and calendar reminders'
-                        : 'Not available on this device',
-                  ),
-                  trailing: const Icon(Icons.notifications_active_outlined, size: 20),
-                  onTap: () async {
-                    final db = context.db;
-                    await Reminders.instance.requestPermission();
-                    await Reminders.instance.resync(db);
-                  },
+                title: 'About',
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.info_outline_rounded),
+                      title: const Text('Hub'),
+                      subtitle: Text(appVersionLabel),
+                      trailing: IconButton(
+                        tooltip: 'Copy version',
+                        icon: const Icon(Icons.copy_rounded, size: 18),
+                        onPressed: () => Clipboard.setData(ClipboardData(text: 'Hub $appVersionLabel')),
+                      ),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.description_outlined),
+                      title: const Text('Open source licences'),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => showLicensePage(
+                        context: context,
+                        applicationName: 'Hub',
+                        applicationVersion: appVersionLabel,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+                      child: Text(
+                        'Hub keeps your data on this device. The AI tab only sends what you ask, to the model you '
+                        'pick: through the Claude app on your plan, or on your own API key.',
+                        style: TextStyle(color: p.muted, fontSize: 13.5, height: 1.45),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            ContentWidth(
-              child: Text(
-                'Hub keeps your data on this device. Claude opens in the official Claude app on your own plan; '
-                'no paid API is used.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: p.muted, fontSize: 13.5, height: 1.45),
               ),
             ),
           ],

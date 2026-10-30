@@ -43,6 +43,7 @@ class Reminders {
       color: const Color(0xFF1F6F54),
       actions: todo ? _todoActions : null,
     ),
+    iOS: const DarwinNotificationDetails(),
     windows: WindowsNotificationDetails(
       actions: todo
           ? const [
@@ -63,10 +64,11 @@ class Reminders {
       color: Color(0xFF1F6F54),
       styleInformation: BigTextStyleInformation(''),
     ),
+    iOS: DarwinNotificationDetails(presentSound: false),
     windows: WindowsNotificationDetails(),
   );
 
-  bool get supported => !kIsWeb && (Platform.isAndroid || Platform.isWindows);
+  bool get supported => !kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isWindows);
 
   Future<void> init(AppDatabase db) async {
     _db = db;
@@ -82,6 +84,12 @@ class Reminders {
       await _plugin.initialize(
         settings: const InitializationSettings(
           android: AndroidInitializationSettings('ic_stat_hub'),
+          // Asked for the first time a reminder is set, not at launch.
+          iOS: DarwinInitializationSettings(
+            requestAlertPermission: false,
+            requestBadgePermission: false,
+            requestSoundPermission: false,
+          ),
           windows: WindowsInitializationSettings(
             appName: 'Hub',
             appUserModelId: 'Hub.App',
@@ -130,6 +138,12 @@ class Reminders {
   /// Whether reminders can show. Null when unknown.
   Future<bool?> allowed() async {
     if (!_ready) return null;
+    if (Platform.isIOS) {
+      final ios = await _plugin
+          .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+          ?.checkPermissions();
+      return ios?.isEnabled;
+    }
     if (Platform.isAndroid) {
       return _plugin
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
@@ -140,7 +154,16 @@ class Reminders {
 
   /// Asks Android 13+ for permission to post notifications and to ring on time.
   Future<void> requestPermission() async {
-    if (!_ready || !Platform.isAndroid) return;
+    if (!_ready) return;
+    if (Platform.isIOS) {
+      await _plugin.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()?.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      return;
+    }
+    if (!Platform.isAndroid) return;
     final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     await android?.requestNotificationsPermission();
     if (!(await android?.canScheduleExactNotifications() ?? true)) {
@@ -151,7 +174,7 @@ class Reminders {
 
   /// Asks once, the first time a reminder is set, so reminders don't silently never show.
   Future<void> ensurePermission() async {
-    if (!_ready || !Platform.isAndroid) return;
+    if (!_ready || !(Platform.isAndroid || Platform.isIOS)) return;
     if (await allowed() == true && _exact) return;
     await requestPermission();
     if (_db != null) await resync(_db!);
@@ -184,7 +207,11 @@ class Reminders {
     do {
       _again = false;
       try {
-        final plan = await planReminders(db, DateTime.now());
+        var plan = await planReminders(db, DateTime.now());
+        // iOS keeps at most 64 pending notifications, so it gets the soonest ones.
+        if (!kIsWeb && Platform.isIOS && plan.length > 60) {
+          plan = ([...plan]..sort((a, b) => a.at.compareTo(b.at))).take(60).toList();
+        }
         final key = '$_exact\n${plan.join('\n')}';
         if (key == _lastPlan) continue;
         await _plugin.cancelAll();

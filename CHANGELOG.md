@@ -4,6 +4,17 @@ Builds are numbered by the CI run. Notable changes, newest first.
 
 ## October 2026
 
+### iPhone
+- Hub now builds for iPhone. The release has an unsigned `Hub.ipa` you install with Sideloadly or AltStore and a free Apple ID, no paid developer account.
+- Reminders work on iPhone too; Hub asks for notification permission the first time you set one.
+
+### Taps and more
+- Every tap on Home lands: the gaps between app and shortcut rows used to swallow taps, and holding an app tile now starts editing Home instead of only showing a tooltip.
+- Shortcuts open their apps more reliably on Android 11 and newer.
+- AI chat remembers your last conversation, offers starter suggestions and can use a short summary of your day if you allow it.
+- Search also finds recurring payments, saved space items, shopping and habits, and remembers recent searches.
+- Optional end-of-day summary, and a tidier settings page with an About section.
+
 ### AI that works
 - Two ways to pay: your subscription (through the Claude app, no API cost) or your own API key for Anthropic, OpenAI, DeepSeek or Llama. Keys live only in secure storage, with a test button and plain error messages.
 - AI chat and a Hub agent: say "12 euro lunch" or "note: call the landlord" and confirm the cards it proposes.

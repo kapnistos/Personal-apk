@@ -22,6 +22,7 @@ class PlannedNote {
 class AutomationSettings {
   AutomationSettings(Map<String, String> raw)
     : briefing = _time(raw['auto.briefing'] ?? '07:30'),
+      evening = _time(raw['auto.evening'] ?? 'off'),
       bills = (raw['auto.bills'] ?? 'on') == 'on',
       lowBalanceCents = raw['auto.lowBalance'] == 'off' ? null : int.tryParse(raw['auto.lowBalance'] ?? '') ?? 10000,
       weekly = (raw['auto.weekly'] ?? 'on') == 'on',
@@ -31,6 +32,9 @@ class AutomationSettings {
 
   /// Morning briefing time (hour, minute), or null when off.
   final (int, int)? briefing;
+
+  /// End of day summary time, or null when off (the default).
+  final (int, int)? evening;
   final bool bills;
   final int? lowBalanceCents;
   final bool weekly;
@@ -45,8 +49,15 @@ class AutomationSettings {
 }
 
 /// The automation settings as one string, to tell when any of them changed.
-String automationSignature(AppSettings s) =>
-    const ['briefing', 'bills', 'lowBalance', 'weekly', 'overdue', 'habits'].map((k) => s.raw('auto.$k')).join('|');
+String automationSignature(AppSettings s) => const [
+  'briefing',
+  'evening',
+  'bills',
+  'lowBalance',
+  'weekly',
+  'overdue',
+  'habits',
+].map((k) => s.raw('auto.$k')).join('|');
 
 String _hm(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
@@ -113,6 +124,51 @@ Future<List<PlannedNote>> planAutomations(AppDatabase db, {DateTime? now}) async
         if (habitCount > 0) '$habitCount ${habitCount == 1 ? 'habit' : 'habits'}',
       ];
       out.add(PlannedNote(500000 + i, at, 'Your ${i == 0 ? 'day' : _weekday(day)}', parts.join(' · '), 'today'));
+    }
+  }
+
+  // End of day: what got done and spent today, and a look at tomorrow.
+  final e = s.evening;
+  if (e != null) {
+    final spentToday = MonthSummary(
+      (await db.watchEntries(today, addDays(today, 1)).first).where((x) => !x.date.isAfter(n)).toList(),
+    ).out;
+    final doneToday = todos.where((t) => t.done && t.completedAt != null && dateOnly(t.completedAt!) == today).length;
+    final habitsDue = habits.where((h) => habitDue(h, today)).toList();
+    final habitsDone = habitsDue.where((h) => done.contains('${h.id}:${AppDatabase.dayKey(today)}')).length;
+    for (var i = 0; i < 7; i++) {
+      final day = addDays(today, i);
+      final at = DateTime(day.year, day.month, day.day, e.$1, e.$2);
+      if (!at.isAfter(n)) continue;
+      final next = addDays(day, 1);
+      final nextEvents = occ.where((o) => o.touches(next)).toList()..sort((a, b) => a.start.compareTo(b.start));
+      final nextTimed = nextEvents.where((o) => !o.allDay && !o.start.isBefore(next)).toList();
+      final nextTasks = todos.where((t) => !t.done && t.due != null && dateOnly(t.due!) == next).length;
+      final nextBills = subs.where((x) => x.kind.sign < 0 && daysBetween(next, x.nextDate) == 0).toList();
+      final parts = <String>[
+        // Only today's own numbers are known now; later days are refreshed when Hub next runs.
+        if (i == 0) ...[
+          if (doneToday > 0) '$doneToday ${doneToday == 1 ? 'task' : 'tasks'} done',
+          spentToday > 0 ? 'spent ${_euro(spentToday)}' : 'nothing spent',
+          if (habitsDue.isNotEmpty) '$habitsDone of ${habitsDue.length} habits',
+        ],
+        nextEvents.isEmpty
+            ? 'nothing in the calendar tomorrow'
+            : 'tomorrow ${nextEvents.length} ${nextEvents.length == 1 ? 'event' : 'events'}'
+                  '${nextTimed.isEmpty ? '' : ', first ${_hm(nextTimed.first.start)} ${nextTimed.first.event.title}'}',
+        if (nextTasks > 0) '$nextTasks ${nextTasks == 1 ? 'task' : 'tasks'} due tomorrow',
+        for (final x in nextBills) '${x.name} ${_euro(x.amountCents)} tomorrow',
+      ];
+      final body = parts.join(' · ');
+      out.add(
+        PlannedNote(
+          560000 + i,
+          at,
+          i == 0 ? 'Your day in short' : 'End of ${_weekday(day)}',
+          '${body[0].toUpperCase()}${body.substring(1)}',
+          'today',
+        ),
+      );
     }
   }
 
