@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
+import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import 'calendar_model.dart';
@@ -162,7 +163,7 @@ class _EventEditorState extends State<_EventEditor> {
         final cals = (snap.data ?? const <Calendar>[]).where((c) => c.icsUrl == null).toList();
         final cal = cals.where((c) => c.id == _calendarId).firstOrNull ?? cals.firstOrNull;
         return Scaffold(
-          appBar: AppBar(
+          appBar: HubBar(
             leading: IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(context)),
             title: Text(widget.event == null ? 'New event' : 'Edit event'),
             actions: [
@@ -701,30 +702,36 @@ Future<void> showCalendarsSheet(BuildContext context) {
                     ),
                   ),
                 const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.add_rounded),
-                  title: const Text('New calendar'),
-                  onTap: () => editCalendar(context, null),
+                Press(
+                  child: ListTile(
+                    leading: const Icon(Icons.add_rounded),
+                    title: const Text('New calendar'),
+                    onTap: () => editCalendar(context, null),
+                  ),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.link_rounded),
-                  title: const Text('Subscribe by link (Proton, Google, Outlook)'),
-                  onTap: () => subscribeCalendar(context),
+                Press(
+                  child: ListTile(
+                    leading: const Icon(Icons.link_rounded),
+                    title: const Text('Subscribe by link (Proton, Google, Outlook)'),
+                    onTap: () => subscribeCalendar(context),
+                  ),
                 ),
                 if (cals.any((c) => c.icsUrl != null))
-                  ListTile(
-                    leading: const Icon(Icons.sync_rounded),
-                    title: const Text('Refresh subscribed calendars'),
-                    onTap: () async {
-                      final messenger = ScaffoldMessenger.of(context);
-                      for (final c in cals.where((c) => c.icsUrl != null)) {
-                        try {
-                          await FeedSync.instance.sync(db, c);
-                        } catch (e) {
-                          messenger.showSnackBar(SnackBar(content: Text('$e')));
+                  Press(
+                    child: ListTile(
+                      leading: const Icon(Icons.sync_rounded),
+                      title: const Text('Refresh subscribed calendars'),
+                      onTap: () async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        for (final c in cals.where((c) => c.icsUrl != null)) {
+                          try {
+                            await FeedSync.instance.sync(db, c);
+                          } catch (e) {
+                            messenger.showSnackBar(SnackBar(content: Text('$e')));
+                          }
                         }
-                      }
-                    },
+                      },
+                    ),
                   ),
               ],
             ),

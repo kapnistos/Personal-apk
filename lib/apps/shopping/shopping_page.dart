@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/db/database.dart';
+import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../ai/ai_service.dart';
+import '../ai/claude_code.dart' show ClaudePlanUnavailable;
 import '../claude/claude_bridge.dart';
 import 'shopping_model.dart';
 
@@ -87,10 +89,16 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
       return;
     }
     setState(() => _checking = true);
-    messenger.showSnackBar(SnackBar(content: Text('Checking prices with ${ai.model.name}')));
+    messenger.showSnackBar(SnackBar(content: Text('Checking prices with ${ai.modelName}')));
     try {
       final reply = await ai.ask([AiMessage('user', prompt)], maxTokens: 1024);
       await _applyPlan(reply.text, items);
+    } on ClaudePlanUnavailable catch (e) {
+      // Claude Code could not be reached: hand the list to the Claude app.
+      if (mounted) await askClaude(prompt);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('${e.note}. The list is on your clipboard.')));
     } on AiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
@@ -262,7 +270,7 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
             return groups[b]!.length.compareTo(groups[a]!.length);
           });
         return Scaffold(
-          appBar: AppBar(
+          appBar: HubBar(
             title: const Text('Shopping'),
             actions: [
               IconButton(
@@ -334,15 +342,11 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
                   alignment: WrapAlignment.spaceBetween,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    SegmentedButton<bool>(
-                      showSelectedIcon: false,
-                      style: SegmentedButton.styleFrom(visualDensity: VisualDensity.compact),
-                      segments: const [
-                        ButtonSegment(value: true, label: Text('By shop')),
-                        ButtonSegment(value: false, label: Text('By aisle')),
-                      ],
-                      selected: {_byShop},
-                      onSelectionChanged: (v) => setState(() => _byShop = v.first),
+                    PillToggle<bool>(
+                      dense: true,
+                      options: const [(true, 'By shop'), (false, 'By aisle')],
+                      value: _byShop,
+                      onChanged: (v) => setState(() => _byShop = v),
                     ),
                     if (open.isNotEmpty)
                       TextButton.icon(
@@ -368,33 +372,38 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
                 ContentWidth(
                   child: Padding(
                     padding: const EdgeInsets.only(top: 10),
-                    child: Card(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                            child: Row(
-                              children: [
-                                if (_byShop)
-                                  CircleAvatar(radius: 6, backgroundColor: storeColor(k))
-                                else
-                                  Icon(categoryIcon(k), size: 18, color: p.muted),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(k, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+                          child: Row(
+                            children: [
+                              if (_byShop)
+                                CircleAvatar(radius: 6, backgroundColor: storeColor(k))
+                              else
+                                Icon(categoryIcon(k), size: 18, color: p.muted),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  k,
+                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: p.muted),
                                 ),
-                                Text(
-                                  '${groups[k]!.length}',
-                                  style: TextStyle(color: p.muted, fontWeight: FontWeight.w600),
-                                ),
-                              ],
-                            ),
+                              ),
+                              Text(
+                                '${groups[k]!.length}',
+                                style: TextStyle(color: p.muted, fontWeight: FontWeight.w600),
+                              ),
+                            ],
                           ),
-                          for (final i in groups[k]!) _ItemTile(item: i, byShop: _byShop, onEdit: () => _edit(i)),
-                          const SizedBox(height: 6),
-                        ],
-                      ),
+                        ),
+                        GroupCard(
+                          indent: 64,
+                          children: [
+                            for (final i in groups[k]!) _ItemTile(item: i, byShop: _byShop, onEdit: () => _edit(i)),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -402,15 +411,11 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
                 ContentWidth(
                   child: Padding(
                     padding: const EdgeInsets.only(top: 16),
-                    child: Section(
+                    child: GroupSection(
                       title: 'In the basket · ${bought.length}',
                       trailing: TextButton(onPressed: db.clearBoughtShopping, child: const Text('Clear')),
-                      child: Column(
-                        children: [
-                          for (final i in bought) _ItemTile(item: i, byShop: _byShop, onEdit: () => _edit(i)),
-                          const SizedBox(height: 6),
-                        ],
-                      ),
+                      indent: 64,
+                      children: [for (final i in bought) _ItemTile(item: i, byShop: _byShop, onEdit: () => _edit(i))],
                     ),
                   ),
                 ),
@@ -438,46 +443,48 @@ class _ItemTile extends StatelessWidget {
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        color: p.danger.withValues(alpha: 0.12),
-        child: Icon(Icons.delete_outline_rounded, color: p.danger),
+        color: p.danger,
+        child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
       ),
       onDismissed: (_) async {
         await db.deleteShoppingItem(item.id);
         if (context.mounted) showUndo(context, '${item.name} removed', () => db.restoreShoppingItem(item));
       },
-      child: ListTile(
-        dense: true,
-        leading: Checkbox(
-          shape: const CircleBorder(),
-          value: item.done,
-          onChanged: (v) {
-            HapticFeedback.selectionClick();
-            db.updateShoppingItem(item.id, done: v ?? false);
-          },
-        ),
-        title: Text(
-          item.name,
-          style: TextStyle(
-            fontSize: 15.5,
-            decoration: item.done ? TextDecoration.lineThrough : null,
-            color: item.done ? p.muted : null,
+      child: Press(
+        child: ListTile(
+          dense: true,
+          leading: Checkbox(
+            shape: const CircleBorder(),
+            value: item.done,
+            onChanged: (v) {
+              HapticFeedback.selectionClick();
+              db.updateShoppingItem(item.id, done: v ?? false);
+            },
           ),
+          title: Text(
+            item.name,
+            style: TextStyle(
+              fontSize: 15.5,
+              decoration: item.done ? TextDecoration.lineThrough : null,
+              color: item.done ? p.muted : null,
+            ),
+          ),
+          subtitle: Text(
+            [
+              if (item.quantity.isNotEmpty) item.quantity,
+              if (byShop && item.category.isNotEmpty && item.category != otherCategory) item.category,
+              if (!byShop && item.store.isNotEmpty) item.store,
+            ].join(' · '),
+            style: TextStyle(color: p.muted, fontSize: 13),
+          ),
+          trailing: IconButton(
+            tooltip: 'Change',
+            icon: Icon(Icons.storefront_outlined, color: p.muted, size: 20),
+            onPressed: onEdit,
+          ),
+          onTap: () => db.updateShoppingItem(item.id, done: !item.done),
+          onLongPress: onEdit,
         ),
-        subtitle: Text(
-          [
-            if (item.quantity.isNotEmpty) item.quantity,
-            if (byShop && item.category.isNotEmpty && item.category != otherCategory) item.category,
-            if (!byShop && item.store.isNotEmpty) item.store,
-          ].join(' · '),
-          style: TextStyle(color: p.muted, fontSize: 13),
-        ),
-        trailing: IconButton(
-          tooltip: 'Change',
-          icon: Icon(Icons.storefront_outlined, color: p.muted, size: 20),
-          onPressed: onEdit,
-        ),
-        onTap: () => db.updateShoppingItem(item.id, done: !item.done),
-        onLongPress: onEdit,
       ),
     );
   }
@@ -506,7 +513,7 @@ class _ShopRulesPageState extends State<ShopRulesPage> {
     final p = Palette.of(context);
     final settings = context.settings;
     return Scaffold(
-      appBar: AppBar(
+      appBar: HubBar(
         title: const Text('Cheapest shops'),
         actions: [
           TextButton(

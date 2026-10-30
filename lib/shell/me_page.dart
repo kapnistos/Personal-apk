@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-
 import 'package:flutter/services.dart';
 
 import '../core/app_info.dart';
+import '../core/press.dart';
 import '../core/reminders.dart';
-import '../core/sync/sync_service.dart';
 import '../core/settings.dart';
+import '../core/sync/sync_service.dart';
 import '../core/theme.dart';
 import '../core/widgets.dart';
 import 'automations_page.dart';
@@ -19,36 +19,38 @@ class MePage extends StatelessWidget {
     final s = context.settings;
     final p = Palette.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Me')),
+      appBar: HubBar(title: const Text('Me')),
       body: ListenableBuilder(
         listenable: s,
         builder: (context, _) => ListView(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
           children: [
             ContentWidth(
-              child: Section(
+              child: GroupSection(
                 title: 'Profile',
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: p.accent,
-                    child: Text(
-                      s.name.isEmpty ? '?' : s.name.characters.first.toUpperCase(),
-                      style: TextStyle(color: p.onAccent, fontWeight: FontWeight.w700),
+                child: Press(
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: p.accent,
+                      child: Text(
+                        s.name.isEmpty ? '?' : s.name.characters.first.toUpperCase(),
+                        style: TextStyle(color: p.onAccent, fontWeight: FontWeight.w700),
+                      ),
                     ),
+                    title: Text(s.name.isEmpty ? 'Add your name' : s.name),
+                    subtitle: const Text('Used for the greeting on Home'),
+                    trailing: const Icon(Icons.edit_outlined, size: 20),
+                    onTap: () async {
+                      final v = await _prompt(context, 'Your name', s.name);
+                      if (v != null) s.setName(v);
+                    },
                   ),
-                  title: Text(s.name.isEmpty ? 'Add your name' : s.name),
-                  subtitle: const Text('Used for the greeting on Home'),
-                  trailing: const Icon(Icons.edit_outlined, size: 20),
-                  onTap: () async {
-                    final v = await _prompt(context, 'Your name', s.name);
-                    if (v != null) s.setName(v);
-                  },
                 ),
               ),
             ),
             const SizedBox(height: 16),
             ContentWidth(
-              child: Section(
+              child: GroupSection(
                 title: 'Appearance',
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -119,36 +121,36 @@ class MePage extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             ContentWidth(
-              child: Section(
+              child: GroupSection(
                 title: 'Units and keys',
-                child: Column(
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.payments_outlined),
-                      title: const Text('Currency'),
-                      trailing: DropdownButton<String>(
-                        value: s.currency,
-                        underline: const SizedBox.shrink(),
-                        items: [
-                          // A currency set elsewhere (sync, a restore) is kept in the list so the menu can show it.
-                          for (final c in {'EUR', 'USD', 'GBP', 'CHF', s.currency})
-                            DropdownMenuItem(value: c, child: Text(c)),
-                        ],
-                        onChanged: (v) => s.setCurrency(v ?? 'EUR'),
-                      ),
+                children: [
+                  ListTile(
+                    leading: const RowIcon(Icons.payments_outlined),
+                    title: const Text('Currency'),
+                    trailing: DropdownButton<String>(
+                      value: s.currency,
+                      underline: const SizedBox.shrink(),
+                      items: [
+                        // A currency set elsewhere (sync, a restore) is kept in the list so the menu can show it.
+                        for (final c in {'EUR', 'USD', 'GBP', 'CHF', s.currency})
+                          DropdownMenuItem(value: c, child: Text(c)),
+                      ],
+                      onChanged: (v) => s.setCurrency(v ?? 'EUR'),
                     ),
-                    ListTile(
-                      leading: const Icon(Icons.thermostat_outlined),
-                      title: const Text('Temperature'),
-                      trailing: PillToggle<TempUnit>(
-                        dense: true,
-                        options: const [(TempUnit.celsius, '°C'), (TempUnit.fahrenheit, '°F')],
-                        value: s.tempUnit,
-                        onChanged: s.setTempUnit,
-                      ),
+                  ),
+                  ListTile(
+                    leading: const RowIcon(Icons.thermostat_outlined),
+                    title: const Text('Temperature'),
+                    trailing: PillToggle<TempUnit>(
+                      dense: true,
+                      options: const [(TempUnit.celsius, '°C'), (TempUnit.fahrenheit, '°F')],
+                      value: s.tempUnit,
+                      onChanged: s.setTempUnit,
                     ),
-                    ListTile(
-                      leading: const Icon(Icons.key_rounded),
+                  ),
+                  Press(
+                    child: ListTile(
+                      leading: const RowIcon(Icons.key_rounded),
                       title: const Text('Google Weather key'),
                       subtitle: Text(
                         s.googleWeatherKey.isEmpty
@@ -166,27 +168,28 @@ class MePage extends StatelessWidget {
                         if (v != null) s.setGoogleWeatherKey(v);
                       },
                     ),
-                    const SizedBox(height: 4),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 16),
             ContentWidth(
-              child: Section(
+              child: GroupSection(
                 title: 'Notifications',
-                child: Column(
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.auto_mode_rounded),
+                children: [
+                  Press(
+                    child: ListTile(
+                      leading: const RowIcon(Icons.auto_mode_rounded),
                       title: const Text('Automations'),
                       subtitle: const Text('Morning briefing, end of day, bills, low balance, weekly review'),
                       trailing: const Icon(Icons.chevron_right_rounded),
                       onTap: () =>
                           Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AutomationsPage())),
                     ),
-                    ListTile(
-                      leading: const Icon(Icons.notifications_active_outlined),
+                  ),
+                  Press(
+                    child: ListTile(
+                      leading: const RowIcon(Icons.notifications_active_outlined),
                       title: const Text('Allow reminders'),
                       subtitle: Text(
                         Reminders.instance.supported
@@ -199,49 +202,47 @@ class MePage extends StatelessWidget {
                         await Reminders.instance.resync(db);
                       },
                     ),
-                    const SizedBox(height: 4),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 16),
             ContentWidth(
-              child: Section(
+              child: GroupSection(
                 title: 'Your data',
-                child: Column(
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.backup_outlined),
-                      title: const Text('Backup and restore'),
-                      subtitle: const Text('Save everything to a file, or bring it back'),
+                children: [
+                  Press(
+                    child: ListTile(
+                      leading: const RowIcon(Icons.import_export_rounded),
+                      title: const Text('Import and export'),
+                      subtitle: const Text('All your data in one file, to keep or move to another device'),
                       trailing: const Icon(Icons.chevron_right_rounded),
                       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BackupPage())),
                     ),
-                    const SizedBox(height: 4),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 16),
             const ContentWidth(child: _SyncSection()),
             const SizedBox(height: 16),
             ContentWidth(
-              child: Section(
+              child: GroupSection(
                 title: 'About',
-                child: Column(
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.info_outline_rounded),
-                      title: const Text('Hub'),
-                      subtitle: Text(appVersionLabel),
-                      trailing: IconButton(
-                        tooltip: 'Copy version',
-                        icon: const Icon(Icons.copy_rounded, size: 18),
-                        onPressed: () => Clipboard.setData(ClipboardData(text: 'Hub $appVersionLabel')),
-                      ),
+                children: [
+                  ListTile(
+                    leading: const RowIcon(Icons.info_outline_rounded),
+                    title: const Text('Hub'),
+                    subtitle: Text(appVersionLabel),
+                    trailing: IconButton(
+                      tooltip: 'Copy version',
+                      icon: const Icon(Icons.copy_rounded, size: 18),
+                      onPressed: () => Clipboard.setData(ClipboardData(text: 'Hub $appVersionLabel')),
                     ),
-                    ListTile(
-                      leading: const Icon(Icons.description_outlined),
+                  ),
+                  Press(
+                    child: ListTile(
+                      leading: const RowIcon(Icons.description_outlined),
                       title: const Text('Open source licences'),
                       trailing: const Icon(Icons.chevron_right_rounded),
                       onTap: () => showLicensePage(
@@ -250,16 +251,16 @@ class MePage extends StatelessWidget {
                         applicationVersion: appVersionLabel,
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
-                      child: Text(
-                        'Hub keeps your data on this device. The AI tab only sends what you ask, to the model you '
-                        'pick: through the Claude app on your plan, or on your own API key.',
-                        style: TextStyle(color: p.muted, fontSize: 13.5, height: 1.45),
-                      ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+                    child: Text(
+                      'Hub keeps your data on this device. The AI tab only sends what you ask, to the model you '
+                      'pick: through the Claude app on your plan, or on your own API key.',
+                      style: TextStyle(color: p.muted, fontSize: 13.5, height: 1.45),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -390,7 +391,7 @@ class _SyncSectionState extends State<_SyncSection> {
     final s = context.settings;
     final p = Palette.of(context);
     final mode = _pendingClient ? 'client' : s.syncMode;
-    return Section(
+    return GroupSection(
       title: 'Sync',
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),

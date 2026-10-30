@@ -13,14 +13,16 @@ void main() {
   Future<AppDatabase> seeded() async {
     final db = AppDatabase(NativeDatabase.memory());
     await db.delete(db.subscriptions).go();
-    await db.saveSubscription(SubscriptionsCompanion.insert(
-      name: 'Rent',
-      amountCents: 98000,
-      kind: EntryKind.subscription,
-      category: 'Rent',
-      account: const Value('ABN AMRO'),
-      nextDate: DateTime(2026, 11, 1),
-    ));
+    await db.saveSubscription(
+      SubscriptionsCompanion.insert(
+        name: 'Rent',
+        amountCents: 98000,
+        kind: EntryKind.subscription,
+        category: 'Rent',
+        account: const Value('ABN AMRO'),
+        nextDate: DateTime(2026, 11, 1),
+      ),
+    );
     final abn = (await db.watchAccounts().first).first;
     await db.setAccountBalance(abn.id, 100000, at: DateTime(2026, 10, 29));
     await db.addTodo('Report', due: DateTime(2026, 10, 30));
@@ -81,6 +83,19 @@ void main() {
     await restoreBackup(fresh, json);
     expect((await fresh.watchNotes().first).length, 1);
     await fresh.close();
+  });
+
+  test('a replacing import leaves exactly what the backup holds', () async {
+    final db = await seeded();
+    await db.saveNote(title: 'In the backup', body: '');
+    final json = await backupJson(db);
+    await db.saveNote(title: 'Added later', body: '');
+    await restoreBackup(db, json, replace: true);
+    expect((await db.watchNotes().first).map((n) => n.title), ['In the backup']);
+    // Only the note that is really gone is marked deleted for sync.
+    final tombs = await db.customSelect("SELECT tbl FROM sync_tombstones WHERE tbl = 'notes'").get();
+    expect(tombs, hasLength(1));
+    await db.close();
   });
 
   test('habit streaks skip days the habit does not apply to', () {

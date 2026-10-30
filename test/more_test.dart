@@ -105,7 +105,7 @@ void main() {
     await db.close();
   });
 
-  testWidgets('chat keeps its history, and Clear chat empties it', (tester) async {
+  testWidgets('chat keeps its history, and New chat empties it', (tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.5;
     addTearDown(tester.view.reset);
@@ -143,7 +143,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 400));
         expect(find.text('Here is your plan.'), findsOneWidget);
 
-        await tester.tap(find.byTooltip('Clear chat'));
+        await tester.tap(find.byTooltip('New chat'));
         await tester.pump(const Duration(milliseconds: 300));
         expect(find.text('Here is your plan.'), findsNothing);
         expect(ChatMemory(settings).load(false), isEmpty);

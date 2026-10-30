@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
+import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -59,7 +60,7 @@ class _NewsPageState extends State<NewsPage> {
       _ => _news.items.where((i) => i.topic == _topic).take(60).toList(),
     };
     return Scaffold(
-      appBar: AppBar(
+      appBar: HubBar(
         title: const Text('News'),
         actions: [
           IconButton(
@@ -90,24 +91,13 @@ class _NewsPageState extends State<NewsPage> {
         child: Builder(
           builder: (context) {
             final header = <Widget>[
-              SizedBox(
-                height: 44,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  children: [
-                    for (final t in ['Briefing', 'Latest', ...newsTopics])
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          showCheckmark: false,
-                          label: Text(t),
-                          selected: _topic == t,
-                          onSelected: (_) => setState(() => _topic = t),
-                        ),
-                      ),
-                  ],
-                ),
+              PillTabs<String>(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                options: [
+                  for (final t in ['Briefing', 'Latest', ...newsTopics]) (t, t),
+                ],
+                value: _topic,
+                onChanged: (t) => setState(() => _topic = t),
               ),
               if (_loading) const LinearProgressIndicator(minHeight: 2, color: newsColor),
               Padding(
@@ -159,47 +149,49 @@ class _LeadStory extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => openArticle(item.link),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            AspectRatio(
-              aspectRatio: 16 / 9,
-              child: LayoutBuilder(
-                builder: (context, box) => Image.network(
-                  item.image!,
-                  fit: BoxFit.cover,
-                  cacheWidth: box.maxWidth.isFinite
-                      ? (box.maxWidth * MediaQuery.devicePixelRatioOf(context)).round().clamp(1, 1600)
-                      : null,
-                  errorBuilder: (_, _, _) => Container(color: p.raised),
+    return Press(
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => openArticle(item.link),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: LayoutBuilder(
+                  builder: (context, box) => Image.network(
+                    item.image!,
+                    fit: BoxFit.cover,
+                    cacheWidth: box.maxWidth.isFinite
+                        ? (box.maxWidth * MediaQuery.devicePixelRatioOf(context)).round().clamp(1, 1600)
+                        : null,
+                    errorBuilder: (_, _, _) => Container(color: p.raised),
+                  ),
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _Byline(item: item),
-                  const SizedBox(height: 6),
-                  Text(item.title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700, height: 1.25)),
-                  if (item.summary.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _Byline(item: item),
                     const SizedBox(height: 6),
-                    Text(
-                      item.summary,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: p.muted, height: 1.4),
-                    ),
+                    Text(item.title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700, height: 1.25)),
+                    if (item.summary.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        item.summary,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: p.muted, height: 1.4),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -214,7 +206,7 @@ class _Byline extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     return Text(
-      [item.source.toUpperCase(), item.topic, if (item.published != null) relativeTime(item.published!)].join('  ·  '),
+      [item.source, item.topic, if (item.published != null) relativeTime(item.published!)].join('  ·  '),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(fontSize: 12, letterSpacing: 0.4, color: p.muted, fontWeight: FontWeight.w600),
@@ -230,53 +222,55 @@ class NewsTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () => openArticle(item.link),
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: compact ? 6 : 8, horizontal: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _Byline(item: item),
-                  const SizedBox(height: 3),
-                  Text(
-                    item.title,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: compact ? 14.5 : 15.5, fontWeight: FontWeight.w600, height: 1.3),
-                  ),
-                  if (!compact && item.summary.isNotEmpty) ...[
+    return Press(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => openArticle(item.link),
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: compact ? 6 : 8, horizontal: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _Byline(item: item),
                     const SizedBox(height: 3),
                     Text(
-                      item.summary,
-                      maxLines: 2,
+                      item.title,
+                      maxLines: 3,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: p.muted, fontSize: 14),
+                      style: TextStyle(fontSize: compact ? 14.5 : 15.5, fontWeight: FontWeight.w600, height: 1.3),
                     ),
+                    if (!compact && item.summary.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        item.summary,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: p.muted, fontSize: 14),
+                      ),
+                    ],
                   ],
-                ],
-              ),
-            ),
-            if (item.image != null && !compact) ...[
-              const SizedBox(width: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.network(
-                  item.image!,
-                  width: 84,
-                  height: 64,
-                  fit: BoxFit.cover,
-                  cacheWidth: (84 * MediaQuery.devicePixelRatioOf(context)).round(),
-                  errorBuilder: (_, _, _) => const SizedBox(width: 84),
                 ),
               ),
+              if (item.image != null && !compact) ...[
+                const SizedBox(width: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.network(
+                    item.image!,
+                    width: 84,
+                    height: 64,
+                    fit: BoxFit.cover,
+                    cacheWidth: (84 * MediaQuery.devicePixelRatioOf(context)).round(),
+                    errorBuilder: (_, _, _) => const SizedBox(width: 84),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -352,7 +346,7 @@ class _NewsSourcesPageState extends State<NewsSourcesPage> {
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     return Scaffold(
-      appBar: AppBar(
+      appBar: HubBar(
         title: const Text('News sources'),
         actions: [
           TextButton(
@@ -373,7 +367,7 @@ class _NewsSourcesPageState extends State<NewsSourcesPage> {
               ContentWidth(
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: Section(
+                  child: GroupSection(
                     title: t,
                     child: Column(
                       children: [

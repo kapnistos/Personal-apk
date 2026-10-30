@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
+import '../../core/press.dart';
 import '../../core/reminders.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
@@ -48,7 +49,7 @@ class _TodoPageState extends State<TodoPage> {
   Widget build(BuildContext context) {
     final db = context.db;
     return Scaffold(
-      appBar: AppBar(
+      appBar: HubBar(
         title: const Text('To-do'),
         actions: [
           PopupMenuButton<TodoSort>(
@@ -88,31 +89,22 @@ class _TodoPageState extends State<TodoPage> {
               final groups = groupTodos(applyTodoFilter(all, _filter), byDate: _filter != TodoFilter.done, sort: sort);
               return Column(
                 children: [
-                  SizedBox(
-                    height: 44,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      children: [
-                        for (final f in TodoFilter.values)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: ChoiceChip(
-                              showCheckmark: false,
-                              label: Text(
-                                '${switch (f) {
-                                  TodoFilter.open => 'Open',
-                                  TodoFilter.today => 'Today',
-                                  TodoFilter.important => 'Important',
-                                  TodoFilter.done => 'Done',
-                                }}${counts[f]! > 0 && f != TodoFilter.done ? '  ${counts[f]}' : ''}',
-                              ),
-                              selected: _filter == f,
-                              onSelected: (_) => setState(() => _filter = f),
-                            ),
-                          ),
-                      ],
-                    ),
+                  PillTabs<TodoFilter>(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                    options: [
+                      for (final f in TodoFilter.values)
+                        (
+                          f,
+                          '${switch (f) {
+                            TodoFilter.open => 'Open',
+                            TodoFilter.today => 'Today',
+                            TodoFilter.important => 'Important',
+                            TodoFilter.done => 'Done',
+                          }}${counts[f]! > 0 && f != TodoFilter.done ? '  ${counts[f]}' : ''}',
+                        ),
+                    ],
+                    value: _filter,
+                    onChanged: (f) => setState(() => _filter = f),
                   ),
                   Expanded(
                     // A quick cross-fade when switching filters, so the list does not jump.
@@ -150,19 +142,22 @@ class _TodoPageState extends State<TodoPage> {
                                   children: [
                                     for (final (label, items) in groups) ...[
                                       Padding(
-                                        padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
+                                        padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
                                         child: Row(
                                           children: [
                                             SectionLabel(label),
                                             const SizedBox(width: 6),
                                             Text(
                                               '${items.length}',
-                                              style: TextStyle(fontSize: 12.5, color: Palette.of(context).muted),
+                                              style: TextStyle(fontSize: 13, color: Palette.of(context).muted),
                                             ),
                                           ],
                                         ),
                                       ),
-                                      for (final t in items) TodoTile(todo: t, space: spaces[t.spaceId]),
+                                      GroupCard(
+                                        indent: 56,
+                                        children: [for (final t in items) TodoTile(todo: t, space: spaces[t.spaceId])],
+                                      ),
                                     ],
                                   ],
                                 ),
@@ -303,10 +298,12 @@ Future<void> showTodoActions(BuildContext context, Todo todo) async {
     showDragHandle: true,
     builder: (context) {
       final p = Palette.of(context);
-      Widget item(String key, IconData icon, String label, {Color? color}) => ListTile(
-        leading: Icon(icon, color: color ?? p.muted),
-        title: Text(label, style: color == null ? null : TextStyle(color: color)),
-        onTap: () => Navigator.pop(context, key),
+      Widget item(String key, IconData icon, String label, {Color? color}) => Press(
+        child: ListTile(
+          leading: Icon(icon, color: color ?? p.muted),
+          title: Text(label, style: color == null ? null : TextStyle(color: color)),
+          onTap: () => Navigator.pop(context, key),
+        ),
       );
       return SafeArea(
         child: SingleChildScrollView(
@@ -458,57 +455,58 @@ class TodoTile extends StatelessWidget {
     ];
     final tile = Material(
       color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => editTodo(context, todo),
-        onLongPress: () => showTodoActions(context, todo),
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: dense ? 2 : 4),
-          child: Row(
-            children: [
-              Checkbox(
-                value: todo.done,
-                shape: const CircleBorder(),
-                activeColor: TileColors.todo,
-                onChanged: (_) => toggleTodoDone(context, todo),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      todo.title,
-                      maxLines: dense ? 1 : 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 15,
-                        decoration: todo.done ? TextDecoration.lineThrough : null,
-                        color: todo.done ? p.muted : p.ink,
-                      ),
-                    ),
-                    if (spans.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text.rich(
-                          TextSpan(children: spans),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 13.5, color: p.muted),
+      child: Press(
+        child: InkWell(
+          onTap: () => editTodo(context, todo),
+          onLongPress: () => showTodoActions(context, todo),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(dense ? 0 : 4, dense ? 2 : 5, dense ? 0 : 2, dense ? 2 : 5),
+            child: Row(
+              children: [
+                Checkbox(
+                  value: todo.done,
+                  shape: const CircleBorder(),
+                  activeColor: TileColors.todo,
+                  onChanged: (_) => toggleTodoDone(context, todo),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        todo.title,
+                        maxLines: dense ? 1 : 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 15,
+                          decoration: todo.done ? TextDecoration.lineThrough : null,
+                          color: todo.done ? p.muted : p.ink,
                         ),
                       ),
-                  ],
+                      if (spans.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text.rich(
+                            TextSpan(children: spans),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 13.5, color: p.muted),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              IconButton(
-                tooltip: todo.important ? 'Unmark important' : 'Mark important',
-                visualDensity: VisualDensity.compact,
-                icon: Icon(
-                  todo.important ? Icons.star_rounded : Icons.star_outline_rounded,
-                  color: todo.important ? const Color(0xFFE0A526) : p.muted,
+                IconButton(
+                  tooltip: todo.important ? 'Unmark important' : 'Mark important',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    todo.important ? Icons.star_rounded : Icons.star_outline_rounded,
+                    color: todo.important ? const Color(0xFFE0A526) : p.muted,
+                  ),
+                  onPressed: () => db.updateTodo(todo.copyWith(important: !todo.important)),
                 ),
-                onPressed: () => db.updateTodo(todo.copyWith(important: !todo.important)),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -519,13 +517,13 @@ class TodoTile extends StatelessWidget {
       background: Container(
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.only(left: 20),
-        decoration: BoxDecoration(color: TileColors.todo, borderRadius: BorderRadius.circular(12)),
+        color: TileColors.todo,
         child: const Icon(Icons.check_rounded, color: Colors.white),
       ),
       secondaryBackground: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        decoration: BoxDecoration(color: p.danger, borderRadius: BorderRadius.circular(12)),
+        color: p.danger,
         child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
       ),
       confirmDismiss: (dir) async {
@@ -706,11 +704,8 @@ class _QuickAddState extends State<_QuickAdd> {
     final q = _preview;
     final chips = q == null ? const <(IconData, String)>[] : quickTaskChips(q);
     return Container(
-      decoration: BoxDecoration(
-        color: p.surface,
-        border: Border(top: BorderSide(color: p.line)),
-      ),
-      padding: EdgeInsets.fromLTRB(16, 10, 10, 10 + MediaQuery.paddingOf(context).bottom),
+      color: p.background,
+      padding: EdgeInsets.fromLTRB(16, 8, 16, 12 + MediaQuery.paddingOf(context).bottom),
       child: ContentWidth(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -732,22 +727,15 @@ class _QuickAddState extends State<_QuickAdd> {
                             Container(
                               key: ValueKey('quick-$label'),
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: TileColors.todo.withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(99),
-                              ),
+                              decoration: ShapeDecoration(color: p.raised, shape: const StadiumBorder()),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(icon, size: 14, color: TileColors.todo),
+                                  Icon(icon, size: 14, color: p.muted),
                                   const SizedBox(width: 5),
                                   Text(
                                     label,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: TileColors.todo,
-                                    ),
+                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: p.ink),
                                   ),
                                 ],
                               ),
@@ -766,11 +754,24 @@ class _QuickAddState extends State<_QuickAdd> {
                     textInputAction: TextInputAction.done,
                     onChanged: (v) => setState(() => _preview = v.trim().isEmpty ? null : parseQuickTask(v)),
                     onSubmitted: (_) => _submit(),
-                    decoration: const InputDecoration(hintText: 'Add a task', prefixIcon: Icon(Icons.add_rounded)),
+                    decoration: InputDecoration(
+                      hintText: 'Add a task',
+                      prefixIcon: const Icon(Icons.add_rounded),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(28),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(28),
+                        borderSide: BorderSide(color: p.accent, width: 1.5),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 6),
-                IconButton.filled(tooltip: 'Add', onPressed: _submit, icon: const Icon(Icons.arrow_upward_rounded)),
+                const SizedBox(width: 8),
+                RoundButton(tooltip: 'Add', onPressed: _submit, icon: Icons.arrow_upward_rounded, filled: true),
               ],
             ),
           ],

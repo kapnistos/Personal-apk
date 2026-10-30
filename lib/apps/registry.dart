@@ -19,7 +19,9 @@ import 'wallet/wallet_page.dart';
 import 'weather/weather_page.dart';
 
 /// Every mini-app on the home screen, in display order.
-final miniApps = _allApps.where((a) => personalEdition || !personalOnlyApps.contains(a.id)).toList();
+List<MiniApp> get miniApps => _allApps
+    .where((a) => personalEdition || !personalOnlyApps.contains(a.id) || (a.id == 'internships' && hasInternshipData))
+    .toList();
 
 final _allApps = <MiniApp>[
   MiniApp(

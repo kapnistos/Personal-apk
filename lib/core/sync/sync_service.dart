@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data' show BytesBuilder;
 
 import 'package:drift/drift.dart' show TableUpdateQuery;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../../apps/ai/claude_code.dart';
 import '../db/database.dart';
 import 'sync_engine.dart';
 
@@ -66,10 +68,12 @@ class SyncService {
     }
     final ips = await localAddresses();
     status.value = 'Serving on ${ips.isEmpty ? 'port $syncPort' : ips.map((ip) => '$ip:$syncPort').join(', ')}';
-    _server!.listen((req) => _handle(req, engine, token));
+    _server!.listen((req) => handle(req, engine, token));
   }
 
-  Future<void> _handle(HttpRequest req, SyncEngine engine, String token) async {
+  /// Answers one request to the server. Every path needs the sync key.
+  @visibleForTesting
+  Future<void> handle(HttpRequest req, SyncEngine engine, String token) async {
     final res = req.response..headers.contentType = ContentType.json;
     try {
       if (req.headers.value('authorization') != 'Bearer $token') {
@@ -90,6 +94,19 @@ class SyncService {
         status.value = 'Last device synced at ${_hm(DateTime.now())}';
         return;
       }
+      // Your Claude plan through Claude Code on this laptop, for phones.
+      if (req.method == 'POST' && req.uri.path == '/ai') {
+        final raw = await _readCapped(req, ClaudeCodeRunner.maxPromptChars * 4 + 4096);
+        final (code, body) = raw == null
+            ? (
+                HttpStatus.requestEntityTooLarge,
+                <String, Object?>{'error': 'That question is too long for Claude Code.'},
+              )
+            : await ClaudePlan.serve(_tryJson(raw));
+        res.statusCode = code;
+        res.write(jsonEncode(body));
+        return;
+      }
       res.statusCode = HttpStatus.notFound;
     } catch (e) {
       res.statusCode = HttpStatus.internalServerError;
@@ -99,10 +116,31 @@ class SyncService {
     }
   }
 
+  /// The request body as text, or null when it is longer than [maxBytes].
+  static Future<String?> _readCapped(HttpRequest req, int maxBytes) async {
+    final bytes = BytesBuilder(copy: false);
+    await for (final chunk in req) {
+      bytes.add(chunk);
+      if (bytes.length > maxBytes) return null;
+    }
+    return utf8.decode(bytes.takeBytes(), allowMalformed: true);
+  }
+
+  static Object? _tryJson(String s) {
+    try {
+      return jsonDecode(s);
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<List<String>> localAddresses() async {
     try {
       final list = await NetworkInterface.list(type: InternetAddressType.IPv4);
-      final all = [for (final i in list) for (final a in i.addresses) a.address];
+      final all = [
+        for (final i in list)
+          for (final a in i.addresses) a.address,
+      ];
       // Tailscale addresses first: they work from anywhere.
       all.sort((a, b) => (b.startsWith('100.') ? 1 : 0) - (a.startsWith('100.') ? 1 : 0));
       return all;
@@ -117,14 +155,22 @@ class SyncService {
     status.value = 'Waiting for first sync';
     _timer = Timer.periodic(const Duration(minutes: 2), (_) => syncNow());
     _changes = engine.db
-        .tableUpdates(TableUpdateQuery.onAllTables([
-          engine.db.notes, engine.db.todos, engine.db.events, engine.db.calendars,
-          engine.db.entries, engine.db.subscriptions, engine.db.budgets, engine.db.cities,
-        ]))
+        .tableUpdates(
+          TableUpdateQuery.onAllTables([
+            engine.db.notes,
+            engine.db.todos,
+            engine.db.events,
+            engine.db.calendars,
+            engine.db.entries,
+            engine.db.subscriptions,
+            engine.db.budgets,
+            engine.db.cities,
+          ]),
+        )
         .listen((_) {
-      _debounce?.cancel();
-      _debounce = Timer(const Duration(seconds: 4), syncNow);
-    });
+          _debounce?.cancel();
+          _debounce = Timer(const Duration(seconds: 4), syncNow);
+        });
     _client = (engine, url, token);
     unawaited(syncNow());
   }

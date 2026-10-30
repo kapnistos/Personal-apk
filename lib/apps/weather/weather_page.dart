@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
+import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -39,7 +40,7 @@ class _WeatherPageState extends State<WeatherPage> {
         final cities = snap.data ?? const <City>[];
         final city = selectedCity(context, cities);
         return Scaffold(
-          appBar: AppBar(
+          appBar: HubBar(
             title: InkWell(
               borderRadius: BorderRadius.circular(10),
               onTap: () => showLocationPicker(context),
@@ -249,11 +250,11 @@ class _NowCard extends StatelessWidget {
               Text(
                 formatTemp(f.temperature, unit),
                 style: const TextStyle(
-                  fontSize: 76,
+                  fontSize: 80,
                   height: 0.95,
-                  fontWeight: FontWeight.w300,
+                  fontWeight: FontWeight.w800,
                   color: white,
-                  letterSpacing: -3,
+                  letterSpacing: -4,
                 ),
               ),
               const Spacer(),
@@ -284,7 +285,7 @@ class _HourlyStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    return Section(
+    return GroupSection(
       title: 'Next 24 hours',
       child: SizedBox(
         height: 108,
@@ -347,7 +348,7 @@ class _DailyList extends StatelessWidget {
     final lo = f.days.map((d) => d.min).reduce(math.min);
     final hi = f.days.map((d) => d.max).reduce(math.max);
     final span = math.max(1.0, hi - lo);
-    return Section(
+    return GroupSection(
       title: '7-day forecast',
       child: Column(
         children: [
@@ -590,16 +591,18 @@ class _CityManagerState extends State<_CityManager> {
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       children: [
                         for (final r in _results)
-                          ListTile(
-                            leading: const Icon(Icons.place_outlined),
-                            title: Text(r.name),
-                            subtitle: Text(r.region),
-                            trailing: const Icon(Icons.add_rounded),
-                            onTap: () async {
-                              await db.addCity(r.name, r.region, r.latitude, r.longitude);
-                              _controller.clear();
-                              setState(() => _results = []);
-                            },
+                          Press(
+                            child: ListTile(
+                              leading: const Icon(Icons.place_outlined),
+                              title: Text(r.name),
+                              subtitle: Text(r.region),
+                              trailing: const Icon(Icons.add_rounded),
+                              onTap: () async {
+                                await db.addCity(r.name, r.region, r.latitude, r.longitude);
+                                _controller.clear();
+                                setState(() => _results = []);
+                              },
+                            ),
                           ),
                         if (_results.isEmpty && !_searching && _error == null)
                           Padding(
@@ -694,10 +697,10 @@ class RainNowcastCardState extends State<RainNowcastCard> {
     final n = _data;
     if (n == null) {
       if (_failed) return const SizedBox.shrink();
-      return const Section(title: 'Rain, next hours', child: SizedBox(height: 120));
+      return const GroupSection(title: 'Rain, next hours', child: SizedBox(height: 120));
     }
     final maxMm = n.points.fold<double>(2, (m, x) => math.max(m, x.mmPerHour));
-    return Section(
+    return GroupSection(
       title: 'Rain, next hours',
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 2, 16, 14),
@@ -819,35 +822,41 @@ void showLocationPicker(BuildContext context) {
             child: ListView(
               shrinkWrap: true,
               children: [
-                ListTile(
-                  leading: const Icon(Icons.my_location_rounded),
-                  title: const Text('Use my location'),
-                  onTap: () {
-                    Navigator.pop(sheet);
-                    useMyLocation(context);
-                  },
+                Press(
+                  child: ListTile(
+                    leading: const Icon(Icons.my_location_rounded),
+                    title: const Text('Use my location'),
+                    onTap: () {
+                      Navigator.pop(sheet);
+                      useMyLocation(context);
+                    },
+                  ),
                 ),
                 const Divider(),
                 for (final c in cities)
-                  ListTile(
-                    leading: Icon(
-                      c.id == current?.id ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                      color: c.id == current?.id ? TileColors.weather : null,
+                  Press(
+                    child: ListTile(
+                      leading: Icon(
+                        c.id == current?.id ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                        color: c.id == current?.id ? TileColors.weather : null,
+                      ),
+                      title: Text(c.name),
+                      subtitle: c.region.isEmpty ? null : Text(c.region),
+                      onTap: () {
+                        settings.setRaw('weather.city', '${c.id}');
+                        Navigator.pop(sheet);
+                      },
                     ),
-                    title: Text(c.name),
-                    subtitle: c.region.isEmpty ? null : Text(c.region),
+                  ),
+                Press(
+                  child: ListTile(
+                    leading: const Icon(Icons.add_location_alt_outlined),
+                    title: const Text('Add or remove cities'),
                     onTap: () {
-                      settings.setRaw('weather.city', '${c.id}');
                       Navigator.pop(sheet);
+                      showCityManager(context);
                     },
                   ),
-                ListTile(
-                  leading: const Icon(Icons.add_location_alt_outlined),
-                  title: const Text('Add or remove cities'),
-                  onTap: () {
-                    Navigator.pop(sheet);
-                    showCityManager(context);
-                  },
                 ),
               ],
             ),
@@ -886,7 +895,7 @@ class WeatherSourcesCard extends StatelessWidget {
         ],
       ),
     );
-    return Section(
+    return GroupSection(
       title: 'Where the forecast comes from',
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),

@@ -2,11 +2,12 @@ import 'package:drift/drift.dart' show Value;
 import 'package:enough_mail/enough_mail.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
+import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -65,7 +66,7 @@ class _MailPageState extends State<MailPage> {
             .where((i) => _accountFilter == null || i.account.id == _accountFilter)
             .toList();
         return Scaffold(
-          appBar: AppBar(
+          appBar: HubBar(
             title: const Text('Mail'),
             actions: [
               IconButton(
@@ -128,10 +129,7 @@ class _MailPageState extends State<MailPage> {
                             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                             child: Container(
                               padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: p.danger.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                              decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(16)),
                               child: Row(
                                 children: [
                                   Icon(Icons.error_outline_rounded, color: p.danger, size: 20),
@@ -179,73 +177,75 @@ class _MailRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     final unread = item.unread;
-    return InkWell(
-      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _MessagePage(item: item))),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: Color(item.account.color).withValues(alpha: 0.16),
-              child: Text(
-                item.sender.characters.first.toUpperCase(),
-                style: TextStyle(color: Color(item.account.color), fontWeight: FontWeight.w700),
+    return Press(
+      child: InkWell(
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _MessagePage(item: item))),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: Color(item.account.color),
+                child: Text(
+                  item.sender.characters.first.toUpperCase(),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          item.sender,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontWeight: unread ? FontWeight.w700 : FontWeight.w500),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.sender,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontWeight: unread ? FontWeight.w700 : FontWeight.w500),
+                          ),
                         ),
-                      ),
-                      Text(
-                        time,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: unread ? p.accent : p.muted,
-                          fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          item.subject,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Text(
+                          time,
                           style: TextStyle(
-                            color: unread ? p.ink : p.muted,
+                            fontSize: 13,
+                            color: unread ? p.accent : p.muted,
                             fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
                           ),
                         ),
-                      ),
-                      if (showAccount)
-                        Container(
-                          width: 8,
-                          height: 8,
-                          margin: const EdgeInsets.only(left: 8),
-                          decoration: BoxDecoration(color: Color(item.account.color), shape: BoxShape.circle),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.subject,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: unread ? p.ink : p.muted,
+                              fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
+                            ),
+                          ),
                         ),
-                    ],
-                  ),
-                ],
+                        if (showAccount)
+                          Container(
+                            width: 8,
+                            height: 8,
+                            margin: const EdgeInsets.only(left: 8),
+                            decoration: BoxDecoration(color: Color(item.account.color), shape: BoxShape.circle),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -286,7 +286,7 @@ class _MessagePageState extends State<_MessagePage> {
     final text = _full == null ? null : messageText(_full!);
     final from = item.message.from?.firstOrNull;
     return Scaffold(
-      appBar: AppBar(
+      appBar: HubBar(
         actions: [
           if (text != null)
             IconButton(
@@ -317,10 +317,10 @@ class _MessagePageState extends State<_MessagePage> {
               children: [
                 CircleAvatar(
                   radius: 18,
-                  backgroundColor: Color(item.account.color).withValues(alpha: 0.16),
+                  backgroundColor: Color(item.account.color),
                   child: Text(
                     item.sender.characters.first.toUpperCase(),
-                    style: TextStyle(color: Color(item.account.color), fontWeight: FontWeight.w700),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -447,7 +447,7 @@ class _ComposeState extends State<_Compose> {
       hintStyle: TextStyle(color: p.muted),
     );
     return Scaffold(
-      appBar: AppBar(
+      appBar: HubBar(
         leading: IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(context)),
         title: Text(widget.replyTo == null ? 'New email' : 'Reply'),
         actions: [
@@ -515,7 +515,7 @@ class MailAccountsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Mail accounts')),
+      appBar: HubBar(title: const Text('Mail accounts')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => openAccountSetup(context),
         icon: const Icon(Icons.add_rounded),
@@ -532,33 +532,35 @@ class MailAccountsPage extends StatelessWidget {
                 ContentWidth(
                   child: Card(
                     margin: const EdgeInsets.only(bottom: 10),
-                    child: ListTile(
-                      leading: CircleAvatar(backgroundColor: Color(a.color), radius: 8),
-                      title: Text(a.email),
-                      subtitle: Text('${presetFor(a.provider).label} · ${a.imapHost}'),
-                      trailing: IconButton(
-                        tooltip: 'Remove',
-                        icon: Icon(Icons.delete_outline_rounded, color: p.danger),
-                        onPressed: () async {
-                          final db = context.db;
-                          final ok = await showDialog<bool>(
-                            context: context,
-                            builder: (d) => AlertDialog(
-                              title: const Text('Remove account?'),
-                              content: Text('${a.email} is removed from Hub. Nothing is deleted on the server.'),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Cancel')),
-                                FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('Remove')),
-                              ],
-                            ),
-                          );
-                          if (ok == true) {
-                            await MailService.instance.forget(a.id);
-                            await db.deleteMailAccount(a.id);
-                          }
-                        },
+                    child: Press(
+                      child: ListTile(
+                        leading: CircleAvatar(backgroundColor: Color(a.color), radius: 8),
+                        title: Text(a.email),
+                        subtitle: Text('${presetFor(a.provider).label} · ${a.imapHost}'),
+                        trailing: IconButton(
+                          tooltip: 'Remove',
+                          icon: Icon(Icons.delete_outline_rounded, color: p.danger),
+                          onPressed: () async {
+                            final db = context.db;
+                            final ok = await showDialog<bool>(
+                              context: context,
+                              builder: (d) => AlertDialog(
+                                title: const Text('Remove account?'),
+                                content: Text('${a.email} is removed from Hub. Nothing is deleted on the server.'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Cancel')),
+                                  FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('Remove')),
+                                ],
+                              ),
+                            );
+                            if (ok == true) {
+                              await MailService.instance.forget(a.id);
+                              await db.deleteMailAccount(a.id);
+                            }
+                          },
+                        ),
+                        onTap: () => openAccountSetup(context, existing: a),
                       ),
-                      onTap: () => openAccountSetup(context, existing: a),
                     ),
                   ),
                 ),
@@ -706,7 +708,7 @@ class _AccountSetupState extends State<_AccountSetup> {
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text(widget.existing == null ? 'Add mail account' : 'Edit account')),
+      appBar: HubBar(title: Text(widget.existing == null ? 'Add mail account' : 'Edit account')),
       body: ContentWidth(
         maxWidth: 560,
         child: ListView(
@@ -760,10 +762,7 @@ class _AccountSetupState extends State<_AccountSetup> {
               Container(
                 margin: const EdgeInsets.only(top: 12),
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: p.accent.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                decoration: BoxDecoration(color: p.raised, borderRadius: BorderRadius.circular(16)),
                 child: Column(
                   children: [
                     Text('Enter this code at ${_code!.url}', textAlign: TextAlign.center),

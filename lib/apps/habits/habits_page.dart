@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
+import '../../core/press.dart';
 import '../../core/reminders.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
@@ -93,7 +94,7 @@ class HabitsPage extends StatelessWidget {
     final today = dateOnly(DateTime.now());
     final from = addDays(today, -400);
     return Scaffold(
-      appBar: AppBar(title: const Text('Habits')),
+      appBar: HubBar(title: const Text('Habits')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => editHabit(context),
         icon: const Icon(Icons.add_rounded),
@@ -126,7 +127,7 @@ class HabitsPage extends StatelessWidget {
                       children: [
                         for (final (name, icon) in habitSuggestions)
                           ActionChip(
-                            avatar: Icon(habitIcons[icon], size: 18),
+                            avatar: Icon(habitIcons[icon], size: 18, color: p.ink),
                             label: Text(name),
                             onPressed: () => db.saveHabit(
                               HabitsCompanion.insert(
@@ -165,10 +166,7 @@ class HabitsPage extends StatelessWidget {
                                   color: habitColor,
                                   backgroundColor: p.raised,
                                 ),
-                                Text(
-                                  '$doneToday/${dueToday.length}',
-                                  style: const TextStyle(fontWeight: FontWeight.w700),
-                                ),
+                                Text('$doneToday/${dueToday.length}', style: numeralStyle(16)),
                               ],
                             ),
                           ),
@@ -181,7 +179,11 @@ class HabitsPage extends StatelessWidget {
                                   doneToday == dueToday.length
                                       ? 'All done today'
                                       : '${dueToday.length - doneToday} to go today',
-                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.5,
+                                  ),
                                 ),
                                 Text(DateFormat('EEEE d MMMM').format(today), style: TextStyle(color: p.muted)),
                               ],
@@ -192,16 +194,15 @@ class HabitsPage extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
-                for (final h in habits)
-                  ContentWidth(
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: HabitCard(habit: h, done: byHabit[h.id] ?? const {}),
-                    ),
+                const ContentWidth(child: GroupLabel('Your habits')),
+                ContentWidth(
+                  child: GroupCard(
+                    indent: 72,
+                    children: [for (final h in habits) HabitCard(habit: h, done: byHabit[h.id] ?? const {})],
                   ),
+                ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.only(top: 12),
                   child: Text(
                     'Hold a habit to see its history and tick past days.',
                     textAlign: TextAlign.center,
@@ -257,7 +258,7 @@ class HabitCard extends StatelessWidget {
               height: 28,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: isDone ? c : (due ? c.withValues(alpha: 0.10) : Colors.transparent),
+                color: isDone ? c : (due ? p.raised : Colors.transparent),
                 border: d == today && !isDone ? Border.all(color: c, width: 1.6) : null,
               ),
               child: isDone ? const Icon(Icons.check_rounded, size: 16, color: Colors.white) : null,
@@ -267,8 +268,7 @@ class HabitCard extends StatelessWidget {
       );
     }
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
+    return Press(
       child: InkWell(
         onLongPress: () => showHabitHistory(context, habit),
         onTap: () => editHabit(context, habit: habit),
@@ -284,17 +284,16 @@ class HabitCard extends StatelessWidget {
                       HapticFeedback.mediumImpact();
                       db.setHabitDone(habit.id, today, !todayDone);
                     },
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: todayDone ? c : c.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Icon(
-                        todayDone ? Icons.check_rounded : habitIcons[habit.icon] ?? Icons.check_rounded,
-                        color: todayDone ? Colors.white : c,
+                    child: Press(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(color: todayDone ? c : p.raised, shape: BoxShape.circle),
+                        child: Icon(
+                          todayDone ? Icons.check_rounded : habitIcons[habit.icon] ?? Icons.check_rounded,
+                          color: todayDone ? Colors.white : c,
+                        ),
                       ),
                     ),
                   ),
@@ -325,10 +324,7 @@ class HabitCard extends StatelessWidget {
                     children: [
                       Icon(Icons.local_fire_department_rounded, size: 20, color: streak > 0 ? habitColor : p.muted),
                       const SizedBox(width: 2),
-                      Text(
-                        '$streak',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17, color: streak > 0 ? null : p.muted),
-                      ),
+                      Text('$streak', style: numeralStyle(19, color: streak > 0 ? null : p.muted)),
                     ],
                   ),
                 ],
@@ -388,10 +384,16 @@ Future<void> editHabit(BuildContext context, {Habit? habit}) async {
                 runSpacing: 6,
                 children: [
                   for (final e in habitIcons.entries)
-                    IconButton.filledTonal(
+                    IconButton(
                       isSelected: icon == e.key,
                       onPressed: () => setSheet(() => icon = e.key),
-                      icon: Icon(e.value, color: icon == e.key ? Color(color) : null),
+                      style: IconButton.styleFrom(
+                        fixedSize: const Size.square(44),
+                        shape: const CircleBorder(),
+                        backgroundColor: icon == e.key ? Color(color) : Palette.of(context).raised,
+                        foregroundColor: icon == e.key ? Colors.white : Palette.of(context).ink,
+                      ),
+                      icon: Icon(e.value, color: icon == e.key ? Colors.white : null),
                     ),
                 ],
               ),
@@ -404,7 +406,7 @@ Future<void> editHabit(BuildContext context, {Habit? habit}) async {
                     GestureDetector(
                       onTap: () => setSheet(() => color = c),
                       child: CircleAvatar(
-                        radius: 15,
+                        radius: 20,
                         backgroundColor: Color(c),
                         child: color == c ? const Icon(Icons.check_rounded, size: 16, color: Colors.white) : null,
                       ),
@@ -427,28 +429,30 @@ Future<void> editHabit(BuildContext context, {Habit? habit}) async {
                 ],
               ),
               const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.notifications_none_rounded),
-                title: Text(remind.isEmpty ? 'No reminder' : 'Remind me at $remind'),
-                subtitle: const Text('Only on days it is not done yet'),
-                trailing: remind.isEmpty
-                    ? null
-                    : IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => setSheet(() => remind = '')),
-                onTap: () async {
-                  final parts = remind.split(':');
-                  final t = await showTimePicker(
-                    context: context,
-                    initialTime: remind.isEmpty
-                        ? const TimeOfDay(hour: 20, minute: 0)
-                        : TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])),
-                  );
-                  if (t != null) {
-                    setSheet(
-                      () => remind = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}',
+              Press(
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.notifications_none_rounded),
+                  title: Text(remind.isEmpty ? 'No reminder' : 'Remind me at $remind'),
+                  subtitle: const Text('Only on days it is not done yet'),
+                  trailing: remind.isEmpty
+                      ? null
+                      : IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => setSheet(() => remind = '')),
+                  onTap: () async {
+                    final parts = remind.split(':');
+                    final t = await showTimePicker(
+                      context: context,
+                      initialTime: remind.isEmpty
+                          ? const TimeOfDay(hour: 20, minute: 0)
+                          : TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])),
                     );
-                  }
-                },
+                    if (t != null) {
+                      setSheet(
+                        () => remind = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}',
+                      );
+                    }
+                  },
+                ),
               ),
               const SizedBox(height: 12),
               Row(
@@ -568,8 +572,8 @@ class _HabitHistoryState extends State<HabitHistory> {
                   children: [
                     CircleAvatar(
                       radius: 18,
-                      backgroundColor: c.withValues(alpha: 0.14),
-                      child: Icon(habitIcons[h.icon] ?? Icons.check_rounded, color: c, size: 20),
+                      backgroundColor: c,
+                      child: Icon(habitIcons[h.icon] ?? Icons.check_rounded, color: Colors.white, size: 20),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -648,7 +652,7 @@ class _HabitHistoryState extends State<HabitHistory> {
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: isDone ? c : (due && !future ? c.withValues(alpha: 0.10) : null),
+                                color: isDone ? c : (due && !future ? p.raised : null),
                                 border: d == today && !isDone ? Border.all(color: c, width: 1.6) : null,
                               ),
                               child: Text(

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
+import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -141,13 +142,53 @@ class _CalendarPageState extends State<CalendarPage> {
       builder: (context, calSnap) {
         final cals = {for (final c in calSnap.data ?? const <Calendar>[]) c.id: c};
         return Scaffold(
-          appBar: AppBar(
+          appBar: HubBar(
             titleSpacing: wide ? 20 : null,
             title: Text(_title(view)),
+            // Phones move Today and the arrows to a second row, so the month name keeps its room.
+            bottom: wide
+                ? null
+                : PreferredSize(
+                    preferredSize: const Size.fromHeight(56),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 12, 12),
+                      child: Row(
+                        children: [
+                          Press(
+                            child: TextButton(
+                              style: TextButton.styleFrom(
+                                backgroundColor: p.raised,
+                                foregroundColor: p.ink,
+                                minimumSize: const Size(0, 44),
+                                padding: const EdgeInsets.symmetric(horizontal: 18),
+                                shape: const StadiumBorder(),
+                              ),
+                              onPressed: _today,
+                              child: const Text('Today'),
+                            ),
+                          ),
+                          const Spacer(),
+                          RoundButton(
+                            tooltip: 'Previous',
+                            onPressed: () => _step(-1),
+                            icon: Icons.chevron_left_rounded,
+                          ),
+                          const SizedBox(width: 8),
+                          RoundButton(tooltip: 'Next', onPressed: () => _step(1), icon: Icons.chevron_right_rounded),
+                        ],
+                      ),
+                    ),
+                  ),
             actions: [
-              TextButton(onPressed: _today, child: const Text('Today')),
-              IconButton(tooltip: 'Previous', onPressed: () => _step(-1), icon: const Icon(Icons.chevron_left_rounded)),
-              IconButton(tooltip: 'Next', onPressed: () => _step(1), icon: const Icon(Icons.chevron_right_rounded)),
+              if (wide) ...[
+                TextButton(onPressed: _today, child: const Text('Today')),
+                IconButton(
+                  tooltip: 'Previous',
+                  onPressed: () => _step(-1),
+                  icon: const Icon(Icons.chevron_left_rounded),
+                ),
+                IconButton(tooltip: 'Next', onPressed: () => _step(1), icon: const Icon(Icons.chevron_right_rounded)),
+              ],
               if (wide)
                 Padding(
                   padding: const EdgeInsets.only(left: 8, right: 16),
@@ -416,7 +457,7 @@ class _MiniMonthState extends State<MiniMonth> {
                             margin: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: isSel ? p.accent : (isToday ? p.accent.withValues(alpha: 0.14) : null),
+                              color: isSel ? p.accent : (isToday ? p.raised : null),
                             ),
                             alignment: Alignment.center,
                             child: Text(
@@ -473,8 +514,8 @@ class _MonthView extends StatelessWidget {
                 Expanded(
                   child: Center(
                     child: Text(
-                      DateFormat.E().format(addDays(start, i)).toUpperCase(),
-                      style: TextStyle(fontSize: 12, letterSpacing: 0.6, color: p.muted, fontWeight: FontWeight.w600),
+                      DateFormat.E().format(addDays(start, i)),
+                      style: TextStyle(fontSize: 12.5, color: p.muted, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),
@@ -528,7 +569,7 @@ class _MonthView extends StatelessWidget {
         Expanded(
           flex: 8,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 88 + MediaQuery.paddingOf(context).bottom),
             children: [
               Text(
                 friendlyDay(selected) == DateFormat.EEEE().format(selected)
@@ -542,7 +583,7 @@ class _MonthView extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   child: Text('No events', style: TextStyle(color: p.muted)),
                 ),
-              for (final o in dayOcc) EventRow(o: o),
+              if (dayOcc.isNotEmpty) GroupCard(indent: 38, children: [for (final o in dayOcc) EventRow(o: o)]),
             ],
           ),
         ),
@@ -575,9 +616,7 @@ class _MonthCell extends StatelessWidget {
       onDoubleTap: onDoubleTap,
       child: Container(
         decoration: BoxDecoration(
-          color: isSelected && compact
-              ? p.accent.withValues(alpha: 0.07)
-              : (inMonth ? null : p.background.withValues(alpha: 0.5)),
+          color: isSelected && compact ? p.raised : (inMonth ? null : p.background.withValues(alpha: 0.5)),
           border: Border(
             right: BorderSide(color: p.line, width: 0.5),
             bottom: BorderSide(color: p.line, width: 0.5),
@@ -604,24 +643,28 @@ class _MonthCell extends StatelessWidget {
               ),
             );
             if (compact) {
-              return Column(
-                children: [
-                  header,
-                  const SizedBox(height: 3),
-                  Wrap(
-                    spacing: 3,
-                    runSpacing: 3,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      for (final o in occ.take(4))
-                        Container(
-                          width: 5,
-                          height: 5,
-                          decoration: BoxDecoration(color: o.color, shape: BoxShape.circle),
-                        ),
-                    ],
-                  ),
-                ],
+              // Short cells (small phones, large text) cut the dots off rather than spill.
+              return SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: Column(
+                  children: [
+                    header,
+                    const SizedBox(height: 3),
+                    Wrap(
+                      spacing: 3,
+                      runSpacing: 3,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        for (final o in occ.take(4))
+                          Container(
+                            width: 5,
+                            height: 5,
+                            decoration: BoxDecoration(color: o.color, shape: BoxShape.circle),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               );
             }
             final fit = ((c.maxHeight - 28) / 20).floor().clamp(0, 10);
@@ -751,7 +794,7 @@ class _TimeGridState extends State<_TimeGrid> {
                     child: Column(
                       children: [
                         Text(
-                          DateFormat.E().format(d).toUpperCase(),
+                          DateFormat.E().format(d),
                           style: TextStyle(
                             fontSize: 12,
                             letterSpacing: 0.6,
@@ -794,7 +837,7 @@ class _TimeGridState extends State<_TimeGrid> {
                     child: Padding(
                       padding: const EdgeInsets.only(top: 3, right: 8),
                       child: Text(
-                        'all-day',
+                        'All day',
                         textAlign: TextAlign.right,
                         style: TextStyle(fontSize: 11.5, color: p.muted),
                       ),
@@ -836,6 +879,8 @@ class _TimeGridState extends State<_TimeGrid> {
           Expanded(
             child: SingleChildScrollView(
               controller: _scroll,
+              // The last hours clear the bottom bar, which the page runs on under.
+              padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
               child: SizedBox(
                 height: 24 * _hourHeight,
                 child: Row(
@@ -959,9 +1004,10 @@ class _EventBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final bg = Color.alphaBlend(o.color.withValues(alpha: dark ? 0.32 : 0.16), Palette.of(context).surface);
-    final fg = dark ? Color.lerp(o.color, Colors.white, 0.6)! : Color.lerp(o.color, Colors.black, 0.45)!;
+    // Neutral blocks; the calendar's colour is the stripe on the left.
+    final p = Palette.of(context);
+    final bg = p.raised;
+    final fg = p.ink;
     final minutes = o.end.difference(o.start).inMinutes;
     return Opacity(
       opacity: past ? 0.6 : 1,
@@ -994,7 +1040,7 @@ class _EventBlock extends StatelessWidget {
                       '${o.event.location.isNotEmpty ? ' · ${o.event.location}' : ''}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: fg.withValues(alpha: 0.8)),
+                      style: TextStyle(fontSize: 12, color: p.muted),
                     ),
                 ],
               ),
@@ -1066,7 +1112,7 @@ class _AgendaState extends State<_Agenda> {
         return ContentWidth(
           child: ListView.builder(
             controller: _scroll,
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 88 + MediaQuery.paddingOf(context).bottom),
             itemCount: rows.length + 2,
             itemBuilder: (context, i) {
               if (i == 0) {
@@ -1114,7 +1160,7 @@ class _AgendaState extends State<_Agenda> {
                       child: Column(
                         children: [
                           Text(
-                            DateFormat.E().format(d).toUpperCase(),
+                            DateFormat.E().format(d),
                             style: TextStyle(
                               fontSize: 12,
                               color: isToday ? p.accent : p.muted,
@@ -1130,7 +1176,8 @@ class _AgendaState extends State<_Agenda> {
                               '${d.day}',
                               style: TextStyle(
                                 fontSize: 20,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.6,
                                 color: isToday ? p.onAccent : p.ink,
                               ),
                             ),
@@ -1144,7 +1191,7 @@ class _AgendaState extends State<_Agenda> {
                               padding: const EdgeInsets.only(top: 18),
                               child: Text('Nothing planned today', style: TextStyle(color: p.muted)),
                             )
-                          : Column(children: [for (final o in list) EventRow(o: o)]),
+                          : GroupCard(indent: 38, children: [for (final o in list) EventRow(o: o)]),
                     ),
                   ],
                 ),
@@ -1164,24 +1211,21 @@ class EventRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Material(
-        color: p.raised.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () => showEventDetails(context, o),
+    return Press(
+      child: InkWell(
+        onTap: () => showEventDetails(context, o),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
           child: Padding(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             child: Row(
               children: [
                 Container(
-                  width: 4,
-                  height: 34,
-                  decoration: BoxDecoration(color: o.color, borderRadius: BorderRadius.circular(2)),
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(color: o.color, shape: BoxShape.circle),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

@@ -12,11 +12,12 @@ import '../apps/notes/notes_page.dart';
 import '../apps/shopping/shopping_page.dart';
 import '../apps/spaces/space_page.dart';
 import '../apps/todo/todo_page.dart';
-import '../apps/wallet/wallet_model.dart';
 import '../apps/wallet/subscriptions_page.dart';
+import '../apps/wallet/wallet_model.dart';
 import '../apps/wallet/wallet_page.dart';
 import '../core/db/database.dart';
 import '../core/format.dart';
+import '../core/press.dart';
 import '../core/settings.dart';
 import '../core/theme.dart';
 import '../core/widgets.dart';
@@ -189,21 +190,23 @@ class _SearchPageState extends State<SearchPage> {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
       children: [
         ContentWidth(
-          child: Section(
+          child: GroupSection(
             title: 'Recent',
             trailing: TextButton(onPressed: () => RecentSearches.clear(context.settings), child: const Text('Clear')),
             child: Column(
               children: [
                 for (final q in recent)
-                  ListTile(
-                    leading: Icon(Icons.history_rounded, color: p.muted),
-                    title: Text(q),
-                    trailing: Icon(Icons.north_west_rounded, size: 18, color: p.muted),
-                    onTap: () {
-                      _controller.text = q;
-                      _controller.selection = TextSelection.collapsed(offset: q.length);
-                      _run(q);
-                    },
+                  Press(
+                    child: ListTile(
+                      leading: const RowIcon(Icons.history_rounded),
+                      title: Text(q),
+                      trailing: Icon(Icons.north_west_rounded, size: 18, color: p.muted),
+                      onTap: () {
+                        _controller.text = q;
+                        _controller.selection = TextSelection.collapsed(offset: q.length);
+                        _run(q);
+                      },
+                    ),
                   ),
                 const SizedBox(height: 6),
               ],
@@ -220,19 +223,22 @@ class _SearchPageState extends State<SearchPage> {
     final r = _results;
     final currency = context.settings.currency;
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 0,
+      appBar: HubBar(
+        centerTitle: false,
+        titleSpacing: 8,
         title: TextField(
           controller: _controller,
           autofocus: true,
           onChanged: _changed,
           onSubmitted: (q) => RecentSearches.remember(context.settings, q),
           textInputAction: TextInputAction.search,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             hintText: 'Search everything',
-            filled: false,
-            border: InputBorder.none,
-            focusedBorder: InputBorder.none,
+            prefixIcon: const Icon(Icons.search_rounded),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
           ),
         ),
       ),
@@ -246,29 +252,33 @@ class _SearchPageState extends State<SearchPage> {
                 if (r.notes.isNotEmpty)
                   _group('Notes', [
                     for (final n in r.notes)
-                      ListTile(
-                        leading: const Icon(Icons.sticky_note_2_outlined, color: TileColors.notes),
-                        title: Text(n.title.isEmpty ? 'Untitled' : n.title),
-                        subtitle: Text(n.body.replaceAll('\n', ' '), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        onTap: () => _open(() => openNote(context, note: n)),
+                      Press(
+                        child: ListTile(
+                          leading: const RowIcon(Icons.sticky_note_2_outlined, color: TileColors.notes),
+                          title: Text(n.title.isEmpty ? 'Untitled' : n.title),
+                          subtitle: Text(n.body.replaceAll('\n', ' '), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          onTap: () => _open(() => openNote(context, note: n)),
+                        ),
                       ),
                   ]),
                 if (r.todos.isNotEmpty) _group('Tasks', [for (final t in r.todos) TodoTile(todo: t, dense: true)]),
                 if (r.events.isNotEmpty)
                   _group('Events', [
                     for (final e in r.events)
-                      ListTile(
-                        leading: Icon(Icons.circle, size: 14, color: Color(_cals[e.calendarId]?.color ?? 0xFF888888)),
-                        title: Text(e.title),
-                        subtitle: Text(
-                          '${DateFormat('EEE d MMM y').format(e.start)}${e.allDay ? '' : ', ${DateFormat.Hm().format(e.start)}'}'
-                          '${e.repeat != 'none' ? ' · ${repeatLabels[e.repeat]}' : ''}',
-                          style: TextStyle(color: p.muted),
-                        ),
-                        onTap: () => _open(
-                          () => showEventDetails(
-                            context,
-                            Occurrence(e, e.start, e.end, Color(_cals[e.calendarId]?.color ?? 0xFF888888)),
+                      Press(
+                        child: ListTile(
+                          leading: Icon(Icons.circle, size: 14, color: Color(_cals[e.calendarId]?.color ?? 0xFF888888)),
+                          title: Text(e.title),
+                          subtitle: Text(
+                            '${DateFormat('EEE d MMM y').format(e.start)}${e.allDay ? '' : ', ${DateFormat.Hm().format(e.start)}'}'
+                            '${e.repeat != 'none' ? ' · ${repeatLabels[e.repeat]}' : ''}',
+                            style: TextStyle(color: p.muted),
+                          ),
+                          onTap: () => _open(
+                            () => showEventDetails(
+                              context,
+                              Occurrence(e, e.start, e.end, Color(_cals[e.calendarId]?.color ?? 0xFF888888)),
+                            ),
                           ),
                         ),
                       ),
@@ -276,71 +286,78 @@ class _SearchPageState extends State<SearchPage> {
                 if (r.entries.isNotEmpty)
                   _group('Wallet', [
                     for (final e in r.entries)
-                      ListTile(
-                        leading: Icon(categoryInfo(e.category).icon, color: categoryInfo(e.category).color),
-                        title: Text(e.note.isEmpty ? e.category : e.note),
-                        subtitle: Text('${friendlyDay(e.date)} · ${e.category}', style: TextStyle(color: p.muted)),
-                        trailing: Text(money(e.kind.sign * e.amountCents, currency, signed: e.kind.sign != 0)),
-                        onTap: () => _open(() => editEntry(context, entry: e)),
+                      Press(
+                        child: ListTile(
+                          leading: RowIcon(categoryInfo(e.category).icon, color: categoryInfo(e.category).color),
+                          title: Text(e.note.isEmpty ? e.category : e.note),
+                          subtitle: Text('${friendlyDay(e.date)} · ${e.category}', style: TextStyle(color: p.muted)),
+                          trailing: Text(money(e.kind.sign * e.amountCents, currency, signed: e.kind.sign != 0)),
+                          onTap: () => _open(() => editEntry(context, entry: e)),
+                        ),
                       ),
                   ]),
                 if (r.recurring.isNotEmpty)
                   _group('Recurring', [
                     for (final x in r.recurring)
-                      ListTile(
-                        leading: Icon(categoryInfo(x.category).icon, color: categoryInfo(x.category).color),
-                        title: Text(x.name),
-                        subtitle: Text(
-                          x.active ? 'Next ${friendlyDay(x.nextDate).toLowerCase()} · ${x.category}' : 'Paused',
-                          style: TextStyle(color: p.muted),
+                      Press(
+                        child: ListTile(
+                          leading: RowIcon(categoryInfo(x.category).icon, color: categoryInfo(x.category).color),
+                          title: Text(x.name),
+                          subtitle: Text(
+                            x.active ? 'Next ${friendlyDay(x.nextDate).toLowerCase()} · ${x.category}' : 'Paused',
+                            style: TextStyle(color: p.muted),
+                          ),
+                          trailing: Text(money(x.kind.sign * x.amountCents, currency, signed: x.kind.sign != 0)),
+                          onTap: () => _push(const SubscriptionsPage()),
                         ),
-                        trailing: Text(money(x.kind.sign * x.amountCents, currency, signed: x.kind.sign != 0)),
-                        onTap: () => _push(const SubscriptionsPage()),
                       ),
                   ]),
                 if (r.saved.isNotEmpty)
                   _group('Saved in spaces', [
                     for (final i in r.saved)
-                      ListTile(
-                        leading: Icon(switch (i.kind) {
-                          'link' => Icons.link_rounded,
-                          'file' => Icons.insert_drive_file_outlined,
-                          _ => Icons.notes_rounded,
-                        }, color: Color(_spaces[i.spaceId]?.color ?? 0xFF888888)),
-                        title: Text(i.title.isEmpty ? (i.url.isEmpty ? 'Untitled' : i.url) : i.title),
-                        subtitle: Text(
-                          _spaces[i.spaceId]?.name ?? 'Space',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: p.muted),
+                      Press(
+                        child: ListTile(
+                          leading: RowIcon(switch (i.kind) {
+                            'link' => Icons.link_rounded,
+                            'file' => Icons.insert_drive_file_outlined,
+                            _ => Icons.notes_rounded,
+                          }, color: Color(_spaces[i.spaceId]?.color ?? 0xFF888888)),
+                          title: Text(i.title.isEmpty ? (i.url.isEmpty ? 'Untitled' : i.url) : i.title),
+                          subtitle: Text(
+                            _spaces[i.spaceId]?.name ?? 'Space',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: p.muted),
+                          ),
+                          onTap: () => _push(SpacePage(spaceId: i.spaceId)),
                         ),
-                        onTap: () => _push(SpacePage(spaceId: i.spaceId)),
                       ),
                   ]),
                 if (r.shopping.isNotEmpty)
                   _group('Shopping', [
                     for (final i in r.shopping)
-                      ListTile(
-                        leading: Icon(
-                          i.done ? Icons.check_circle_rounded : Icons.shopping_basket_outlined,
-                          color: i.done ? p.muted : p.accent,
+                      Press(
+                        child: ListTile(
+                          leading: RowIcon(i.done ? Icons.check_rounded : Icons.shopping_basket_outlined),
+                          title: Text(
+                            i.quantity.isEmpty ? i.name : '${i.name} (${i.quantity})',
+                            style: i.done ? TextStyle(color: p.muted, decoration: TextDecoration.lineThrough) : null,
+                          ),
+                          subtitle: i.store.isEmpty ? null : Text(i.store, style: TextStyle(color: p.muted)),
+                          onTap: () => _push(const ShoppingPage()),
                         ),
-                        title: Text(
-                          i.quantity.isEmpty ? i.name : '${i.name} (${i.quantity})',
-                          style: i.done ? TextStyle(color: p.muted, decoration: TextDecoration.lineThrough) : null,
-                        ),
-                        subtitle: i.store.isEmpty ? null : Text(i.store, style: TextStyle(color: p.muted)),
-                        onTap: () => _push(const ShoppingPage()),
                       ),
                   ]),
                 if (r.habits.isNotEmpty)
                   _group('Habits', [
                     for (final h in r.habits)
-                      ListTile(
-                        leading: Icon(habitIcons[h.icon] ?? Icons.check_rounded, color: Color(h.color)),
-                        title: Text(h.name),
-                        subtitle: h.archived ? Text('Archived', style: TextStyle(color: p.muted)) : null,
-                        onTap: () => _open(() => showHabitHistory(context, h)),
+                      Press(
+                        child: ListTile(
+                          leading: RowIcon(habitIcons[h.icon] ?? Icons.check_rounded, color: Color(h.color)),
+                          title: Text(h.name),
+                          subtitle: h.archived ? Text('Archived', style: TextStyle(color: p.muted)) : null,
+                          onTap: () => _open(() => showHabitHistory(context, h)),
+                        ),
                       ),
                   ]),
               ],
@@ -351,10 +368,7 @@ class _SearchPageState extends State<SearchPage> {
   Widget _group(String title, List<Widget> children) => Padding(
     padding: const EdgeInsets.only(bottom: 14),
     child: ContentWidth(
-      child: Section(
-        title: title,
-        child: Column(children: [...children, const SizedBox(height: 6)]),
-      ),
+      child: GroupSection(title: title, children: children),
     ),
   );
 }

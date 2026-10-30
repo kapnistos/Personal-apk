@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
+import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -19,7 +20,7 @@ class SubscriptionsPage extends StatelessWidget {
     final currency = context.settings.currency;
     final p = Palette.of(context);
     return Scaffold(
-      appBar: AppBar(
+      appBar: HubBar(
         title: const Text('Recurring'),
         actions: [
           PopupMenuButton<String>(
@@ -127,58 +128,57 @@ class SubscriptionsPage extends StatelessWidget {
                                   );
                                   return Opacity(
                                     opacity: s.active ? 1 : 0.5,
-                                    child: ListTile(
-                                      onTap: () => _edit(context, s),
-                                      leading: Container(
-                                        width: 38,
-                                        height: 38,
-                                        decoration: BoxDecoration(
-                                          color: info.color.withValues(alpha: 0.16),
-                                          shape: BoxShape.circle,
+                                    child: Press(
+                                      child: ListTile(
+                                        onTap: () => _edit(context, s),
+                                        leading: Container(
+                                          width: 38,
+                                          height: 38,
+                                          decoration: BoxDecoration(color: info.color, shape: BoxShape.circle),
+                                          child: Icon(info.icon, size: 20, color: Colors.white),
                                         ),
-                                        child: Icon(info.icon, size: 20, color: info.color),
-                                      ),
-                                      title: Text(s.name),
-                                      subtitle: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            s.active
-                                                ? '${periodLabel(s.periodMonths)} · next ${friendlyDay(s.nextDate)}'
-                                                : 'Paused',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(color: p.muted, fontSize: 13.5),
-                                          ),
-                                          if (change != null && s.active)
+                                        title: Text(s.name),
+                                        subtitle: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
                                             Text(
-                                              change.up
-                                                  ? 'Went up by ${money(change.diff, currency)} (was ${money(change.before, currency)})'
-                                                  : 'Went down by ${money(-change.diff, currency)} (was ${money(change.before, currency)})',
+                                              s.active
+                                                  ? '${periodLabel(s.periodMonths)} · next ${friendlyDay(s.nextDate)}'
+                                                  : 'Paused',
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                color: change.up == (s.kind.sign < 0) ? p.danger : p.positive,
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w500,
-                                              ),
+                                              style: TextStyle(color: p.muted, fontSize: 13.5),
                                             ),
-                                          if (cancelBy != null && s.active)
-                                            Text(
-                                              'Cancel by ${friendlyDay(cancelBy)}',
-                                              style: TextStyle(
-                                                color: p.danger,
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w500,
+                                            if (change != null && s.active)
+                                              Text(
+                                                change.up
+                                                    ? 'Went up by ${money(change.diff, currency)} (was ${money(change.before, currency)})'
+                                                    : 'Went down by ${money(-change.diff, currency)} (was ${money(change.before, currency)})',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  color: change.up == (s.kind.sign < 0) ? p.danger : p.positive,
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
                                               ),
-                                            ),
-                                        ],
-                                      ),
-                                      trailing: Text(
-                                        money(s.kind.sign * s.amountCents, currency, signed: true),
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          color: s.kind.sign > 0 ? p.positive : p.ink,
+                                            if (cancelBy != null && s.active)
+                                              Text(
+                                                'Cancel by ${friendlyDay(cancelBy)}',
+                                                style: TextStyle(
+                                                  color: p.danger,
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                        trailing: Text(
+                                          money(s.kind.sign * s.amountCents, currency, signed: true),
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            color: s.kind.sign > 0 ? p.positive : p.ink,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -450,7 +450,7 @@ class _BillStrip extends StatelessWidget {
       (byDay[b.date] ??= []).add(b);
     }
     final out = bills.where((b) => b.sub.kind.sign < 0).fold<int>(0, (t, b) => t + b.sub.amountCents);
-    return Section(
+    return GroupSection(
       title: 'Coming up',
       trailing: Padding(
         padding: const EdgeInsets.only(right: 12),

@@ -70,7 +70,14 @@ void main() {
       await tester.tap(find.byTooltip('Add a widget'));
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.text('Tap one to put it at the end of Home.'), findsOneWidget);
-      await tester.scrollUntilVisible(find.text('Month'), 300, scrollable: find.byType(Scrollable).last);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.scrollUntilVisible(
+        find.text('Month'),
+        300,
+        scrollable: find.descendant(of: find.byType(BottomSheet), matching: find.byType(Scrollable)).first,
+      );
+      await tester.ensureVisible(find.text('Month'));
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.text('Month'));
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.byTooltip('Remove').evaluate().length, before + 1);
@@ -154,18 +161,25 @@ void main() {
   });
 
   testWidgets('search treats % and _ as plain characters', (tester) async {
-    await pumpWithDb(tester, (db, s) => Hub(db: db, settings: s, child: const MaterialApp(home: SearchPage())),
-        (db) async {
-      await tester.runAsync(() async {
-        await db.saveNote(title: 'Discount', body: 'save 50% on rent');
-        await db.saveNote(title: 'Budget', body: 'save 500 on rent');
-      });
-      await tester.enterText(find.byType(TextField), '50%');
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 100)));
-      await tester.pump(const Duration(milliseconds: 50));
-      expect(find.text('Discount'), findsOneWidget);
-      expect(find.text('Budget'), findsNothing);
-    });
+    await pumpWithDb(
+      tester,
+      (db, s) => Hub(
+        db: db,
+        settings: s,
+        child: const MaterialApp(home: SearchPage()),
+      ),
+      (db) async {
+        await tester.runAsync(() async {
+          await db.saveNote(title: 'Discount', body: 'save 50% on rent');
+          await db.saveNote(title: 'Budget', body: 'save 500 on rent');
+        });
+        await tester.enterText(find.byType(TextField), '50%');
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 100)));
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(find.text('Discount'), findsOneWidget);
+        expect(find.text('Budget'), findsNothing);
+      },
+    );
   });
 }

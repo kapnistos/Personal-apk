@@ -5,11 +5,12 @@ import 'package:drift/drift.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'db/database.dart';
+import 'edition.dart';
 import 'format.dart';
 
 /// Tables a backup leaves out: sync bookkeeping and caches that rebuild themselves.
 const _skipTables = {'sync_state', 'sync_tombstones', 'sqlite_sequence'};
-const _skipSettings = {'news.cache'};
+const _skipSettings = {'news.cache', 'ai.openrouter.models'};
 
 /// Everything in the database as JSON: every table, every row, including the
 /// sync ids, so a restored row is the same row on every device.
@@ -34,7 +35,9 @@ Future<String> backupJson(AppDatabase db) async => jsonEncode(await exportBackup
 
 /// Puts every row from a backup back. Rows with the same id are replaced by the
 /// backup's version; everything else already in the app stays. Returns the rows restored.
-Future<int> restoreBackup(AppDatabase db, String json) async {
+///
+/// With [replace], the app is emptied first so it holds exactly what the backup holds.
+Future<int> restoreBackup(AppDatabase db, String json, {bool replace = false}) async {
   final data = jsonDecode(json) as Map<String, dynamic>;
   if (data['app'] != 'Hub' || data['tables'] is! Map) throw const FormatException('Not a Hub backup');
   final tables = (data['tables'] as Map).cast<String, dynamic>();
@@ -44,6 +47,11 @@ Future<int> restoreBackup(AppDatabase db, String json) async {
   };
   var count = 0;
   await db.transaction(() async {
+    if (replace) {
+      for (final name in tables.keys) {
+        if (existing.contains(name) && !_skipTables.contains(name)) await db.customStatement('DELETE FROM "$name"');
+      }
+    }
     for (final entry in tables.entries) {
       if (!existing.contains(entry.key) || _skipTables.contains(entry.key)) continue;
       final columns = {
@@ -61,9 +69,20 @@ Future<int> restoreBackup(AppDatabase db, String json) async {
         count++;
       }
     }
+    // Emptying the tables marked every row as deleted for sync; the ones that came straight back are not.
+    if (replace && existing.contains('sync_tombstones')) {
+      for (final name in tables.keys) {
+        if (!existing.contains(name) || _skipTables.contains(name)) continue;
+        final hasGid = (await db.customSelect('PRAGMA table_info("$name")').get()).any(
+          (c) => c.read<String>('name') == 'gid',
+        );
+        if (hasGid) await db.customStatement('DELETE FROM sync_tombstones WHERE gid IN (SELECT gid FROM "$name")');
+      }
+    }
   });
   // Drift's streams don't see raw SQL writes; tell them everything changed.
   db.notifyUpdates({for (final t in db.allTables) TableUpdate.onTable(t)});
+  await checkImportedApps(db);
   return count;
 }
 

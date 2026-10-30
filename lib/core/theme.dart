@@ -158,6 +158,13 @@ class TileColors {
   static const claude = Color(0xFFC96442);
 }
 
+/// The deep-blue sky of the weather card on Home, by day and by night. The same in light and dark,
+/// like a window onto the weather rather than part of the page.
+class SkyColors {
+  static const day = [Color(0xFF4E73B3), Color(0xFF2B4778)];
+  static const night = [Color(0xFF2C3E68), Color(0xFF131C36)];
+}
+
 /// The app theme. Results are cached, so rebuilding the app with the same choices hands back the same object
 /// and nothing below it has to rebuild.
 ThemeData buildTheme(Brightness brightness, {String accent = 'blue', String background = 'black'}) =>
@@ -282,7 +289,9 @@ ThemeData _build(Brightness brightness, String accent, String background) {
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: p.background,
       surfaceTintColor: Colors.transparent,
+      // No pill behind the chosen tab and no ripple: the ink colour alone marks it.
       indicatorColor: Colors.transparent,
+      overlayColor: WidgetStateProperty.all(Colors.transparent),
       elevation: 0,
       height: 66,
       labelTextStyle: WidgetStateProperty.resolveWith(

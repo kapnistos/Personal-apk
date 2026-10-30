@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/format.dart';
+import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -63,17 +64,14 @@ class _ClaudePageState extends State<ClaudePage> {
       (Icons.lightbulb_outline_rounded, 'Explain simply', () async => 'Explain this simply, with an example:\n\n'),
     ];
     return Scaffold(
-      appBar: AppBar(title: const Text('Claude')),
+      appBar: HubBar(title: const Text('Claude')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
           ContentWidth(
             child: Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: TileColors.claude.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
+              decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(22)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -91,7 +89,7 @@ class _ClaudePageState extends State<ClaudePage> {
                     minLines: 3,
                     maxLines: 8,
                     textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(hintText: 'What do you need?', fillColor: p.surface),
+                    decoration: const InputDecoration(hintText: 'What do you need?'),
                   ),
                   const SizedBox(height: 12),
                   Row(

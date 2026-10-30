@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -81,14 +83,14 @@ class _ShellState extends State<Shell> {
     }
 
     return Scaffold(
+      // Pages run on under the bar; it blurs what passes beneath and fades it out above its top edge.
+      extendBody: true,
       body: body,
-      bottomNavigationBar: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: p.line)),
-        ),
+      bottomNavigationBar: _FrostedBar(
         child: NavigationBar(
           selectedIndex: _index,
           onDestinationSelected: select,
+          backgroundColor: Colors.transparent,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           destinations: [
             for (final (icon, selected, label) in _destinations)
@@ -96,6 +98,55 @@ class _ShellState extends State<Shell> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// How far the fog above the bottom bar reaches up into the page.
+const navFogHeight = 18.0;
+
+/// The bottom bar as a pane of frosted glass: the page shows through, blurred, at about three quarters
+/// opacity, and a soft fog above the top edge lets scrolling content fade out instead of being cut off.
+class _FrostedBar extends StatelessWidget {
+  const _FrostedBar({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final glass = p.background.withValues(alpha: dark ? 0.72 : 0.78);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Taps pass straight through the fog to the page.
+        IgnorePointer(
+          child: Container(
+            height: navFogHeight,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [p.background.withValues(alpha: 0), glass],
+                stops: const [0, 1],
+              ),
+            ),
+          ),
+        ),
+        ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: glass,
+                border: Border(top: BorderSide(color: p.line.withValues(alpha: 0.6), width: 0.5)),
+              ),
+              child: child,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

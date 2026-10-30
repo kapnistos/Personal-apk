@@ -437,3 +437,134 @@ class PillToggle<T> extends StatelessWidget {
     );
   }
 }
+
+/// Shrinks its child to 95% while a finger is down, so a tap feels physical without a ripple.
+/// It only listens to the pointer, so the child's own gestures (tap, hold) still win as before.
+class Pressable extends StatefulWidget {
+  const Pressable({super.key, required this.child, this.scale = 0.95});
+  final Widget child;
+  final double scale;
+
+  @override
+  State<Pressable> createState() => _PressableState();
+}
+
+class _PressableState extends State<Pressable> {
+  bool _down = false;
+
+  void _set(bool v) {
+    if (mounted && _down != v) setState(() => _down = v);
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    onPointerDown: (_) => _set(true),
+    onPointerUp: (_) => _set(false),
+    onPointerCancel: (_) => _set(false),
+    child: AnimatedScale(
+      scale: _down ? widget.scale : 1,
+      duration: const Duration(milliseconds: 140),
+      curve: Curves.easeOutCubic,
+      child: widget.child,
+    ),
+  );
+}
+
+/// A round app button: a coloured circle with a white glyph, a label under it and an optional count badge.
+/// The whole box, padding included, takes the tap, so there are no dead gaps between buttons.
+class AppCircle extends StatelessWidget {
+  const AppCircle({
+    super.key,
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.onTap,
+    this.badge = 0,
+    this.dimmed = false,
+    this.size = 52,
+  });
+  final IconData icon;
+  final Color color;
+  final String label;
+  final VoidCallback onTap;
+  final int badge;
+  final bool dimmed;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return Semantics(
+      button: true,
+      label: badge > 0 ? '$label, $badge' : label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Pressable(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(2, 8, 2, 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: size + 8,
+                  height: size,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.center,
+                    children: [
+                      Opacity(
+                        opacity: dimmed ? 0.45 : 1,
+                        child: AppGlyph(icon: icon, color: color, size: size),
+                      ),
+                      if (badge > 0)
+                        Positioned(
+                          top: -3,
+                          right: -1,
+                          child: Container(
+                            constraints: const BoxConstraints(minWidth: 21),
+                            height: 21,
+                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: p.danger,
+                              borderRadius: BorderRadius.circular(11),
+                              // A ring in the page colour lifts the badge off the circle.
+                              border: Border.all(color: p.background, width: 2),
+                            ),
+                            child: Text(
+                              badge > 99 ? '99+' : '$badge',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -0.1,
+                    color: dimmed ? p.muted : p.ink,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -45,10 +45,22 @@ void main() {
         // Scroll to the top first so every target is found by scrolling down.
         await tester.drag(homeList, const Offset(0, 5000));
         await tester.pump(const Duration(seconds: 1));
-        await tester.scrollUntilVisible(f, 150, scrollable: homeList);
+        // Home's own top is tall, so widgets further down are only built once scrolled near.
+        bool built() {
+          try {
+            return f.hitTestable().evaluate().isNotEmpty;
+          } on StateError {
+            return false;
+          }
+        }
+
+        for (var i = 0; i < 80 && !built(); i++) {
+          await tester.drag(homeList, const Offset(0, -150));
+          await tester.pump(const Duration(milliseconds: 50));
+        }
         await tester.pump(const Duration(milliseconds: 100));
         // Keep it clear of the bottom bar.
-        await tester.ensureVisible(f);
+        await tester.ensureVisible(f.first);
         await tester.pump(const Duration(seconds: 1));
       }
 
@@ -88,24 +100,33 @@ void main() {
             }
           }
 
-          // The space between two rows of tiles belongs to a tile too: no dead band.
-          for (final i in [0, 1]) {
-            final tile = find.descendant(of: grid, matching: find.text(miniApps[i].title));
+          // The space around each circle belongs to it too: no dead band under a label or between two circles.
+          for (final name in ['Calendar', 'To-do']) {
+            final tile = find.descendant(of: grid, matching: find.text(name));
             await reveal(tile);
             final label = tester.getRect(tile);
-            // The tile under it, four per row on a phone; its glyph is 57 above its label.
-            final under = tester.getRect(find.descendant(of: grid, matching: find.text(miniApps[i + 4].title)));
-            await tester.tapAt(Offset(label.center.dx, (label.bottom + under.top - 57) / 2));
+            await tester.tapAt(Offset(label.center.dx, label.bottom + 6));
             await settle(800);
-            expect(homeOnTop(), isFalse, reason: 'tap between rows under ${miniApps[i].title}');
+            expect(homeOnTop(), isFalse, reason: 'tap under $name');
             await back();
           }
+          // Bring the Plan label to the top, so the whole first row of circles is on screen.
+          await reveal(find.descendant(of: grid, matching: find.text('Plan')));
+          final cal = tester.getRect(find.descendant(of: grid, matching: find.text('Calendar')));
+          final todo = tester.getRect(find.descendant(of: grid, matching: find.text('To-do')));
+          // Halfway between the two circles, level with them (a circle sits about 35 above its label).
+          await tester.tapAt(Offset((cal.center.dx + todo.center.dx) / 2, cal.top - 35));
+          await settle(800);
+          expect(homeOnTop(), isFalse, reason: 'tap between two circles');
+          await back();
 
           // Every shortcut launches.
           for (final n in shortcutNames) {
             final s = shortcutCatalog.firstWhere((x) => x.name == n);
-            final tile = find.descendant(of: find.byType(DashFrame), matching: find.text(n)).first;
-            await reveal(tile);
+            final all = find.descendant(of: find.byType(DashFrame), matching: find.text(n));
+            // Home's own top comes first now, so the widgets may not be built until scrolled to.
+            await reveal(all);
+            final tile = all.first;
             launched.clear();
             await tester.tap(tile, warnIfMissed: false);
             await settle();
@@ -143,8 +164,9 @@ void main() {
           await settle(800);
           expect(homeOnTop(), isFalse, reason: 'tap after edit mode');
           await back();
-          final x = find.descendant(of: find.byType(DashFrame), matching: find.text('X')).first;
-          await reveal(x);
+          final xs = find.descendant(of: find.byType(DashFrame), matching: find.text('X'));
+          await reveal(xs);
+          final x = xs.first;
           launched.clear();
           await tester.tap(x, warnIfMissed: false);
           await settle();
@@ -161,8 +183,9 @@ void main() {
           await back();
 
           // Other tappable widgets on Home.
-          await reveal(find.text('Search everything'));
-          await tester.tap(find.text('Search everything'));
+          final search = find.descendant(of: find.byType(HomePage), matching: find.text('Search')).first;
+          await reveal(search);
+          await tester.tap(search);
           await settle(800);
           expect(homeOnTop(), isFalse, reason: 'search');
           await back();

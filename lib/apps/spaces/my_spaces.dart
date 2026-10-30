@@ -4,13 +4,15 @@ import 'package:flutter/material.dart';
 import '../../core/db/database.dart';
 import '../../core/edition.dart';
 import '../../core/mini_app.dart';
+import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'space_page.dart';
 
 /// Spaces that come with the app; everything else is one the user made.
-const builtInSpaces = {'Job', 'Lab research', 'University'};
+/// The public build never makes a Lab space, so one there was brought in by an import and counts as the user's own.
+Set<String> get builtInSpaces => {'Job', if (personalEdition) 'Lab research', 'University'};
 
 /// Icons a space can use.
 const mySpaceIcons = <String, IconData>{
@@ -36,8 +38,8 @@ const mySpaceColors = [0xFF4F86FF, 0xFF1F9D6B, 0xFFD9822B, 0xFFC0563F, 0xFF7A5BC
 
 IconData mySpaceIcon(String key) => mySpaceIcons[key] ?? Icons.folder_rounded;
 
-/// Whether this build shows the space (the public build has no Lab).
-bool spaceShown(Space s) => personalEdition || s.name != 'Lab research';
+/// Whether this build shows the space. Every space is shown: an imported Lab space must not vanish.
+bool spaceShown(Space s) => true;
 
 /// The user's own spaces as Home tiles.
 List<MiniApp> customSpaceApps(List<Space> spaces) => [
@@ -61,7 +63,7 @@ class SpacesPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Spaces')),
+      appBar: HubBar(title: const Text('Spaces')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => editSpace(context),
         icon: const Icon(Icons.add_rounded),
@@ -85,11 +87,12 @@ class SpacesPage extends StatelessWidget {
                 ),
               ),
               ContentWidth(
-                child: Card(
-                  child: Column(
-                    children: [
-                      for (final s in spaces)
-                        ListTile(
+                child: GroupCard(
+                  indent: 72,
+                  children: [
+                    for (final s in spaces)
+                      Press(
+                        child: ListTile(
                           leading: AppGlyph(icon: mySpaceIcon(s.icon), color: Color(s.color), size: 40),
                           title: Text(s.name),
                           subtitle: Text(builtInSpaces.contains(s.name) ? 'Comes with Hub' : 'Your space'),
@@ -101,9 +104,9 @@ class SpacesPage extends StatelessWidget {
                           onTap: () =>
                               Navigator.of(context).push(MaterialPageRoute(builder: (_) => SpacePage(spaceId: s.id))),
                         ),
-                      if (spaces.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Text('No spaces yet')),
-                    ],
-                  ),
+                      ),
+                    if (spaces.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Text('No spaces yet')),
+                  ],
                 ),
               ),
             ],

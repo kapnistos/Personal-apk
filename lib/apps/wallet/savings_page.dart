@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
+import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -180,61 +181,58 @@ class GoalCard extends StatelessWidget {
       pace =
           '${money((left / months).ceil(), currency)} a month to reach it by ${DateFormat('MMM y').format(goal.deadline!)}';
     }
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => showGoal(context, goal),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(goal.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  ),
-                  Text(
-                    '${(ratio * 100).round()}%',
-                    style: TextStyle(color: color, fontWeight: FontWeight.w700),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: ratio,
-                  minHeight: 10,
-                  color: color,
-                  backgroundColor: color.withValues(alpha: 0.15),
+    return Press(
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => showGoal(context, goal),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(goal.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    ),
+                    Text(
+                      '${(ratio * 100).round()}%',
+                      style: TextStyle(color: color, fontWeight: FontWeight.w700),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${money(saved, currency)} of ${money(goal.targetCents, currency)}',
-                style: const TextStyle(fontWeight: FontWeight.w500),
-              ),
-              if (left <= 0)
-                Text('Goal reached', style: TextStyle(color: p.positive, fontSize: 14))
-              else if (pace != null)
-                Text(pace, style: TextStyle(color: p.muted, fontSize: 14)),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  FilledButton.tonalIcon(
-                    onPressed: () => moveMoney(context, goal, deposit: true),
-                    icon: const Icon(Icons.add_rounded, size: 18),
-                    label: const Text('Add money'),
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton(
-                    onPressed: saved > 0 ? () => moveMoney(context, goal, deposit: false) : null,
-                    child: const Text('Take out'),
-                  ),
-                ],
-              ),
-            ],
+                const SizedBox(height: 10),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(value: ratio, minHeight: 10, color: color, backgroundColor: p.raised),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${money(saved, currency)} of ${money(goal.targetCents, currency)}',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+                if (left <= 0)
+                  Text('Goal reached', style: TextStyle(color: p.positive, fontSize: 14))
+                else if (pace != null)
+                  Text(pace, style: TextStyle(color: p.muted, fontSize: 14)),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => moveMoney(context, goal, deposit: true),
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Add money'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: saved > 0 ? () => moveMoney(context, goal, deposit: false) : null,
+                      child: const Text('Take out'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

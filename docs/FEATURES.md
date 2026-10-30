@@ -156,6 +156,25 @@ Each space has its own calendar and these sections:
 - Gmail and Outlook through IMAP/SMTP (Outlook signs in with a Microsoft device code), Proton Mail through Proton Mail Bridge running on your own computer.
 - Passwords are kept in the operating system's secure storage and never sync.
 
+## AI
+
+- The AI tab is the chat: switch between **Chat** (a general assistant) and the **Hub agent** (adds expenses,
+  notes, to-dos, events and shopping after you tap Add on each change). Starter suggestions, Stop while it thinks,
+  copy under each answer, New chat. The model chip at the top opens **AI settings**.
+- **How it answers**: **Claude Code (my plan)**, **Claude app (my plan)** or **API key**.
+- **API key**: paste any key and Hub works out whose it is from how it starts (`sk-or-` OpenRouter, `sk-ant-`
+  Anthropic, `sk-proj-` OpenAI, `gsk_` Groq; a plain `sk-` is tried on OpenAI, then DeepSeek), checks it and shows
+  Connected or a plain error. Keys live only in the device's secure storage, never in settings, backups or sync.
+- **OpenRouter: one key, any model.** Pick from OpenRouter's live model list with context size and price per million
+  tokens, searchable, with a few suggestions (Claude Haiku, a small GPT, DeepSeek, Llama, Claude Sonnet) on top.
+  Chat, the Hub agent and the shopping price check all work through it.
+- Rate limits and server errors are retried once or twice, then shown in plain words (wrong key, no credit, model not
+  available, no connection, too slow).
+- **Claude Code (my plan)** answers with your own Claude plan through Claude Code (`claude -p`) on your computer, or on
+  the laptop running Hub in Server mode when you are on your phone, with Haiku, Sonnet or Opus. You sign in by running
+  `claude` once yourself; Hub never handles the login. Setup is in `server/README.md`.
+- Coming soon: your own agents, such as Instinct, working on your Hub.
+
 ## Claude
 
 - Opens a new chat in the Claude app (or claude.ai) with your prompt filled in and copied.

@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
+import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -175,7 +176,7 @@ class _InvestingTabState extends State<InvestingTab> {
               if (value > 0) ...[
                 const SizedBox(height: 12),
                 ContentWidth(
-                  child: Section(
+                  child: GroupSection(
                     title: 'Spread',
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
@@ -274,37 +275,39 @@ class _HoldingTile extends StatelessWidget {
     final gain = value - h.investedCents;
     final pct = h.investedCents == 0 ? 0.0 : gain / h.investedCents * 100;
     final (label, color) = holdingKinds[h.kind] ?? ('Other', p.muted);
-    return ListTile(
-      onTap: () => editHolding(context, holding: h),
-      leading: CircleAvatar(
-        backgroundColor: color.withValues(alpha: 0.15),
-        child: Text(
-          (h.symbol.isNotEmpty ? h.symbol : h.name).characters.take(2).toString().toUpperCase(),
-          style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 14),
-        ),
-      ),
-      title: Text(h.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(
-        [
-          label,
-          if (h.symbol.isNotEmpty) h.symbol,
-          '${formatUnits(h.units)} units',
-          if (h.account.isNotEmpty) h.account,
-        ].join(' · '),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: p.muted),
-      ),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(money(value, currency), style: const TextStyle(fontWeight: FontWeight.w600)),
-          Text(
-            '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(1)}%',
-            style: TextStyle(fontSize: 13.5, color: gain >= 0 ? p.positive : p.danger),
+    return Press(
+      child: ListTile(
+        onTap: () => editHolding(context, holding: h),
+        leading: CircleAvatar(
+          backgroundColor: color,
+          child: Text(
+            (h.symbol.isNotEmpty ? h.symbol : h.name).characters.take(2).toString().toUpperCase(),
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
           ),
-        ],
+        ),
+        title: Text(h.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text(
+          [
+            label,
+            if (h.symbol.isNotEmpty) h.symbol,
+            '${formatUnits(h.units)} units',
+            if (h.account.isNotEmpty) h.account,
+          ].join(' · '),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: p.muted),
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(money(value, currency), style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(1)}%',
+              style: TextStyle(fontSize: 13.5, color: gain >= 0 ? p.positive : p.danger),
+            ),
+          ],
+        ),
       ),
     );
   }

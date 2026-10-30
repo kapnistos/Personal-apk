@@ -29,7 +29,6 @@ import '../core/settings.dart';
 import '../core/theme.dart';
 import '../core/widgets.dart';
 import 'home_page.dart';
-import 'search_page.dart';
 import 'shortcuts.dart';
 
 /// How big a widget is: s takes half a phone row, m and l the whole row
@@ -143,21 +142,17 @@ final dashKinds = [
 ];
 
 const _allKinds = [
-  DashKind('search', 'Search', 'Search notes, tasks, events and mail', Icons.search_rounded, 0xFF5F6B7A, [
-    'm',
-    'l',
-  ], 'l'),
   DashKind(
     'weather',
     'Weather',
     'Now, today and rain in the next hours',
     Icons.wb_sunny_rounded,
     0xFF3A78C9,
-    ['s', 'm', 'l'],
-    'l',
+    // The full-width weather card, search and the apps are part of Home itself now.
+    ['s', 'm'],
+    's',
     ownCard: true,
   ),
-  DashKind('apps', 'Apps', 'Every Hub app', Icons.apps_rounded, 0xFF1F7A5A, ['m', 'l'], 'l'),
   DashKind('shortcuts', 'Shortcuts', 'Jump straight into X, Instagram, your bank…', Icons.bolt_rounded, 0xFFC0563F, [
     's',
     'm',
@@ -248,9 +243,6 @@ DashKind kindOf(String type) => dashKinds.firstWhere((k) => k.type == type, orEl
 /// What a new install shows.
 List<DashItem> defaultDashboard() => [
   for (final (i, (type, size)) in [
-    ('search', 'l'),
-    ('weather', 'l'),
-    ('apps', 'l'),
     ('shortcuts', 'l'),
     ('today', 'l'),
     ('tasks', 's'),
@@ -284,6 +276,8 @@ List<DashItem> loadDashboard(AppSettings s) {
   try {
     return [for (final j in jsonDecode(raw) as List) DashItem.fromJson((j as Map).cast<String, dynamic>())]
         .where((i) => dashKinds.any((k) => k.type == i.type))
+        // Home draws the big weather card itself; a saved one would show the same forecast twice.
+        .where((i) => !(i.type == 'weather' && i.size == 'l'))
         .toList();
   } catch (_) {
     return defaultDashboard();
@@ -504,14 +498,6 @@ class DashboardState extends State<Dashboard> {
                       },
                       icon: const Icon(Icons.edit_outlined, size: 18),
                       label: const Text('Change the words'),
-                    ),
-                  ],
-                  if (item.type == 'apps') ...[
-                    const SizedBox(height: 16),
-                    OutlinedButton.icon(
-                      onPressed: () => pickVisibleApps(context),
-                      icon: const Icon(Icons.apps_rounded, size: 18),
-                      label: const Text('Choose apps'),
                     ),
                   ],
                   if (item.type == 'shortcuts') ...[
@@ -998,9 +984,7 @@ class _DashBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final small = size == 's';
     return switch (item.type) {
-      'search' => const _SearchBar(),
       'weather' => WeatherGlance(compact: small),
-      'apps' => const AppGrid(),
       'shortcuts' => _ShortcutsWidget(item: item, size: size),
       'quick' => _QuickAdd(small: small),
       'today' => small ? const _TodaySmall() : const TodayCard(),
@@ -1129,39 +1113,6 @@ class _Muted extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
     child: Text(text, style: TextStyle(color: Palette.of(context).muted)),
   );
-}
-
-class _SearchBar extends StatelessWidget {
-  const _SearchBar();
-
-  @override
-  Widget build(BuildContext context) {
-    final p = Palette.of(context);
-    return Card(
-      color: p.raised,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _push(context, const SearchPage()),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-          child: Row(
-            children: [
-              Icon(Icons.search_rounded, color: p.muted),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text('Search everything', style: TextStyle(color: p.muted)),
-              ),
-              if (MediaQuery.sizeOf(context).width >= 720)
-                Text(
-                  'Ctrl K',
-                  style: TextStyle(color: p.muted, fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _ShortcutsWidget extends StatelessWidget {

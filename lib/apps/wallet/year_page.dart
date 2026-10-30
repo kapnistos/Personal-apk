@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
+import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -28,17 +29,19 @@ class _YearPageState extends State<YearPage> {
     final p = Palette.of(context);
     final currency = context.settings.currency;
     return Scaffold(
-      appBar: AppBar(
+      appBar: HubBar(
         title: Text('$_year'),
         actions: [
           IconButton(
-              tooltip: 'Previous year',
-              onPressed: () => setState(() => _year--),
-              icon: const Icon(Icons.chevron_left_rounded)),
+            tooltip: 'Previous year',
+            onPressed: () => setState(() => _year--),
+            icon: const Icon(Icons.chevron_left_rounded),
+          ),
           IconButton(
-              tooltip: 'Next year',
-              onPressed: _year >= DateTime.now().year ? null : () => setState(() => _year++),
-              icon: const Icon(Icons.chevron_right_rounded)),
+            tooltip: 'Next year',
+            onPressed: _year >= DateTime.now().year ? null : () => setState(() => _year++),
+            icon: const Icon(Icons.chevron_right_rounded),
+          ),
           const SizedBox(width: 8),
         ],
       ),
@@ -50,8 +53,7 @@ class _YearPageState extends State<YearPage> {
           final taxes = year.byKind[EntryKind.tax] ?? 0;
           final rate = year.income == 0 ? null : (year.net / year.income * 100);
           final months = [
-            for (var m = 1; m <= 12; m++)
-              (m, MonthSummary(entries.where((e) => e.date.month == m).toList())),
+            for (var m = 1; m <= 12; m++) (m, MonthSummary(entries.where((e) => e.date.month == m).toList())),
           ];
           final taxByCategory = <String, int>{};
           for (final e in entries.where((e) => e.kind == EntryKind.tax)) {
@@ -64,64 +66,76 @@ class _YearPageState extends State<YearPage> {
                 child: Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Wrap(spacing: 24, runSpacing: 14, children: [
-                      _Stat('Came in', money(year.income, currency), p.positive),
-                      _Stat('Went out', money(year.out, currency), p.danger),
-                      _Stat('Left over', money(year.net, currency, signed: true), p.ink),
-                      _Stat('Taxes', money(taxes, currency), const Color(0xFF7A4E9E)),
-                      if (rate != null) _Stat('Savings rate', '${rate.toStringAsFixed(0)}%', TileColors.finance),
-                    ]),
+                    child: Wrap(
+                      spacing: 24,
+                      runSpacing: 14,
+                      children: [
+                        _Stat('Came in', money(year.income, currency), p.positive),
+                        _Stat('Went out', money(year.out, currency), p.ink),
+                        _Stat('Left over', money(year.net, currency, signed: true), p.ink),
+                        _Stat('Taxes', money(taxes, currency), p.ink),
+                        if (rate != null) _Stat('Savings rate', '${rate.toStringAsFixed(0)}%', p.ink),
+                      ],
+                    ),
                   ),
                 ),
               ),
               const SizedBox(height: 12),
               ContentWidth(
-                child: Section(
+                child: GroupSection(
                   title: 'Month by month',
-                  child: Column(children: [
-                    for (final (m, s) in months)
-                      if (s.income != 0 || s.out != 0)
-                        ListTile(
-                          dense: true,
-                          title: Text(DateFormat.MMMM().format(DateTime(_year, m))),
-                          subtitle: Text('In ${money(s.income, currency)} · Out ${money(s.out, currency)}',
-                              style: TextStyle(color: p.muted)),
-                          trailing: Text(money(s.net, currency, signed: true),
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w600, color: s.net >= 0 ? p.positive : p.danger)),
+                  child: Column(
+                    children: [
+                      for (final (m, s) in months)
+                        if (s.income != 0 || s.out != 0)
+                          ListTile(
+                            dense: true,
+                            title: Text(DateFormat.MMMM().format(DateTime(_year, m))),
+                            subtitle: Text(
+                              'In ${money(s.income, currency)} · Out ${money(s.out, currency)}',
+                              style: TextStyle(color: p.muted),
+                            ),
+                            trailing: Text(
+                              money(s.net, currency, signed: true),
+                              style: TextStyle(fontWeight: FontWeight.w600, color: s.net >= 0 ? p.positive : p.danger),
+                            ),
+                          ),
+                      if (months.every((x) => x.$2.income == 0 && x.$2.out == 0))
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                          child: Text('No entries in $_year.', style: TextStyle(color: p.muted)),
                         ),
-                    if (months.every((x) => x.$2.income == 0 && x.$2.out == 0))
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                        child: Text('No entries in $_year.', style: TextStyle(color: p.muted)),
-                      ),
-                    const SizedBox(height: 6),
-                  ]),
+                      const SizedBox(height: 6),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
               ContentWidth(
-                child: Section(
+                child: GroupSection(
                   title: 'Taxes paid',
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    for (final MapEntry(key: k, value: v) in taxByCategory.entries)
-                      ListTile(
-                        dense: true,
-                        leading: Icon(categoryInfo(k).icon, color: categoryInfo(k).color),
-                        title: Text(k),
-                        trailing: Text(money(v, currency)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final MapEntry(key: k, value: v) in taxByCategory.entries)
+                        ListTile(
+                          dense: true,
+                          leading: Icon(categoryInfo(k).icon, color: categoryInfo(k).color),
+                          title: Text(k),
+                          trailing: Text(money(v, currency)),
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                        child: Text(
+                          taxByCategory.isEmpty
+                              ? 'Add taxes as "Tax" entries to see them here. Handy for the yearly '
+                                    'aangifte in the Netherlands and the Greek E1.'
+                              : 'Useful for your yearly tax return. Export the year as CSV from the Wallet menu.',
+                          style: TextStyle(color: p.muted, fontSize: 14),
+                        ),
                       ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                      child: Text(
-                        taxByCategory.isEmpty
-                            ? 'Add taxes as "Tax" entries to see them here. Handy for the yearly '
-                                'aangifte in the Netherlands and the Greek E1.'
-                            : 'Useful for your yearly tax return. Export the year as CSV from the Wallet menu.',
-                        style: TextStyle(color: p.muted, fontSize: 14),
-                      ),
-                    ),
-                  ]),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -139,11 +153,14 @@ class _Stat extends StatelessWidget {
   final Color color;
 
   @override
-  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SectionLabel(label),
-        const SizedBox(height: 4),
-        Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: color)),
-      ]);
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SectionLabel(label),
+      const SizedBox(height: 4),
+      Text(value, style: numeralStyle(22, color: color)),
+    ],
+  );
 }
 
 /// Every wallet entry as CSV, readable by Excel and Google Sheets.
@@ -151,14 +168,16 @@ String entriesToCsv(List<Entry> entries) {
   String q(String s) => '"${s.replaceAll('"', '""')}"';
   final b = StringBuffer('date,kind,category,amount,note,account\n');
   for (final e in entries) {
-    b.writeln([
-      DateFormat('yyyy-MM-dd').format(e.date),
-      e.kind.name,
-      q(e.category),
-      (e.kind.sign * e.amountCents / 100).toStringAsFixed(2),
-      q(e.note),
-      q(e.account),
-    ].join(','));
+    b.writeln(
+      [
+        DateFormat('yyyy-MM-dd').format(e.date),
+        e.kind.name,
+        q(e.category),
+        (e.kind.sign * e.amountCents / 100).toStringAsFixed(2),
+        q(e.note),
+        q(e.account),
+      ].join(','),
+    );
   }
   return b.toString();
 }

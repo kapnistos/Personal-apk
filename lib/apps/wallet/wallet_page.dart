@@ -15,7 +15,7 @@ import 'accounts_page.dart';
 import 'bank_import.dart';
 import 'insights.dart';
 import 'investing_page.dart';
-import 'month_bar.dart';
+import 'month_bar.dart' show pickMonth;
 import 'savings_page.dart';
 import 'year_page.dart';
 import 'subscriptions_page.dart';
@@ -42,13 +42,10 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    // Spending has its own round Add button at the top of the page.
     final fab = switch (_tabs.index) {
-      0 => FloatingActionButton.extended(
-        heroTag: 'wallet-add',
-        onPressed: () => editEntry(context),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Add'),
-      ),
+      0 => null,
       1 => FloatingActionButton.extended(
         heroTag: 'wallet-goal',
         onPressed: () => editGoal(context),
@@ -62,39 +59,52 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
         label: const Text('Add holding'),
       ),
     };
+    final canPop = ModalRoute.of(context)?.impliesAppBarDismissal ?? false;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Wallet'),
+        toolbarHeight: 68,
+        centerTitle: true,
+        automaticallyImplyLeading: false,
+        leadingWidth: 72,
+        leading: canPop
+            ? Center(
+                child: _RoundButton(
+                  icon: Icons.arrow_back_rounded,
+                  tooltip: 'Back',
+                  onTap: () => Navigator.of(context).maybePop(),
+                ),
+              )
+            : null,
+        title: const Text('Wallet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
         actions: [
-          IconButton(
-            tooltip: 'Subscriptions',
-            icon: const Icon(Icons.autorenew_rounded),
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SubscriptionsPage())),
-          ),
           PopupMenuButton<String>(
+            tooltip: 'More',
+            style: IconButton.styleFrom(backgroundColor: p.surface, fixedSize: const Size(48, 48)),
+            icon: Icon(Icons.more_horiz_rounded, color: p.ink),
             onSelected: (v) {
+              if (v == 'recurring') {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SubscriptionsPage()));
+              }
               if (v == 'import') importBankFile(context);
               if (v == 'banks') showBankHelp(context);
               if (v == 'year') Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YearPage()));
               if (v == 'export') exportEntries(context);
+              if (v == 'budget') editSpendTarget(context);
             },
             itemBuilder: (_) => const [
+              PopupMenuItem(value: 'recurring', child: Text('Recurring payments')),
+              PopupMenuItem(value: 'budget', child: Text('Monthly budget')),
               PopupMenuItem(value: 'year', child: Text('Year overview and taxes')),
               PopupMenuItem(value: 'import', child: Text('Import bank export')),
               PopupMenuItem(value: 'export', child: Text('Export to CSV')),
               PopupMenuItem(value: 'banks', child: Text('Linking your banks')),
             ],
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 12),
         ],
-        bottom: TabBar(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          controller: _tabs,
-          tabs: const [
-            Tab(text: 'Spending'),
-            Tab(text: 'Savings'),
-            Tab(text: 'Investing'),
-          ],
+        bottom: PreferredSize(
+          preferredSize: Size.fromHeight(MediaQuery.textScalerOf(context).scale(16) + 44),
+          child: _PillTabs(controller: _tabs, labels: const ['Spending', 'Savings', 'Investing']),
         ),
       ),
       floatingActionButton: fab,
@@ -103,6 +113,123 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
         // Sideways swipes inside Spending change the month, so tabs change by tapping.
         physics: const NeverScrollableScrollPhysics(),
         children: const [_SpendingTab(), SavingsTab(), InvestingTab()],
+      ),
+    );
+  }
+}
+
+/// Shrinks a little while pressed, then springs back, so taps feel physical.
+class _Press extends StatefulWidget {
+  const _Press({required this.child, this.onTap});
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  State<_Press> createState() => _PressState();
+}
+
+class _PressState extends State<_Press> {
+  bool _down = false;
+
+  void _set(bool v) {
+    if (_down != v) setState(() => _down = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.onTap == null) return widget.child;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => _set(true),
+      onTapUp: (_) => _set(false),
+      onTapCancel: () => _set(false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _down ? 0.95 : 1,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// A round, flat button on the raised surface: back, menu, previous and next month.
+class _RoundButton extends StatelessWidget {
+  const _RoundButton({required this.icon, required this.tooltip, this.onTap});
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        enabled: onTap != null,
+        label: tooltip,
+        excludeSemantics: true,
+        child: _Press(
+          onTap: onTap,
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(color: p.surface, shape: BoxShape.circle),
+            child: Icon(icon, size: 22, color: onTap == null ? p.muted.withValues(alpha: 0.5) : p.ink),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Spending / Savings / Investing as large pills; the chosen one is solid ink.
+class _PillTabs extends StatelessWidget {
+  const _PillTabs({required this.controller, required this.labels});
+  final TabController controller;
+  final List<String> labels;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Row(
+        children: [
+          for (var i = 0; i < labels.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Semantics(
+                selected: controller.index == i,
+                button: true,
+                child: _Press(
+                  onTap: () => controller.animateTo(i),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    constraints: const BoxConstraints(minHeight: 44),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: controller.index == i ? p.ink : p.surface,
+                      borderRadius: BorderRadius.circular(40),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      labels[i],
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: controller.index == i ? p.background : p.ink,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -150,11 +277,69 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
     ),
   );
 
+  DateTime get _latest => DateTime(DateTime.now().year, DateTime.now().month + 12);
+
   void _go(DateTime m) {
-    final latest = DateTime(DateTime.now().year, DateTime.now().month + 12);
     final target = DateTime(m.year, m.month);
-    if (target.isAfter(latest)) return;
+    if (target.isAfter(_latest)) return;
     setState(() => _month = target);
+  }
+
+  /// Big month name with round previous / next buttons; tapping the name opens the month picker.
+  Widget _monthRow(Palette p, bool isCurrent) {
+    final next = DateTime(_month.year, _month.month + 1);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: _Press(
+              onTap: () async {
+                final picked = await pickMonth(context, _month, latest: _latest);
+                if (picked != null) _go(picked);
+              },
+              child: Semantics(
+                button: true,
+                hint: 'Pick a month',
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        DateFormat('MMMM y').format(_month),
+                        maxLines: 1,
+                        style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.8, color: p.ink),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (!isCurrent)
+            TextButton(
+              style: TextButton.styleFrom(minimumSize: const Size(44, 44), foregroundColor: p.accent),
+              onPressed: () => _go(DateTime(DateTime.now().year, DateTime.now().month)),
+              child: const Text('Now'),
+            ),
+          const SizedBox(width: 4),
+          _RoundButton(
+            icon: Icons.chevron_left_rounded,
+            tooltip: 'Previous month',
+            onTap: () => _go(DateTime(_month.year, _month.month - 1)),
+          ),
+          const SizedBox(width: 10),
+          _RoundButton(
+            icon: Icons.chevron_right_rounded,
+            tooltip: 'Next month',
+            onTap: next.isAfter(_latest) ? null : () => _go(next),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -180,6 +365,12 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
           (byDay[dateOnly(e.date)] ??= []).add(e);
         }
         final days = byDay.keys.toList()..sort((a, b) => b.compareTo(a));
+        Widget block(Widget child, {double bottom = 16}) => SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, bottom),
+            child: ContentWidth(child: child),
+          ),
+        );
         return GestureDetector(
           // Swipe sideways to change month.
           onHorizontalDragEnd: (d) {
@@ -189,85 +380,38 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
           },
           child: CustomScrollView(
             slivers: [
+              SliverToBoxAdapter(child: ContentWidth(child: _monthRow(p, isCurrent))),
+              block(
+                _Press(
+                  onTap: () => editSpendTarget(context),
+                  child: SpendingHero(month: _month, monthEntries: all, currency: currency),
+                ),
+                bottom: 20,
+              ),
+              block(const _Actions(), bottom: 20),
+              if (isCurrent) block(_AccountsList(currency: currency), bottom: 20),
+              block(_InOut(summary: summary, currency: currency)),
+              block(_Trend(month: _month, currency: currency, onPick: _go)),
+              if (isCurrent) block(_Upcoming(currency: currency)),
+              block(_Breakdown(summary: summary, month: _month, currency: currency)),
+              block(InsightsCard(month: _month, thisMonth: summary.byCategory, currency: currency)),
+              block(PatternsCard(entries: all, currency: currency)),
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                  child: ContentWidth(
-                    child: MonthBar(
-                      month: _month,
-                      onChanged: _go,
-                      latest: DateTime(DateTime.now().year, DateTime.now().month + 12),
+                child: ContentWidth(
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(20, 4, 16, 10),
+                    child: Text(
+                      'Entries',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.4, color: p.ink),
                     ),
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                  child: ContentWidth(
-                    child: _SummaryCard(summary: summary, currency: currency),
-                  ),
-                ),
-              ),
-              if (isCurrent)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    child: ContentWidth(
-                      child: LeftToSpendCard(monthEntries: all, currency: currency),
-                    ),
-                  ),
-                ),
-              if (isCurrent)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                    child: ContentWidth(child: AccountsStrip(currency: currency)),
-                  ),
-                ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: ContentWidth(
-                    child: _Trend(month: _month, currency: currency, onPick: _go),
-                  ),
-                ),
-              ),
-              if (isCurrent)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    child: ContentWidth(child: _Upcoming(currency: currency)),
-                  ),
-                ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: ContentWidth(
-                    child: _Breakdown(summary: summary, month: _month, currency: currency),
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: ContentWidth(
-                    child: InsightsCard(month: _month, thisMonth: summary.byCategory, currency: currency),
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: ContentWidth(
-                    child: PatternsCard(entries: all, currency: currency),
                   ),
                 ),
               ),
               if (_searching) SliverToBoxAdapter(child: ContentWidth(child: _searchField(p))),
               SliverToBoxAdapter(
                 child: SizedBox(
-                  height: 44,
+                  height: 48,
                   child: ContentWidth(
                     child: ListView(
                       scrollDirection: Axis.horizontal,
@@ -324,28 +468,35 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
                     final dayTotal = list.fold<int>(0, (s, e) => s + e.kind.sign * e.amountCents);
                     return ContentWidth(
                       child: Padding(
-                        padding: EdgeInsets.fromLTRB(16, 6, 16, i == days.length - 1 ? 96 : 6),
+                        padding: EdgeInsets.fromLTRB(16, 6, 16, i == days.length - 1 ? 40 : 6),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Padding(
-                              padding: const EdgeInsets.fromLTRB(4, 4, 4, 6),
+                              padding: const EdgeInsets.fromLTRB(4, 6, 4, 8),
                               child: Row(
                                 children: [
-                                  Expanded(child: SectionLabel(friendlyDay(d))),
+                                  Expanded(
+                                    child: Text(
+                                      friendlyDay(d),
+                                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: p.ink),
+                                    ),
+                                  ),
                                   Text(
                                     money(dayTotal, currency, signed: true),
-                                    style: TextStyle(fontSize: 13, color: p.muted),
+                                    style: TextStyle(fontSize: 14, color: p.muted),
                                   ),
                                 ],
                               ),
                             ),
-                            Card(
+                            Material(
+                              color: p.surface,
+                              borderRadius: BorderRadius.circular(24),
                               clipBehavior: Clip.antiAlias,
                               child: Column(
                                 children: [
                                   for (var j = 0; j < list.length; j++) ...[
-                                    if (j > 0) const Divider(indent: 64),
+                                    if (j > 0) const Divider(indent: 68),
                                     _SwipeToDelete(
                                       entry: list[j],
                                       child: EntryTile(entry: list[j], currency: currency),
@@ -364,6 +515,251 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
           ),
         );
       },
+    );
+  }
+}
+
+/// Add (solid), Recurring, Year and Import as round buttons with their names underneath.
+class _Actions extends StatelessWidget {
+  const _Actions();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    Widget action(IconData icon, String label, VoidCallback onTap, {bool primary = false}) => Expanded(
+      child: Semantics(
+        button: true,
+        label: label,
+        excludeSemantics: true,
+        child: _Press(
+          onTap: onTap,
+          child: Column(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(color: primary ? p.ink : p.surface, shape: BoxShape.circle),
+                child: Icon(icon, size: 26, color: primary ? p.background : p.ink),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: p.ink),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            action(Icons.add_rounded, 'Add', () => editEntry(context), primary: true),
+            action(
+              Icons.autorenew_rounded,
+              'Recurring',
+              () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SubscriptionsPage())),
+            ),
+            action(
+              Icons.bar_chart_rounded,
+              'Year',
+              () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YearPage())),
+            ),
+            action(Icons.file_download_outlined, 'Import', () => importBankFile(context)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Every account in one card: bank circle, name, what is next on it, and the balance.
+class _AccountsList extends StatelessWidget {
+  const _AccountsList({required this.currency});
+  final String currency;
+
+  @override
+  Widget build(BuildContext context) {
+    final db = context.db;
+    final p = Palette.of(context);
+    return StreamBuilder<List<Account>>(
+      stream: db.watchAccounts(),
+      builder: (context, snap) {
+        final accounts = snap.data ?? const <Account>[];
+        return StreamBuilder<List<Subscription>>(
+          stream: db.watchSubscriptions(),
+          builder: (context, subSnap) {
+            final subs = subSnap.data ?? const <Subscription>[];
+            return WalletSection(
+              title: 'Accounts',
+              trailing: TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: p.accent,
+                  minimumSize: const Size(44, 44),
+                  textStyle: const TextStyle(fontFamily: 'Inter', fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                onPressed: () => editAccount(context),
+                child: const Text('Add account'),
+              ),
+              child: accounts.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Text('Add your bank cards to see each balance here.', style: TextStyle(color: p.muted)),
+                    )
+                  : Column(
+                      children: [
+                        for (var i = 0; i < accounts.length; i++) ...[
+                          if (i > 0) const Divider(indent: 76),
+                          StreamBuilder<List<Entry>>(
+                            stream: db.watchAccountEntries(accounts[i].name),
+                            builder: (context, e) => _AccountRow(
+                              state: AccountState(accounts[i], e.data ?? const <Entry>[], subs),
+                              first: i == 0,
+                              currency: currency,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _AccountRow extends StatelessWidget {
+  const _AccountRow({required this.state, required this.first, required this.currency});
+  final AccountState state;
+  final bool first;
+  final String currency;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final a = state.account;
+    final next = state.recurring.where((s) => s.kind.sign < 0).firstOrNull;
+    final sub = next != null
+        ? '${next.name} ${money(next.amountCents, currency)} on ${DateFormat('d MMM').format(next.nextDate)}'
+        : a.number.isNotEmpty
+        ? 'Card •••• ${a.number}'
+        : first
+        ? 'Main account'
+        : 'Account';
+    final initial = a.name.trim().isEmpty ? '?' : a.name.trim().characters.first.toUpperCase();
+    return InkWell(
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AccountPage(accountId: a.id))),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 18, 12),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: Color(a.color), shape: BoxShape.circle),
+              child: Text(
+                initial,
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    a.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w600, color: p.ink),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    sub,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 14, color: p.muted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 140),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: state.hasBalance
+                    ? Text(
+                        money(state.balance, currency),
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: 16.5,
+                          fontWeight: FontWeight.w700,
+                          color: p.ink,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      )
+                    : Text(
+                        'Set balance',
+                        style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: p.accent),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Money in and out this month, side by side.
+class _InOut extends StatelessWidget {
+  const _InOut({required this.summary, required this.currency});
+  final MonthSummary summary;
+  final String currency;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    Widget stat(String label, String value, Color color) => Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(24)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: p.muted, fontSize: 14),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 18),
+            ),
+          ),
+        ],
+      ),
+    );
+    return Row(
+      children: [
+        Expanded(child: stat('Money in', money(summary.income, currency), p.positive)),
+        const SizedBox(width: 12),
+        Expanded(child: stat('Money out', money(summary.out, currency), p.ink)),
+      ],
     );
   }
 }
@@ -397,10 +793,10 @@ class _Trend extends StatelessWidget {
             if (e.key != month && e.value > 0) e.value,
         ];
         final avg = others.isEmpty ? 0.0 : others.fold<int>(0, (a, b) => a + b) / others.length;
-        return Section(
+        return WalletSection(
           title: 'Spending, last 6 months',
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -431,7 +827,7 @@ class _Trend extends StatelessWidget {
                                   height: math.max(3, 64 * out[m]! / maxV),
                                   margin: const EdgeInsets.symmetric(horizontal: 8),
                                   decoration: BoxDecoration(
-                                    color: m == month ? TileColors.finance : TileColors.finance.withValues(alpha: 0.25),
+                                    color: m == month ? p.accent : p.accent.withValues(alpha: 0.28),
                                     borderRadius: BorderRadius.circular(5),
                                   ),
                                 ),
@@ -488,10 +884,10 @@ class _Upcoming extends StatelessWidget {
         final due = billCalendar(snap.data ?? const <Subscription>[], DateTime.now());
         if (due.isEmpty) return const SizedBox.shrink();
         final total = due.fold<int>(0, (t, b) => t + b.sub.kind.sign * b.sub.amountCents);
-        return Section(
+        return WalletSection(
           title: 'Next 30 days',
           trailing: Padding(
-            padding: const EdgeInsets.only(right: 10),
+            padding: const EdgeInsets.only(right: 4),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 140),
               child: FittedBox(
@@ -501,7 +897,7 @@ class _Upcoming extends StatelessWidget {
             ),
           ),
           child: Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(
               children: [
                 for (final b in due.take(6))
@@ -541,109 +937,6 @@ class _Upcoming extends StatelessWidget {
   }
 }
 
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.summary, required this.currency});
-  final MonthSummary summary;
-  final String currency;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = Palette.of(context);
-    return Column(
-      children: [
-        const SizedBox(height: 8),
-        Text(
-          'Net this month',
-          style: TextStyle(color: p.muted, fontWeight: FontWeight.w500),
-        ),
-        const SizedBox(height: 2),
-        BigAmount(money(summary.net, currency, signed: true), size: 44),
-        const SizedBox(height: 18),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 380),
-          child: Row(
-            children: [
-              _action(context, Icons.add_rounded, 'Add', () => editEntry(context)),
-              _action(
-                context,
-                Icons.autorenew_rounded,
-                'Recurring',
-                () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SubscriptionsPage())),
-              ),
-              _action(
-                context,
-                Icons.bar_chart_rounded,
-                'Year',
-                () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YearPage())),
-              ),
-              _action(context, Icons.file_download_outlined, 'Import', () => importBankFile(context)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
-        Row(
-          children: [
-            Expanded(child: _stat(p, Icons.south_west_rounded, 'In', money(summary.income, currency), p.positive)),
-            const SizedBox(width: 10),
-            Expanded(child: _stat(p, Icons.north_east_rounded, 'Out', money(summary.out, currency), p.ink)),
-          ],
-        ),
-      ],
-    );
-  }
-
-  /// A round action button with its name underneath.
-  Widget _action(BuildContext context, IconData icon, String label, VoidCallback onTap) {
-    final p = Palette.of(context);
-    return Expanded(
-      child: Column(
-        children: [
-          Material(
-            color: p.raised,
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: onTap,
-              child: SizedBox(width: 52, height: 52, child: Icon(icon, color: p.ink)),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _stat(Palette p, IconData icon, String label, String value, Color color) => Container(
-    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-    decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(20)),
-    child: Row(
-      children: [
-        Icon(icon, size: 18, color: p.muted),
-        const SizedBox(width: 8),
-        Text(label, style: TextStyle(color: p.muted, fontSize: 14)),
-        const SizedBox(width: 8),
-        Expanded(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerRight,
-            child: Text(
-              value,
-              maxLines: 1,
-              style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 15),
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
 class _Breakdown extends StatelessWidget {
   const _Breakdown({required this.summary, required this.month, required this.currency});
   final MonthSummary summary;
@@ -671,12 +964,12 @@ class _Breakdown extends StatelessWidget {
           ...cats.where((c) => budgets.containsKey(c.key)),
           ...cats.where((c) => !budgets.containsKey(c.key) && c.value > 0).take(8),
         ];
-        return Section(
+        return WalletSection(
           title: 'Where it went',
           trailing: budgets.isEmpty
               ? null
               : Padding(
-                  padding: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.only(right: 4),
                   child: _StatusPill(
                     text: overCount > 0
                         ? '$overCount over'
@@ -691,7 +984,7 @@ class _Breakdown extends StatelessWidget {
                   ),
                 ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
             child: Column(
               children: [
                 if (summary.out > 0) ...[
@@ -786,15 +1079,26 @@ class _StatusPill extends StatelessWidget {
   final Color color;
 
   @override
-  Widget build(BuildContext context) => Container(
-    constraints: const BoxConstraints(maxWidth: 150),
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-    decoration: BoxDecoration(color: color.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(20)),
-    child: Text(
-      text,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: const BoxConstraints(maxWidth: 160),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
     ),
   );
 }
@@ -882,10 +1186,10 @@ class EntryTile extends StatelessWidget {
     return ListTile(
       onTap: () => editEntry(context, entry: entry),
       leading: Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(color: info.color.withValues(alpha: 0.16), shape: BoxShape.circle),
-        child: Icon(info.icon, size: 20, color: info.color),
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(color: info.color, shape: BoxShape.circle),
+        child: Icon(info.icon, size: 20, color: Colors.white),
       ),
       title: Text(entry.note.isEmpty ? entry.category : entry.note, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(

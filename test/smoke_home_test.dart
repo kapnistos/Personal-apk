@@ -60,18 +60,33 @@ void main() {
               await settle();
             }
 
-            // AI: model and payment choices.
+            // AI: the tab is the chat; settings sit behind the model chip.
             await tap(nav('AI'));
             await settle();
-            await show(find.text('Claude Sonnet'), AiPage);
-            await tap(find.text('Claude Sonnet'));
+            await tap(find.text('Hub agent'));
             await settle();
-            await show(find.text('API key'), AiPage);
+            expect(find.text('Tell it what to add'), findsOneWidget);
+            await tap(find.text('Chat'));
+            await settle();
+            await tap(find.byTooltip('AI settings'));
+            await settle(800);
             await tap(find.text('API key'));
             await settle();
-            expect(find.text('Test key'), findsOneWidget);
-            await tap(find.text('My subscription'));
+            expect(find.text('Paste'), findsOneWidget);
+            await tap(find.text('Anthropic'));
             await settle();
+            await tap(find.text('Claude Sonnet'));
+            await settle();
+            await tap(find.text('Claude Code (my plan)'));
+            await settle();
+            await tap(find.text('Opus'));
+            await settle();
+            await tap(find.text('Claude app (my plan)'));
+            await settle();
+            await tester.tapAt(const Offset(10, 10));
+            await settle(800);
+            expect(find.text('AI settings'), findsNothing);
+            expect(find.byType(AiPage), findsOneWidget);
             await tap(nav('Home'));
             await settle();
 
@@ -101,7 +116,7 @@ void main() {
             expect(find.text('Edit home'), findsOneWidget);
             await tap(find.text('Done'));
             await settle();
-            await tester.longPress(find.text('Search everything'));
+            await tester.longPress(find.descendant(of: find.byType(HomePage), matching: find.text('Search')).first);
             await settle();
             expect(find.text('Edit home'), findsOneWidget);
 

@@ -4,6 +4,15 @@ Builds are numbered by the CI run. Notable changes, newest first.
 
 ## October 2026
 
+### Simpler AI tab, and OpenRouter
+- The AI tab is now the chat itself: a Chat or Hub agent switch, the conversation and a box to type in. A small model chip at the top opens AI settings. There is a Stop button while it thinks, a copy button under each answer, and a New chat button.
+- OpenRouter: one key, any model. Paste any API key and Hub works out whose it is (OpenRouter, Anthropic, OpenAI, DeepSeek or Groq), checks it and is ready. With OpenRouter you pick from its live model list, with prices, and a few suggestions on top.
+- Busy or rate-limited providers are retried once or twice before Hub shows a plain message.
+- Claude Code (your Claude plan) is now in both builds.
+
+### Claude plan through Claude Code
+- Personal build only: AI chat, the Hub agent and the shopping price check can use your own Claude plan through Claude Code, on your computer or on the laptop running Hub in Server mode. If it cannot be reached, Hub opens the Claude app instead.
+
 ### iPhone
 - Hub now builds for iPhone. The release has an unsigned `Hub.ipa` you install with Sideloadly or AltStore and a free Apple ID, no paid developer account.
 - Reminders work on iPhone too; Hub asks for notification permission the first time you set one.

@@ -17,6 +17,7 @@ import 'core/db/database.dart';
 import 'core/reminders.dart';
 import 'core/settings.dart';
 import 'core/sync/sync_service.dart';
+import 'core/edition.dart';
 import 'core/theme.dart';
 import 'shell/shell.dart';
 
@@ -25,6 +26,7 @@ Future<void> main() async {
   final db = AppDatabase();
   final settings = AppSettings(db);
   await settings.load();
+  if (!personalEdition) await checkImportedApps(db).catchError((_) {});
   runApp(HubApp(db: db, settings: settings));
   unawaited(_startBackground(db, settings));
 }

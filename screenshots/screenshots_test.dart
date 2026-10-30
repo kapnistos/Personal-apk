@@ -9,6 +9,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hub/apps/ai/ai_chat_page.dart';
 import 'package:hub/apps/ai/ai_page.dart';
+import 'package:hub/apps/ai/ai_service.dart';
+import 'package:hub/apps/ai/ai_settings_sheet.dart';
 import 'package:hub/apps/ai/chat_memory.dart';
 import 'package:hub/core/edition.dart';
 import 'package:hub/apps/calendar/calendar_page.dart';
@@ -55,6 +57,16 @@ Future<void> seed(AppDatabase db, AppSettings settings) async {
   await settings.setName('Alex');
   await settings.setRaw('wallet.target', '180000');
   await settings.setRaw(ChatMemory.contextKey, 'on');
+  // AI on an OpenRouter key, with its model list already fetched.
+  await settings.setRaw(AiSettings.billing, 'api');
+  await settings.setRaw(AiSettings.model, 'openrouter');
+  await settings.setRaw(AiSettings.openrouterModel, 'anthropic/claude-haiku-4.5');
+  await settings.setRaw(
+    AiSettings.openrouterModels,
+    OpenRouterModel.encodeCache(const [
+      OpenRouterModel('anthropic/claude-haiku-4.5', 'Anthropic: Claude Haiku 4.5', context: 200000, inPrice: 1, outPrice: 5),
+    ], DateTime.now()),
+  );
   await settings.setRaw(
     ChatMemory.keyFor(false),
     ChatMemory.encode(const [
@@ -335,7 +347,26 @@ Future<void> seed(AppDatabase db, AppSettings settings) async {
   WeatherService.instance.seed(52.37403, 4.88969, f, n);
 }
 
+/// The AI tab with AI settings open over it.
+class _WithAiSettings extends StatefulWidget {
+  const _WithAiSettings();
+  @override
+  State<_WithAiSettings> createState() => _WithAiSettingsState();
+}
+
+class _WithAiSettingsState extends State<_WithAiSettings> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => showAiSettings(context));
+  }
+
+  @override
+  Widget build(BuildContext context) => const AiChatPage(inTab: true);
+}
+
 void main() {
+  AiSetup.store = MemoryAiKeyStore()..values['ai-key-openrouter'] = 'sk-or-v1-demo-key-for-screenshots';
   // Pictures in the docs show the public build: no Lab or Internships.
   personalEdition = false;
   setUpAll(loadFonts);
@@ -351,7 +382,7 @@ void main() {
     'claude': () => const ClaudePage(),
     'me': () => const MePage(),
     'ai': () => const AiPage(),
-    'chat': () => const AiChatPage(),
+    'chat': () => const _WithAiSettings(),
     'mail': () => const MailPage(),
     'university': () => const SpacePage(spaceId: 2),
     'job': () => const SpaceLauncher(gid: 'seed-job', fallbackName: 'Job'),

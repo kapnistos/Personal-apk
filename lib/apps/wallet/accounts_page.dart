@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
+import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -258,7 +259,7 @@ class AccountPage extends StatelessWidget {
       stream: db.watchAccounts(),
       builder: (context, snap) {
         final a = (snap.data ?? const <Account>[]).where((x) => x.id == accountId).firstOrNull;
-        if (a == null) return Scaffold(appBar: AppBar());
+        if (a == null) return Scaffold(appBar: HubBar());
         return StreamBuilder<List<Subscription>>(
           stream: db.watchSubscriptions(),
           builder: (context, subSnap) {
@@ -268,7 +269,7 @@ class AccountPage extends StatelessWidget {
               builder: (entries) {
                 final s = AccountState(a, entries, subs);
                 return Scaffold(
-                  appBar: AppBar(
+                  appBar: HubBar(
                     title: Text(a.name),
                     actions: [
                       IconButton(
@@ -299,7 +300,7 @@ class AccountPage extends StatelessWidget {
                         child: Row(
                           children: [
                             Expanded(
-                              child: FilledButton.tonalIcon(
+                              child: OutlinedButton.icon(
                                 onPressed: () => setAccountBalance(context, a),
                                 icon: const Icon(Icons.account_balance_wallet_outlined, size: 18),
                                 label: const Text('Set current balance'),
@@ -320,7 +321,7 @@ class AccountPage extends StatelessWidget {
                       ],
                       const SizedBox(height: 14),
                       ContentWidth(
-                        child: Section(
+                        child: GroupSection(
                           title: 'Paid from this card',
                           trailing: TextButton(
                             onPressed: () => _assignRecurring(context, a, subs),
@@ -378,7 +379,7 @@ class AccountPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 14),
                       ContentWidth(
-                        child: Section(
+                        child: GroupSection(
                           title: 'Activity',
                           child: Padding(
                             padding: const EdgeInsets.only(bottom: 8),

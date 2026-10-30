@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
@@ -149,33 +149,90 @@ Future<NetWorth> computeNetWorth(AppDatabase db, {DateTime? now}) async => netWo
   now: now,
 );
 
-/// "€412 left to spend": the month against a target, with a daily allowance and pace.
-class LeftToSpendCard extends StatelessWidget {
-  const LeftToSpendCard({super.key, required this.monthEntries, required this.currency});
+/// Money in whole units, for chart labels: "€1,800".
+String moneyWhole(int cents, String currency) =>
+    NumberFormat.simpleCurrency(name: currency, decimalDigits: 0).format(cents / 100);
+
+/// Running total of spending through each day of [month], up to [lastDay].
+List<int> cumulativeSpend(List<Entry> entries, DateTime month, int lastDay) {
+  final perDay = List<int>.filled(lastDay, 0);
+  for (final e in entries) {
+    if (e.kind.sign >= 0 || e.date.year != month.year || e.date.month != month.month) continue;
+    if (e.date.day > lastDay) continue;
+    perDay[e.date.day - 1] += e.amountCents;
+  }
+  for (var i = 1; i < perDay.length; i++) {
+    perDay[i] += perDay[i - 1];
+  }
+  return perDay;
+}
+
+/// The month at a glance: what is left of the budget (or the net when there is none) over a chart of
+/// spending day by day against an even pace.
+class SpendingHero extends StatelessWidget {
+  const SpendingHero({super.key, required this.month, required this.monthEntries, required this.currency});
+  final DateTime month;
   final List<Entry> monthEntries;
   final String currency;
 
   @override
   Widget build(BuildContext context) {
-    final p = Palette.of(context);
     final settings = context.settings;
     final target = int.tryParse(settings.raw(spendTargetKey) ?? '');
-    if (target == null || target <= 0) {
-      return Card(
-        child: ListTile(
-          contentPadding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
-          leading: CircleAvatar(
-            backgroundColor: p.accent.withValues(alpha: 0.16),
-            child: Icon(Icons.flag_outlined, color: p.accent),
-          ),
-          title: const Text('Set a monthly spending target'),
-          subtitle: const Text('See what is left, a daily allowance and whether you are on pace'),
-          trailing: const Icon(Icons.chevron_right_rounded),
-          onTap: () => editSpendTarget(context),
-        ),
+    final now = DateTime.now();
+    final current = DateTime(now.year, now.month);
+    final isCurrent = month == current;
+    final isPast = month.isBefore(current);
+    final daysInMonth = DateUtils.getDaysInMonth(month.year, month.month);
+    final lastDay = isCurrent ? now.day : (isPast ? daysInMonth : 0);
+    final spentSoFar = MonthSummary(monthEntries.where((e) => !e.date.isAfter(now)).toList()).out;
+    final cumulative = cumulativeSpend(monthEntries.where((e) => !e.date.isAfter(now)).toList(), month, lastDay);
+    final free = lastDay == 0
+        ? 0
+        : noSpendDays(monthEntries, isCurrent ? now : DateTime(month.year, month.month, daysInMonth));
+    final hasTarget = target != null && target > 0;
+    if (!hasTarget || lastDay == 0) {
+      return _HeroShell(
+        children: [
+          _NetHeader(entries: monthEntries, currency: currency, canSetBudget: !hasTarget),
+          if (spentSoFar > 0) ...[
+            const SizedBox(height: 20),
+            _ChartBlock(
+              month: month,
+              cumulative: cumulative,
+              daysInMonth: daysInMonth,
+              budget: null,
+              currency: currency,
+              noSpendDays: free,
+            ),
+          ],
+        ],
       );
     }
-    final now = DateTime.now();
+    if (!isCurrent) {
+      final diff = target - spentSoFar;
+      return _HeroShell(
+        children: [
+          _HeroTop(left: 'Spent', right: 'of ${money(target, currency)}'),
+          const SizedBox(height: 4),
+          _Amount(money(spentSoFar, currency)),
+          const SizedBox(height: 12),
+          _StatusLine(
+            good: diff >= 0,
+            strong: diff >= 0 ? '${money(diff, currency)} under budget' : '${money(-diff, currency)} over budget',
+          ),
+          const SizedBox(height: 20),
+          _ChartBlock(
+            month: month,
+            cumulative: cumulative,
+            daysInMonth: daysInMonth,
+            budget: target,
+            currency: currency,
+            noSpendDays: free,
+          ),
+        ],
+      );
+    }
     return StreamBuilder<List<Subscription>>(
       stream: context.db.watchSubscriptions(),
       builder: (context, snap) {
@@ -185,115 +242,499 @@ class LeftToSpendCard extends StatelessWidget {
             .where((s) => s.active && s.kind.sign < 0 && !s.nextDate.isBefore(today) && s.nextDate.isBefore(end))
             .fold<int>(0, (t, s) => t + s.amountCents);
         // Booked recurring payments are already entries; count only what hasn't been booked.
-        final spent = MonthSummary(monthEntries.where((e) => !e.date.isAfter(now)).toList()).out;
-        final plan = SpendPlan(target: target, spent: spent, billsAhead: billsAhead, now: now);
-        final free = noSpendDays(monthEntries, now);
+        final plan = SpendPlan(target: target, spent: spentSoFar, billsAhead: billsAhead, now: now);
         final pace = plan.paceDiff;
-        return Card(
-          child: InkWell(
-            borderRadius: BorderRadius.circular(22),
-            onTap: () => editSpendTarget(context),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(plan.over ? 'Over target by' : 'Left to spend', style: TextStyle(color: p.muted)),
-                      const Spacer(),
-                      Text('of ${money(target, currency)}', style: TextStyle(color: p.muted, fontSize: 13.5)),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  BigAmount(money(plan.left.abs(), currency), size: 34, color: plan.over ? p.danger : null),
-                  const SizedBox(height: 12),
-                  _PaceBar(used: plan.usedFraction, pace: plan.paceFraction, over: plan.over),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (!plan.over && plan.daysLeft > 0)
-                        _Pill('${money(plan.perDay, currency)} a day for ${plan.daysLeft} days'),
-                      _Pill(
-                        pace >= 0 ? '${money(pace, currency)} under pace' : '${money(-pace, currency)} over pace',
-                        color: pace >= 0 ? p.positive : p.danger,
-                      ),
-                      if (billsAhead > 0) _Pill('${money(billsAhead, currency)} in bills to come'),
-                      if (free > 0) _Pill('$free no-spend ${free == 1 ? 'day' : 'days'}'),
-                    ],
-                  ),
-                ],
-              ),
+        final p = Palette.of(context);
+        return _HeroShell(
+          children: [
+            _HeroTop(left: plan.over ? 'Over budget by' : 'Left to spend', right: 'of ${money(target, currency)}'),
+            const SizedBox(height: 4),
+            _Amount(money(plan.left.abs(), currency), color: plan.over ? p.danger : null),
+            const SizedBox(height: 12),
+            _StatusLine(
+              good: pace >= 0,
+              strong: pace >= 0 ? '${money(pace, currency)} under pace' : '${money(-pace, currency)} over pace',
+              rest: [
+                if (!plan.over && plan.daysLeft > 0) '${money(plan.perDay, currency)} a day left',
+                if (billsAhead > 0) '${money(billsAhead, currency)} in bills to come',
+              ].join(' · '),
             ),
-          ),
+            const SizedBox(height: 20),
+            _ChartBlock(
+              month: month,
+              cumulative: cumulative,
+              daysInMonth: daysInMonth,
+              budget: target,
+              currency: currency,
+              noSpendDays: free,
+            ),
+          ],
         );
       },
     );
   }
 }
 
-class _PaceBar extends StatelessWidget {
-  const _PaceBar({required this.used, required this.pace, required this.over});
-  final double used;
-  final double pace;
-  final bool over;
+class _HeroShell extends StatelessWidget {
+  const _HeroShell({required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(color: Palette.of(context).surface, borderRadius: BorderRadius.circular(28)),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+    ),
+  );
+}
+
+class _HeroTop extends StatelessWidget {
+  const _HeroTop({required this.left, required this.right});
+  final String left;
+  final String right;
 
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    return LayoutBuilder(
-      builder: (context, c) => SizedBox(
-        height: 14,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              top: 3,
-              bottom: 3,
-              child: DecoratedBox(
-                decoration: BoxDecoration(color: p.raised, borderRadius: BorderRadius.circular(4)),
-              ),
-            ),
-            Positioned(
-              left: 0,
-              top: 3,
-              bottom: 3,
-              width: c.maxWidth * used,
-              child: DecoratedBox(
-                decoration: BoxDecoration(color: over ? p.danger : p.accent, borderRadius: BorderRadius.circular(4)),
-              ),
-            ),
-            // Today's even-pace mark.
-            Positioned(
-              left: (c.maxWidth * pace - 1).clamp(0, c.maxWidth - 2),
-              top: 0,
-              bottom: 0,
-              width: 2,
-              child: DecoratedBox(decoration: BoxDecoration(color: p.ink)),
-            ),
-          ],
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            left,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: p.muted, fontSize: 15),
+          ),
         ),
-      ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            right,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: TextStyle(color: p.muted, fontSize: 15),
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _Pill extends StatelessWidget {
-  const _Pill(this.text, {this.color});
+/// The huge figure, with muted cents.
+class _Amount extends StatelessWidget {
+  const _Amount(this.text, {this.color});
   final String text;
   final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-      decoration: BoxDecoration(color: p.raised, borderRadius: BorderRadius.circular(20)),
-      child: Text(
-        text,
-        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color ?? p.ink),
+    final m = RegExp(r'^(.*?)([.,]\d{2})(\D*)$').firstMatch(text);
+    final style = TextStyle(
+      fontSize: 56,
+      fontWeight: FontWeight.w800,
+      letterSpacing: -2,
+      height: 1.1,
+      color: color ?? p.ink,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: m == null
+          ? Text(text, maxLines: 1, style: style)
+          : Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(text: m[1]),
+                  TextSpan(
+                    text: '${m[2]}${m[3]}',
+                    style: style.copyWith(
+                      fontSize: 30,
+                      letterSpacing: 0,
+                      color: (color ?? p.muted).withValues(alpha: color == null ? 1 : 0.7),
+                    ),
+                  ),
+                ],
+              ),
+              maxLines: 1,
+              style: style,
+            ),
+    );
+  }
+}
+
+/// "✓ €203.11 under pace · €130.58 a day left".
+class _StatusLine extends StatelessWidget {
+  const _StatusLine({required this.good, required this.strong, this.rest = ''});
+  final bool good;
+  final String strong;
+  final String rest;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final color = good ? p.positive : p.danger;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(good ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded, size: 20, color: color),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: strong,
+                  style: TextStyle(color: color, fontWeight: FontWeight.w600),
+                ),
+                if (rest.isNotEmpty)
+                  TextSpan(
+                    text: ' · $rest',
+                    style: TextStyle(color: p.muted),
+                  ),
+              ],
+            ),
+            style: const TextStyle(fontSize: 15, height: 1.35),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Net this month" with money in and out, for months without a budget.
+class _NetHeader extends StatelessWidget {
+  const _NetHeader({required this.entries, required this.currency, required this.canSetBudget});
+  final List<Entry> entries;
+  final String currency;
+  final bool canSetBudget;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final s = MonthSummary(entries);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Net this month', style: TextStyle(color: p.muted, fontSize: 15)),
+        const SizedBox(height: 4),
+        _Amount(money(s.net, currency, signed: true)),
+        const SizedBox(height: 10),
+        Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: '${money(s.income, currency)} in',
+                style: TextStyle(color: p.positive, fontWeight: FontWeight.w600),
+              ),
+              TextSpan(
+                text: ' · ${money(s.out, currency)} out',
+                style: TextStyle(color: p.muted),
+              ),
+            ],
+          ),
+          style: const TextStyle(fontSize: 15),
+        ),
+        if (canSetBudget) ...[
+          const SizedBox(height: 14),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                foregroundColor: p.ink,
+                backgroundColor: p.raised,
+                minimumSize: const Size(0, 44),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                shape: const StadiumBorder(),
+              ),
+              onPressed: () => editSpendTarget(context),
+              icon: const Icon(Icons.flag_outlined, size: 18),
+              label: const Text('Set a budget'),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// The step chart with its day labels and legend.
+class _ChartBlock extends StatelessWidget {
+  const _ChartBlock({
+    required this.month,
+    required this.cumulative,
+    required this.daysInMonth,
+    required this.budget,
+    required this.currency,
+    required this.noSpendDays,
+  });
+  final DateTime month;
+  final List<int> cumulative;
+  final int daysInMonth;
+  final int? budget;
+  final String currency;
+  final int noSpendDays;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final scaler = MediaQuery.textScalerOf(context);
+    final small = DefaultTextStyle.of(context).style.merge(TextStyle(color: p.muted, fontSize: 13.5));
+    final last = DateTime(month.year, month.month, daysInMonth);
+    final total = cumulative.isEmpty ? 0 : cumulative.last;
+    return Semantics(
+      label: budget == null
+          ? 'Spent ${money(total, currency)} so far this month'
+          : 'Spent ${money(total, currency)} of a ${money(budget!, currency)} budget',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 150,
+            child: CustomPaint(
+              painter: SpendChartPainter(
+                cumulative: cumulative,
+                daysInMonth: daysInMonth,
+                budget: budget,
+                budgetLabel: budget == null ? null : '${moneyWhole(budget!, currency)} budget',
+                labelStyle: small.copyWith(fontSize: scaler.scale(13)),
+                line: p.accent,
+                pace: p.muted,
+                grid: p.line,
+                dot: p.ink,
+                dotRing: p.surface,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Text(DateFormat('d MMM').format(month), style: small),
+              const Spacer(),
+              Text(DateFormat('d MMM').format(last), style: small),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 6,
+            children: [
+              Wrap(
+                spacing: 16,
+                runSpacing: 6,
+                children: [
+                  _LegendItem(label: 'Spent', color: p.accent, dashed: false),
+                  if (budget != null) _LegendItem(label: 'Pace', color: p.muted, dashed: true),
+                ],
+              ),
+              if (noSpendDays > 0) Text('$noSpendDays no-spend ${noSpendDays == 1 ? 'day' : 'days'}', style: small),
+            ],
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _LegendItem extends StatelessWidget {
+  const _LegendItem({required this.label, required this.color, required this.dashed});
+  final String label;
+  final Color color;
+  final bool dashed;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(width: 18, height: 10, child: CustomPaint(painter: _LegendMark(color, dashed))),
+        const SizedBox(width: 8),
+        Text(label, style: TextStyle(color: p.muted, fontSize: 14)),
+      ],
+    );
+  }
+}
+
+class _LegendMark extends CustomPainter {
+  _LegendMark(this.color, this.dashed);
+  final Color color;
+  final bool dashed;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final y = size.height / 2;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = dashed ? 1.5 : 3
+      ..strokeCap = StrokeCap.round;
+    if (!dashed) {
+      canvas.drawLine(Offset(1.5, y), Offset(size.width - 1.5, y), paint);
+      return;
+    }
+    for (var x = 0.0; x < size.width; x += 6) {
+      canvas.drawLine(Offset(x, y), Offset(math.min(x + 3, size.width), y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_LegendMark old) => old.color != color || old.dashed != dashed;
+}
+
+/// Cumulative spending as a stepped line with a soft fill, an even-pace line to the budget and the budget itself.
+class SpendChartPainter extends CustomPainter {
+  SpendChartPainter({
+    required this.cumulative,
+    required this.daysInMonth,
+    required this.budget,
+    required this.budgetLabel,
+    required this.labelStyle,
+    required this.line,
+    required this.pace,
+    required this.grid,
+    required this.dot,
+    required this.dotRing,
+  });
+  final List<int> cumulative;
+  final int daysInMonth;
+  final int? budget;
+  final String? budgetLabel;
+  final TextStyle labelStyle;
+  final Color line;
+  final Color pace;
+  final Color grid;
+  final Color dot;
+  final Color dotRing;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final spent = cumulative.isEmpty ? 0 : cumulative.last;
+    TextPainter? label;
+    if (budgetLabel != null) {
+      label = TextPainter(
+        text: TextSpan(text: budgetLabel, style: labelStyle),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+      )..layout(maxWidth: w);
+    }
+    final top = (label?.height ?? 0) + 8;
+    final bottom = size.height - 2;
+    final peak = math.max(math.max(budget ?? 0, spent), 1);
+    // Leave a little headroom when spending has gone past the budget.
+    final yMax = budget != null && spent > budget! ? peak * 1.04 : peak.toDouble();
+    double y(num v) => bottom - (bottom - top) * (v / yMax);
+    double x(num day) => w * day / daysInMonth;
+
+    final gridPaint = Paint()
+      ..color = grid
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(0, bottom), Offset(w, bottom), gridPaint);
+
+    if (budget != null) {
+      final by = y(budget!);
+      canvas.drawLine(Offset(0, by), Offset(w, by), gridPaint);
+      label!.paint(canvas, Offset(w - label.width, by - label.height - 4));
+      // Even pace: nothing on day 0, the whole budget by the last day.
+      final pacePaint = Paint()
+        ..color = pace.withValues(alpha: 0.8)
+        ..strokeWidth = 1.5
+        ..strokeCap = StrokeCap.round;
+      final start = Offset(0, bottom);
+      final end = Offset(w, by);
+      final length = (end - start).distance;
+      const dash = 5.0, gap = 4.0;
+      for (var d = 0.0; d < length; d += dash + gap) {
+        final a = start + (end - start) * (d / length);
+        final b = start + (end - start) * (math.min(d + dash, length) / length);
+        canvas.drawLine(a, b, pacePaint);
+      }
+    }
+
+    if (cumulative.isEmpty) return;
+    final path = Path()..moveTo(0, y(0));
+    for (var i = 0; i < cumulative.length; i++) {
+      path
+        ..lineTo(x(i), y(cumulative[i]))
+        ..lineTo(x(i + 1), y(cumulative[i]));
+    }
+    final lastX = x(cumulative.length);
+    final fill = Path.from(path)
+      ..lineTo(lastX, bottom)
+      ..lineTo(0, bottom)
+      ..close();
+    canvas.drawPath(
+      fill,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [line.withValues(alpha: 0.32), line.withValues(alpha: 0.02)],
+        ).createShader(Rect.fromLTRB(0, top, w, bottom)),
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = line
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round,
+    );
+    final today = Offset(lastX, y(spent));
+    canvas.drawCircle(today, 6, Paint()..color = dotRing);
+    canvas.drawCircle(today, 4.5, Paint()..color = dot);
+  }
+
+  @override
+  bool shouldRepaint(SpendChartPainter old) =>
+      old.cumulative != cumulative ||
+      old.budget != budget ||
+      old.daysInMonth != daysInMonth ||
+      old.line != line ||
+      old.dot != dot ||
+      old.grid != grid ||
+      old.labelStyle != labelStyle ||
+      old.budgetLabel != budgetLabel;
+}
+
+/// A titled group on the wallet pages: a bold heading above one flat rounded card.
+class WalletSection extends StatelessWidget {
+  const WalletSection({super.key, required this.title, required this.child, this.trailing});
+  final String title;
+  final Widget child;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 8, 0, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.4, color: p.ink),
+                ),
+              ),
+              ?trailing,
+            ],
+          ),
+        ),
+        Material(color: p.surface, borderRadius: BorderRadius.circular(24), clipBehavior: Clip.antiAlias, child: child),
+      ],
     );
   }
 }
@@ -360,10 +801,10 @@ class InsightsCard extends StatelessWidget {
         final previous = [for (final l in byMonth.values) MonthSummary(l).byCategory];
         final list = categoryInsights(thisMonth, previous).take(4).toList();
         if (list.isEmpty) return const SizedBox.shrink();
-        return Section(
+        return WalletSection(
           title: 'Compared with your usual month',
           child: Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(
               children: [
                 for (final i in list)
@@ -372,11 +813,8 @@ class InsightsCard extends StatelessWidget {
                     leading: Container(
                       width: 34,
                       height: 34,
-                      decoration: BoxDecoration(
-                        color: categoryInfo(i.category).color.withValues(alpha: 0.16),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(categoryInfo(i.category).icon, size: 18, color: categoryInfo(i.category).color),
+                      decoration: BoxDecoration(color: categoryInfo(i.category).color, shape: BoxShape.circle),
+                      child: Icon(categoryInfo(i.category).icon, size: 18, color: Colors.white),
                     ),
                     title: Text(i.category, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                     subtitle: Text(i.usual == 0 ? 'New this month' : 'Usually ${money(i.usual, currency)} a month'),
@@ -532,8 +970,8 @@ class RoundUpTile extends StatelessWidget {
       child: ListTile(
         contentPadding: const EdgeInsets.fromLTRB(16, 6, 12, 6),
         leading: CircleAvatar(
-          backgroundColor: p.positive.withValues(alpha: 0.16),
-          child: Icon(Icons.savings_outlined, color: p.positive),
+          backgroundColor: p.positive,
+          child: Icon(Icons.savings_outlined, color: Colors.white),
         ),
         title: const Text('Round-ups'),
         subtitle: Text(
@@ -591,10 +1029,10 @@ class PatternsCard extends StatelessWidget {
     // 5 Jan 2026 is a Monday, so +i gives each weekday's short name in the user's locale.
     String dayName(int i, {bool long = false}) =>
         (long ? DateFormat.EEEE() : DateFormat.E()).format(DateTime(2026, 1, 5 + i));
-    return Section(
+    return WalletSection(
       title: 'Your patterns',
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -619,7 +1057,7 @@ class PatternsCard extends StatelessWidget {
                               height: math.max(3, 44 * days[i] / maxDay),
                               margin: const EdgeInsets.symmetric(horizontal: 6),
                               decoration: BoxDecoration(
-                                color: i == busiest ? TileColors.finance : TileColors.finance.withValues(alpha: 0.25),
+                                color: i == busiest ? p.accent : p.accent.withValues(alpha: 0.28),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                             ),
@@ -707,8 +1145,8 @@ class PaydayTile extends StatelessWidget {
                   ListTile(
                     contentPadding: const EdgeInsets.fromLTRB(16, 6, 12, 6),
                     leading: CircleAvatar(
-                      backgroundColor: p.positive.withValues(alpha: 0.16),
-                      child: Icon(Icons.event_repeat_rounded, color: p.positive),
+                      backgroundColor: p.positive,
+                      child: Icon(Icons.event_repeat_rounded, color: Colors.white),
                     ),
                     title: const Text('Save on payday'),
                     subtitle: Text(

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../core/automations.dart';
 import '../core/backup.dart';
 import '../core/format.dart';
+import '../core/press.dart';
 import '../core/reminders.dart';
 import '../core/settings.dart';
 import '../core/theme.dart';
@@ -86,7 +87,7 @@ class _AutomationsPageState extends State<AutomationsPage> {
         );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Automations')),
+      appBar: HubBar(title: const Text('Automations')),
       body: ListenableBuilder(
         listenable: s,
         builder: (context, _) => ListView(
@@ -189,7 +190,7 @@ class _AutomationsPageState extends State<AutomationsPage> {
             ),
             const SizedBox(height: 16),
             ContentWidth(
-              child: Section(
+              child: GroupSection(
                 title: 'Coming up',
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 8),
@@ -277,8 +278,8 @@ class _BackupPageState extends State<BackupPage> {
     setState(() => _busy = true);
     try {
       final bytes = utf8.encode(await backupJson(db));
-      final where = await FilePicker.saveFile(dialogTitle: 'Save Hub backup', fileName: backupFileName(), bytes: bytes);
-      messenger.showSnackBar(SnackBar(content: Text(where == null ? 'Not saved' : 'Backup saved')));
+      final where = await FilePicker.saveFile(dialogTitle: 'Export Hub data', fileName: backupFileName(), bytes: bytes);
+      messenger.showSnackBar(SnackBar(content: Text(where == null ? 'Not saved' : 'Exported everything')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Could not save: $e')));
     } finally {
@@ -291,29 +292,31 @@ class _BackupPageState extends State<BackupPage> {
   Future<void> _restoreText(String json) async {
     final db = context.db;
     final messenger = ScaffoldMessenger.of(context);
-    final ok = await showDialog<bool>(
+    final replace = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Restore this backup?'),
+        title: const Text('Import this file?'),
         content: const Text(
-          'Everything in the backup comes back. Things you added since stay; '
-          'anything that is in both is set back to the backup\'s version.',
+          'Add to what\'s here: everything in the file comes back and what you added since stays.\n\n'
+          'Replace everything: Hub ends up exactly like the file. A copy of how things are now is kept '
+          'under Daily copies, in case you change your mind.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Restore')),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Replace everything')),
+          FilledButton(onPressed: () => Navigator.pop(context, false), child: const Text('Add to what\'s here')),
         ],
       ),
     );
-    if (ok != true || !mounted) return;
+    if (replace == null || !mounted) return;
     setState(() => _busy = true);
     try {
       // Keep a copy of how things are now, in case the restore was a mistake.
       await autoBackup(db);
-      final n = await restoreBackup(db, json);
-      messenger.showSnackBar(SnackBar(content: Text('Restored $n items')));
+      final n = await restoreBackup(db, json, replace: replace);
+      messenger.showSnackBar(SnackBar(content: Text('Imported $n items')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('That file is not a Hub backup ($e)')));
+      messenger.showSnackBar(const SnackBar(content: Text('That file is not a Hub export')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -332,15 +335,16 @@ class _BackupPageState extends State<BackupPage> {
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Backup')),
+      appBar: HubBar(title: const Text('Import and export')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
         children: [
           if (_busy) const LinearProgressIndicator(minHeight: 2),
           ContentWidth(
             child: Text(
-              'Save a backup somewhere outside the app (Google Drive, Downloads, your PC) before you reinstall '
-              'or switch phones. Restoring brings every note, task, event, payment and setting back.',
+              'Export puts all your data in one file: notes, tasks, events, money, spaces, habits and settings. '
+              'Keep it somewhere safe (Google Drive, Downloads, your PC), or import it on another phone, '
+              'iPhone or PC. API keys are never included.',
               style: TextStyle(color: p.muted),
             ),
           ),
@@ -351,16 +355,16 @@ class _BackupPageState extends State<BackupPage> {
                 Expanded(
                   child: FilledButton.icon(
                     onPressed: _busy ? null : _save,
-                    icon: const Icon(Icons.save_alt_rounded, size: 18),
-                    label: const Text('Save backup'),
+                    icon: const Icon(Icons.upload_rounded, size: 18),
+                    label: const Text('Export all data'),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: _busy ? null : _pick,
-                    icon: const Icon(Icons.restore_rounded, size: 18),
-                    label: const Text('Restore'),
+                    icon: const Icon(Icons.download_rounded, size: 18),
+                    label: const Text('Import'),
                   ),
                 ),
               ],
@@ -368,29 +372,26 @@ class _BackupPageState extends State<BackupPage> {
           ),
           const SizedBox(height: 18),
           ContentWidth(
-            child: Section(
+            child: GroupSection(
               title: 'Daily copies on this device',
-              child: Column(
-                children: [
-                  if (_auto.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                      child: Text('The first one is made today.', style: TextStyle(color: p.muted)),
+              children: [
+                if (_auto.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Text('The first one is made today.', style: TextStyle(color: p.muted)),
+                  ),
+                for (final f in _auto)
+                  ListTile(
+                    dense: true,
+                    leading: const RowIcon(Icons.history_rounded),
+                    title: Text(backupLabel(f)),
+                    subtitle: Text('${(f.lengthSync() / 1024).toStringAsFixed(0)} KB'),
+                    trailing: TextButton(
+                      onPressed: _busy ? null : () async => _restoreText(await f.readAsString()),
+                      child: const Text('Restore'),
                     ),
-                  for (final f in _auto)
-                    ListTile(
-                      dense: true,
-                      leading: const Icon(Icons.history_rounded),
-                      title: Text(backupLabel(f)),
-                      subtitle: Text('${(f.lengthSync() / 1024).toStringAsFixed(0)} KB'),
-                      trailing: TextButton(
-                        onPressed: _busy ? null : () async => _restoreText(await f.readAsString()),
-                        child: const Text('Restore'),
-                      ),
-                    ),
-                  const SizedBox(height: 6),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
         ],

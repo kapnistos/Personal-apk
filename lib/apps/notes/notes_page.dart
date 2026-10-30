@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
+import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -20,9 +21,20 @@ const noteColors = <(Color, Color)>[
   (Color(0xFFE9E2F5), Color(0xFF2C2638)),
 ];
 
+/// The colour circle for each note colour (none, amber, green, blue, red, violet).
+const _noteDots = <Color>[
+  Color(0x00000000),
+  Color(0xFFCF9418),
+  Color(0xFF2E9E6A),
+  Color(0xFF3A78C9),
+  Color(0xFFD0533F),
+  Color(0xFF7B61D1),
+];
+
+/// A note's colour as a flat circle colour, or null for none. Cards and the editor stay neutral.
 Color? noteColor(BuildContext context, int i) {
-  if (i <= 0 || i >= noteColors.length) return null;
-  return Theme.of(context).brightness == Brightness.dark ? noteColors[i].$2 : noteColors[i].$1;
+  if (i <= 0 || i >= _noteDots.length) return null;
+  return _noteDots[i];
 }
 
 /// A line like "- [ ] milk" or "- [x] milk".
@@ -105,7 +117,7 @@ class _NotesPageState extends State<NotesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: HubBar(
         title: const Text('Notes'),
         actions: [
           IconButton(
@@ -303,47 +315,57 @@ class NoteCard extends StatelessWidget {
         if (l.trim().isNotEmpty) (i, l),
     ].take(8).toList();
     final (done, total) = checklistCount(note.body);
-    return Card(
-      color: noteColor(context, note.color),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => openNote(context, note: note),
-        onLongPress: () => showNoteActions(context, note),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (title.isNotEmpty || note.pinned)
+    // Cards stay neutral; a note's colour shows as a small circle.
+    return Press(
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => openNote(context, note: note),
+          onLongPress: () => showNoteActions(context, note),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (title.isNotEmpty || note.pinned)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title.isEmpty ? 'Untitled' : title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      if (note.pinned) const Icon(Icons.push_pin_rounded, size: 15, color: TileColors.notes),
+                    ],
+                  ),
+                if (lines.isNotEmpty) const SizedBox(height: 4),
+                for (final (i, l) in lines) _PreviewLine(line: l, index: i, note: note),
+                const SizedBox(height: 6),
                 Row(
                   children: [
-                    Expanded(
-                      child: Text(
-                        title.isEmpty ? 'Untitled' : title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                    if (note.color > 0) ...[
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(color: noteColor(context, note.color), shape: BoxShape.circle),
                       ),
+                      const SizedBox(width: 6),
+                    ],
+                    Expanded(
+                      child: Text(relativeTime(note.updatedAt), style: TextStyle(color: p.muted, fontSize: 12.5)),
                     ),
-                    if (note.pinned) const Icon(Icons.push_pin_rounded, size: 15, color: TileColors.notes),
+                    if (total > 0)
+                      Text(
+                        '$done/$total',
+                        style: TextStyle(color: p.muted, fontSize: 12.5, fontWeight: FontWeight.w600),
+                      ),
                   ],
                 ),
-              if (lines.isNotEmpty) const SizedBox(height: 4),
-              for (final (i, l) in lines) _PreviewLine(line: l, index: i, note: note),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(relativeTime(note.updatedAt), style: TextStyle(color: p.muted, fontSize: 12.5)),
-                  ),
-                  if (total > 0)
-                    Text(
-                      '$done/$total',
-                      style: TextStyle(color: p.muted, fontSize: 12.5, fontWeight: FontWeight.w600),
-                    ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -423,35 +445,41 @@ Future<void> showNoteActions(BuildContext context, Note note) async {
                       GestureDetector(
                         onTap: () => Navigator.pop(context, 'color$i'),
                         child: Container(
-                          width: 34,
-                          height: 34,
+                          width: 44,
+                          height: 44,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: noteColor(context, i) ?? p.surface,
-                            border: Border.all(color: note.color == i ? TileColors.notes : p.line, width: 2),
+                            color: noteColor(context, i) ?? p.raised,
+                            border: Border.all(color: note.color == i ? p.ink : Colors.transparent, width: 2),
                           ),
                           child: note.color == i
-                              ? const Icon(Icons.check_rounded, size: 16, color: TileColors.notes)
+                              ? Icon(Icons.check_rounded, size: 16, color: i == 0 ? p.ink : Colors.white)
                               : null,
                         ),
                       ),
                   ],
                 ),
               ),
-              ListTile(
-                leading: Icon(note.pinned ? Icons.push_pin_outlined : Icons.push_pin_rounded, color: p.muted),
-                title: Text(note.pinned ? 'Unpin' : 'Pin to the top'),
-                onTap: () => Navigator.pop(context, 'pin'),
+              Press(
+                child: ListTile(
+                  leading: Icon(note.pinned ? Icons.push_pin_outlined : Icons.push_pin_rounded, color: p.muted),
+                  title: Text(note.pinned ? 'Unpin' : 'Pin to the top'),
+                  onTap: () => Navigator.pop(context, 'pin'),
+                ),
               ),
-              ListTile(
-                leading: Icon(Icons.copy_rounded, color: p.muted),
-                title: const Text('Copy text'),
-                onTap: () => Navigator.pop(context, 'copy'),
+              Press(
+                child: ListTile(
+                  leading: Icon(Icons.copy_rounded, color: p.muted),
+                  title: const Text('Copy text'),
+                  onTap: () => Navigator.pop(context, 'copy'),
+                ),
               ),
-              ListTile(
-                leading: Icon(Icons.delete_outline_rounded, color: p.danger),
-                title: Text('Delete', style: TextStyle(color: p.danger)),
-                onTap: () => Navigator.pop(context, 'delete'),
+              Press(
+                child: ListTile(
+                  leading: Icon(Icons.delete_outline_rounded, color: p.danger),
+                  title: Text('Delete', style: TextStyle(color: p.danger)),
+                  onTap: () => Navigator.pop(context, 'delete'),
+                ),
               ),
             ],
           ),
@@ -684,7 +712,6 @@ class _NoteEditorState extends State<NoteEditor> {
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    final bg = noteColor(context, _color);
     final plain = InputDecoration(
       filled: false,
       border: InputBorder.none,
@@ -696,9 +723,7 @@ class _NoteEditorState extends State<NoteEditor> {
     final words = RegExp(r'\S+').allMatches(_body.text).length;
     final (done, total) = checklistCount(_body.text);
     return Scaffold(
-      backgroundColor: bg,
-      appBar: AppBar(
-        backgroundColor: bg,
+      appBar: HubBar(
         actions: [
           IconButton(
             tooltip: _pinned ? 'Unpin' : 'Pin',
@@ -821,16 +846,26 @@ class _NoteEditorState extends State<NoteEditor> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         for (var i = 0; i < noteColors.length; i++)
-                          GestureDetector(
-                            onTap: () => _setColor(i),
-                            child: Container(
-                              width: 22,
-                              height: 22,
-                              margin: const EdgeInsets.symmetric(horizontal: 3),
-                              decoration: BoxDecoration(
-                                color: i == 0 ? p.surface : noteColor(context, i),
-                                shape: BoxShape.circle,
-                                border: Border.all(color: _color == i ? p.ink : p.line, width: _color == i ? 2 : 1),
+                          Semantics(
+                            button: true,
+                            selected: _color == i,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => _setColor(i),
+                              child: SizedBox(
+                                width: 44,
+                                height: 44,
+                                child: Center(
+                                  child: Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      color: noteColor(context, i) ?? p.raised,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: _color == i ? p.ink : Colors.transparent, width: 2),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ),

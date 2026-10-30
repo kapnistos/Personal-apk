@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
+import '../../core/press.dart';
 import '../../core/reminders.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
@@ -37,11 +38,11 @@ class SpaceLauncher extends StatelessWidget {
       }(),
       builder: (context, snap) {
         // Keep a back button while the space loads, so the page is never a dead end.
-        if (snap.connectionState != ConnectionState.done) return Scaffold(appBar: AppBar(title: Text(fallbackName)));
+        if (snap.connectionState != ConnectionState.done) return Scaffold(appBar: HubBar(title: Text(fallbackName)));
         final space = snap.data;
         if (space == null) {
           return Scaffold(
-            appBar: AppBar(title: Text(fallbackName)),
+            appBar: HubBar(title: Text(fallbackName)),
             body: const EmptyState(
               icon: Icons.folder_off_outlined,
               title: 'Not found',
@@ -66,11 +67,11 @@ class SpacePage extends StatelessWidget {
       stream: db.watchSpaces(),
       builder: (context, snap) {
         final space = (snap.data ?? const <Space>[]).where((s) => s.id == spaceId).firstOrNull;
-        if (space == null) return Scaffold(appBar: AppBar()); // Deleted elsewhere: still a way back.
+        if (space == null) return Scaffold(appBar: HubBar()); // Deleted elsewhere: still a way back.
         final color = Color(space.color);
         final words = SpaceWords.of(space.icon);
         return Scaffold(
-          appBar: AppBar(
+          appBar: HubBar(
             title: Row(
               children: [
                 Icon(spaceIcon(space.icon), color: color),
@@ -119,55 +120,67 @@ class SpacePage extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.flag_outlined),
-              title: Text('Add to ${words.dates.toLowerCase()}'),
-              subtitle: const Text('Exam, deadline, holiday: a whole-day date with a reminder'),
-              onTap: () {
-                Navigator.pop(sheet);
-                addImportantDate(context, space);
-              },
+            Press(
+              child: ListTile(
+                leading: const Icon(Icons.flag_outlined),
+                title: Text('Add to ${words.dates.toLowerCase()}'),
+                subtitle: const Text('Exam, deadline, holiday: a whole-day date with a reminder'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  addImportantDate(context, space);
+                },
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.groups_outlined),
-              title: Text('Add to ${words.meetings.toLowerCase()}'),
-              subtitle: const Text('A meeting, lecture or shift with a time'),
-              onTap: () {
-                Navigator.pop(sheet);
-                addMeeting(context, space);
-              },
+            Press(
+              child: ListTile(
+                leading: const Icon(Icons.groups_outlined),
+                title: Text('Add to ${words.meetings.toLowerCase()}'),
+                subtitle: const Text('A meeting, lecture or shift with a time'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  addMeeting(context, space);
+                },
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.check_circle_outline_rounded),
-              title: Text('Add to ${words.plan.toLowerCase()}'),
-              onTap: () {
-                Navigator.pop(sheet);
-                Navigator.of(context).push(MaterialPageRoute(builder: (_) => TodoPage(spaceId: space.id)));
-              },
+            Press(
+              child: ListTile(
+                leading: const Icon(Icons.check_circle_outline_rounded),
+                title: Text('Add to ${words.plan.toLowerCase()}'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => TodoPage(spaceId: space.id)));
+                },
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.notes_rounded),
-              title: const Text('Save a note'),
-              onTap: () {
-                Navigator.pop(sheet);
-                editSpaceItem(context, space, kind: 'note');
-              },
+            Press(
+              child: ListTile(
+                leading: const Icon(Icons.notes_rounded),
+                title: const Text('Save a note'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  editSpaceItem(context, space, kind: 'note');
+                },
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.link_rounded),
-              title: const Text('Save a link'),
-              onTap: () {
-                Navigator.pop(sheet);
-                editSpaceItem(context, space, kind: 'link');
-              },
+            Press(
+              child: ListTile(
+                leading: const Icon(Icons.link_rounded),
+                title: const Text('Save a link'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  editSpaceItem(context, space, kind: 'link');
+                },
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.attach_file_rounded),
-              title: const Text('Save a file'),
-              onTap: () {
-                Navigator.pop(sheet);
-                pickSpaceFile(context, space);
-              },
+            Press(
+              child: ListTile(
+                leading: const Icon(Icons.attach_file_rounded),
+                title: const Text('Save a file'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  pickSpaceFile(context, space);
+                },
+              ),
             ),
           ],
         ),
@@ -199,7 +212,7 @@ class _Block extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    return Section(
+    return GroupSection(
       title: title,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -262,17 +275,19 @@ class _UpcomingDates extends StatelessWidget {
               empty: 'Nothing coming up. Add exams, deadlines or holidays here and get reminded the day before.',
               children: [
                 for (final o in occ)
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                    onTap: () => showEventDetails(context, o),
-                    leading: _Countdown(days: daysBetween(today, o.start), color: Color(space.color)),
-                    title: Text(o.event.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text(
-                      [
-                        DateFormat('EEE d MMM').format(o.start),
-                        if (o.event.location.isNotEmpty) o.event.location,
-                      ].join(' · '),
-                      style: TextStyle(color: p.muted),
+                  Press(
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      onTap: () => showEventDetails(context, o),
+                      leading: _Countdown(days: daysBetween(today, o.start), color: Color(space.color)),
+                      title: Text(o.event.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text(
+                        [
+                          DateFormat('EEE d MMM').format(o.start),
+                          if (o.event.location.isNotEmpty) o.event.location,
+                        ].join(' · '),
+                        style: TextStyle(color: p.muted),
+                      ),
                     ),
                   ),
               ],
@@ -298,10 +313,7 @@ class _Countdown extends StatelessWidget {
       height: 52,
       alignment: Alignment.center,
       padding: const EdgeInsets.all(5),
-      decoration: BoxDecoration(
-        color: urgent ? color : color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: BoxDecoration(color: urgent ? color : Palette.of(context).raised, shape: BoxShape.circle),
       child: FittedBox(
         fit: BoxFit.scaleDown,
         child: Column(
@@ -310,13 +322,17 @@ class _Countdown extends StatelessWidget {
             Text(
               days == 0 ? 'Today' : '$days',
               style: TextStyle(
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
                 fontSize: days == 0 ? 13 : 17,
-                color: urgent ? Colors.white : color,
+                color: urgent ? Colors.white : Palette.of(context).ink,
               ),
             ),
             if (days != 0)
-              Text(days == 1 ? 'day' : 'days', style: TextStyle(fontSize: 11.5, color: urgent ? Colors.white : color)),
+              Text(
+                days == 1 ? 'day' : 'days',
+                style: TextStyle(fontSize: 11.5, color: urgent ? Colors.white : Palette.of(context).muted),
+              ),
           ],
         ),
       ),
@@ -476,7 +492,7 @@ class _PlanState extends State<_Plan> {
                           value: all.isEmpty ? 0 : done / all.length,
                           minHeight: 6,
                           color: color,
-                          backgroundColor: color.withValues(alpha: 0.15),
+                          backgroundColor: p.raised,
                         ),
                       ),
                     ),
@@ -542,37 +558,39 @@ class _Saved extends StatelessWidget {
                   db.deleteSpaceItem(i.id);
                   showUndo(context, 'Removed', () => db.restoreSpaceItem(i));
                 },
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                  leading: Icon(switch (i.kind) {
-                    'link' => Icons.link_rounded,
-                    'file' => Icons.insert_drive_file_outlined,
-                    _ => Icons.notes_rounded,
-                  }, color: Color(space.color)),
-                  title: Text(
-                    i.title.isEmpty ? (i.kind == 'link' ? i.url : 'Note') : i.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    i.kind == 'note'
-                        ? i.body.replaceAll('\n', ' ')
-                        : (i.kind == 'link' ? Uri.tryParse(i.url)?.host ?? i.url : i.url),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: p.muted),
-                  ),
-                  trailing: IconButton(
-                    tooltip: i.pinned ? 'Unpin' : 'Pin',
-                    icon: Icon(
-                      i.pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-                      size: 18,
-                      color: i.pinned ? Color(space.color) : p.muted,
+                child: Press(
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                    leading: Icon(switch (i.kind) {
+                      'link' => Icons.link_rounded,
+                      'file' => Icons.insert_drive_file_outlined,
+                      _ => Icons.notes_rounded,
+                    }, color: Color(space.color)),
+                    title: Text(
+                      i.title.isEmpty ? (i.kind == 'link' ? i.url : 'Note') : i.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    onPressed: () => db.saveSpaceItem(i.toCompanion(false).copyWith(pinned: Value(!i.pinned))),
+                    subtitle: Text(
+                      i.kind == 'note'
+                          ? i.body.replaceAll('\n', ' ')
+                          : (i.kind == 'link' ? Uri.tryParse(i.url)?.host ?? i.url : i.url),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: p.muted),
+                    ),
+                    trailing: IconButton(
+                      tooltip: i.pinned ? 'Unpin' : 'Pin',
+                      icon: Icon(
+                        i.pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                        size: 18,
+                        color: i.pinned ? Color(space.color) : p.muted,
+                      ),
+                      onPressed: () => db.saveSpaceItem(i.toCompanion(false).copyWith(pinned: Value(!i.pinned))),
+                    ),
+                    onTap: () => _open(context, i),
+                    onLongPress: () => editSpaceItem(context, space, item: i, kind: i.kind),
                   ),
-                  onTap: () => _open(context, i),
-                  onLongPress: () => editSpaceItem(context, space, item: i, kind: i.kind),
                 ),
               ),
           ],

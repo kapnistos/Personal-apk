@@ -3,9 +3,9 @@ import 'package:intl/intl.dart';
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
+import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
-import '../../core/widgets.dart';
 import '../calendar/calendar_model.dart' show monthGridStart;
 import '../wallet/month_bar.dart';
 import 'space_model.dart';
@@ -55,7 +55,7 @@ class _WorkLogCardState extends State<WorkLogCard> {
         final year = WorkTotals(all);
         final start = monthGridStart(_month);
         final today = dateOnly(DateTime.now());
-        return Section(
+        return GroupSection(
           title: 'Work days',
           trailing: IconButton(
             tooltip: 'Holiday allowance',
@@ -64,87 +64,110 @@ class _WorkLogCardState extends State<WorkLogCard> {
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              MonthBar(month: _month, onChanged: (m) => setState(() => _month = m)),
-              Row(children: [
-                for (final d in ['M', 'T', 'W', 'T', 'F', 'S', 'S'])
-                  Expanded(
-                    child: Center(
-                        child: Text(d, style: TextStyle(fontSize: 12, color: p.muted, fontWeight: FontWeight.w600))),
-                  ),
-              ]),
-              const SizedBox(height: 4),
-              for (var w = 0; w < 6; w++)
-                if (w < 5 || DateTime(start.year, start.month, start.day + w * 7).month == _month.month)
-                  Row(children: [
-                    for (var i = 0; i < 7; i++)
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                MonthBar(month: _month, onChanged: (m) => setState(() => _month = m)),
+                Row(
+                  children: [
+                    for (final d in ['M', 'T', 'W', 'T', 'F', 'S', 'S'])
                       Expanded(
-                        child: Builder(builder: (context) {
-                          final day = DateTime(start.year, start.month, start.day + w * 7 + i);
-                          final entry = byDay[AppDatabase.dayKey(day)];
-                          final inMonth = day.month == _month.month;
-                          final color = entry == null ? null : workStatusColors[entry.status];
-                          return AspectRatio(
-                            aspectRatio: 1,
-                            child: Padding(
-                              padding: const EdgeInsets.all(2),
-                              child: Material(
-                                color: color?.withValues(alpha: inMonth ? 0.9 : 0.35) ??
-                                    (inMonth ? p.raised.withValues(alpha: 0.6) : Colors.transparent),
-                                borderRadius: BorderRadius.circular(9),
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(9),
-                                  onTap: () => _cycle(day, entry),
-                                  onLongPress: () => _editDay(context, day, entry),
-                                  child: Container(
-                                    decoration: day == today
-                                        ? BoxDecoration(
-                                            border: Border.all(color: p.ink, width: 1.5),
-                                            borderRadius: BorderRadius.circular(9))
-                                        : null,
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      '${day.day}',
-                                      style: TextStyle(
-                                        fontSize: 13.5,
-                                        fontWeight: day == today ? FontWeight.w700 : FontWeight.w500,
-                                        color: color != null
-                                            ? Colors.white
-                                            : (inMonth ? p.ink : p.muted.withValues(alpha: 0.5)),
+                        child: Center(
+                          child: Text(
+                            d,
+                            style: TextStyle(fontSize: 12, color: p.muted, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                for (var w = 0; w < 6; w++)
+                  if (w < 5 || DateTime(start.year, start.month, start.day + w * 7).month == _month.month)
+                    Row(
+                      children: [
+                        for (var i = 0; i < 7; i++)
+                          Expanded(
+                            child: Builder(
+                              builder: (context) {
+                                final day = DateTime(start.year, start.month, start.day + w * 7 + i);
+                                final entry = byDay[AppDatabase.dayKey(day)];
+                                final inMonth = day.month == _month.month;
+                                final color = entry == null ? null : workStatusColors[entry.status];
+                                return AspectRatio(
+                                  aspectRatio: 1,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(2),
+                                    child: Material(
+                                      color:
+                                          color?.withValues(alpha: inMonth ? 0.9 : 0.35) ??
+                                          (inMonth ? p.raised : Colors.transparent),
+                                      borderRadius: BorderRadius.circular(9),
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(9),
+                                        onTap: () => _cycle(day, entry),
+                                        onLongPress: () => _editDay(context, day, entry),
+                                        child: Container(
+                                          decoration: day == today
+                                              ? BoxDecoration(
+                                                  border: Border.all(color: p.ink, width: 1.5),
+                                                  borderRadius: BorderRadius.circular(9),
+                                                )
+                                              : null,
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            '${day.day}',
+                                            style: TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: day == today ? FontWeight.w700 : FontWeight.w500,
+                                              color: color != null
+                                                  ? Colors.white
+                                                  : (inMonth ? p.ink : p.muted.withValues(alpha: 0.5)),
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ),
+                                );
+                              },
                             ),
-                          );
-                        }),
-                      ),
-                  ]),
-              const SizedBox(height: 10),
-              Text('Tap a day to switch between worked, from home, off, holiday and sick. Hold it to add hours.',
-                  style: TextStyle(color: p.muted, fontSize: 13)),
-              const SizedBox(height: 12),
-              Row(children: [
-                _Count('Worked', '${month.worked}', workStatusColors['work']!,
-                    month.hours > 0 ? '${_h(month.hours)} h' : null),
-                _Count('Off', '${month.of('off')}', workStatusColors['off']!, null),
-                _Count('Holiday', '${month.of('holiday')}', workStatusColors['holiday']!, null),
-                _Count('Sick', '${month.of('sick')}', workStatusColors['sick']!, null),
-              ].expand((w) => [const SizedBox(width: 8), Expanded(child: w)]).skip(1).toList()),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: p.raised.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(12)),
-                child: Text(
-                  'In ${_month.year}: ${year.worked} days worked'
-                  '${year.hours > 0 ? ' (${_h(year.hours)} hours)' : ''}, '
-                  '${year.of('holiday')} of $allowance holidays used, ${allowance - year.of('holiday')} left. '
-                  '${year.of('sick')} sick ${year.of('sick') == 1 ? 'day' : 'days'}.',
-                  style: const TextStyle(height: 1.4),
+                          ),
+                      ],
+                    ),
+                const SizedBox(height: 10),
+                Text(
+                  'Tap a day to switch between worked, from home, off, holiday and sick. Hold it to add hours.',
+                  style: TextStyle(color: p.muted, fontSize: 13),
                 ),
-              ),
-            ]),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _Count(
+                      'Worked',
+                      '${month.worked}',
+                      workStatusColors['work']!,
+                      month.hours > 0 ? '${_h(month.hours)} h' : null,
+                    ),
+                    _Count('Off', '${month.of('off')}', workStatusColors['off']!, null),
+                    _Count('Holiday', '${month.of('holiday')}', workStatusColors['holiday']!, null),
+                    _Count('Sick', '${month.of('sick')}', workStatusColors['sick']!, null),
+                  ].expand((w) => [const SizedBox(width: 8), Expanded(child: w)]).skip(1).toList(),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: p.raised, borderRadius: BorderRadius.circular(16)),
+                  child: Text(
+                    'In ${_month.year}: ${year.worked} days worked'
+                    '${year.hours > 0 ? ' (${_h(year.hours)} hours)' : ''}, '
+                    '${year.of('holiday')} of $allowance holidays used, ${allowance - year.of('holiday')} left. '
+                    '${year.of('sick')} sick ${year.of('sick') == 1 ? 'day' : 'days'}.',
+                    style: const TextStyle(height: 1.4),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -169,26 +192,37 @@ class _WorkLogCardState extends State<WorkLogCard> {
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: Text(DateFormat('EEEE d MMMM').format(day)),
-          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Wrap(spacing: 6, runSpacing: 6, children: [
-              for (final s in workStatuses)
-                ChoiceChip(
-                  showCheckmark: false,
-                  label: Text(workStatusLabels[s]!),
-                  selected: status == s,
-                  onSelected: (_) => setState(() => status = s),
-                ),
-            ]),
-            const SizedBox(height: 12),
-            if (status == 'work' || status == 'remote')
-              TextField(
-                controller: hours,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Hours', hintText: '8'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final s in workStatuses)
+                    ChoiceChip(
+                      showCheckmark: false,
+                      label: Text(workStatusLabels[s]!),
+                      selected: status == s,
+                      onSelected: (_) => setState(() => status = s),
+                    ),
+                ],
               ),
-            const SizedBox(height: 10),
-            TextField(controller: note, decoration: const InputDecoration(labelText: 'Note')),
-          ]),
+              const SizedBox(height: 12),
+              if (status == 'work' || status == 'remote')
+                TextField(
+                  controller: hours,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Hours', hintText: '8'),
+                ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: note,
+                decoration: const InputDecoration(labelText: 'Note'),
+              ),
+            ],
+          ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context, 'clear'), child: const Text('Clear day')),
             FilledButton(onPressed: () => Navigator.pop(context, 'save'), child: const Text('Save')),
@@ -198,8 +232,7 @@ class _WorkLogCardState extends State<WorkLogCard> {
     );
     if (result == 'clear') await db.setWorkDay(day, null);
     if (result == 'save') {
-      await db.setWorkDay(day, status,
-          hours: double.tryParse(hours.text.replaceAll(',', '.')), note: note.text.trim());
+      await db.setWorkDay(day, status, hours: double.tryParse(hours.text.replaceAll(',', '.')), note: note.text.trim());
     }
   }
 
@@ -235,20 +268,28 @@ class _Count extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(minHeight: 84),
       padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
-      decoration: BoxDecoration(
-        border: Border.all(color: p.line),
-        borderRadius: BorderRadius.circular(12),
+      decoration: BoxDecoration(color: p.raised, borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(radius: 4, backgroundColor: color),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(fontSize: 13, color: p.muted),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(value, style: numeralStyle(24)),
+          if (extra != null) Text(extra!, style: TextStyle(fontSize: 12.5, color: p.muted)),
+        ],
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          CircleAvatar(radius: 4, backgroundColor: color),
-          const SizedBox(width: 6),
-          Flexible(child: Text(label, style: TextStyle(fontSize: 13, color: p.muted), overflow: TextOverflow.ellipsis)),
-        ]),
-        const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-        if (extra != null) Text(extra!, style: TextStyle(fontSize: 12.5, color: p.muted)),
-      ]),
     );
   }
 }

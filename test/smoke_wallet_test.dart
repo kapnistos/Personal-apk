@@ -131,6 +131,11 @@ void main() {
           await tester.drag(list, const Offset(0, 5000));
           await settle(tester);
         }
+        // Rows far below the fold are not built yet, so step down until one exists.
+        for (var i = 0; i < 80 && f.evaluate().isEmpty; i++) {
+          await tester.drag(list, const Offset(0, -200));
+          await tester.pump(const Duration(milliseconds: 50));
+        }
         await tester.scrollUntilVisible(f.first, 200, scrollable: list, maxScrolls: 80);
         await settle(tester);
       }
@@ -163,24 +168,26 @@ void main() {
         await tap(tester, find.text('Now'));
 
         // Add an expense with a comma decimal, then an income.
-        await tap(tester, find.byType(FloatingActionButton));
+        await scrollTo(tester, find.text('Add'));
+        await tap(tester, find.text('Add'));
         await tester.enterText(find.byType(TextField).first, '12,50');
         await tap(tester, find.widgetWithText(FilledButton, 'Add'));
         final all = await tester.runAsync(() => db.select(db.entries).get());
         expect(all!.where((e) => e.amountCents == 1250), hasLength(1));
-        await tap(tester, find.byType(FloatingActionButton));
+        await scrollTo(tester, find.text('Add'));
+        await tap(tester, find.text('Add'));
         await tap(tester, find.text('Income').last);
         await tester.enterText(find.byType(TextField).first, '100');
         await tap(tester, find.widgetWithText(FilledButton, 'Add'));
 
         // Spending target.
-        await scrollTo(tester, find.text('Set a monthly spending target'));
-        await tap(tester, find.text('Set a monthly spending target'));
+        await scrollTo(tester, find.text('Set a budget'));
+        await tap(tester, find.text('Set a budget'));
         await dialogText(tester, '1.500,75');
         await tap(tester, find.widgetWithText(FilledButton, 'Save'));
         expect(settingsRef.raw(spendTargetKey), '150075');
 
-        // Each account card, set a balance.
+        // Each account row, set a balance.
         // Deep scrolling is only driven on the taller phone; the small one still renders every screen above.
         for (final name in size.height >= 700 ? ['Demo Bank', 'Card Two'] : const <String>[]) {
           await tester.drag(
@@ -188,12 +195,7 @@ void main() {
             const Offset(0, 3000),
           );
           await settle(tester);
-          await scrollTo(tester, find.text('Accounts'));
-          await tester.scrollUntilVisible(
-            find.text(name),
-            150,
-            scrollable: find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.right).last,
-          );
+          await scrollTo(tester, find.text(name));
           await tap(tester, find.text(name));
           await tap(tester, find.text('Set current balance'));
           await dialogText(tester, '1234,56');
@@ -208,7 +210,8 @@ void main() {
       testWidgets('wallet recurring smoke $tag', (tester) async {
         final db = await pump(tester, const WalletPage());
         await settle(tester);
-        await tap(tester, find.byTooltip('Subscriptions'));
+        await scrollTo(tester, find.text('Recurring'));
+        await tap(tester, find.text('Recurring'));
         expect(find.text('Recurring'), findsWidgets);
 
         // Add one.
@@ -249,7 +252,8 @@ void main() {
         await scrollTo(tester, find.text('Round-ups'));
         await tap(tester, find.byType(Switch));
         await tap(tester, find.text('Spending'));
-        await tap(tester, find.byType(FloatingActionButton));
+        await scrollTo(tester, find.text('Add'));
+        await tap(tester, find.text('Add'));
         await tester.enterText(find.byType(TextField).first, '3,40');
         await tap(tester, find.widgetWithText(FilledButton, 'Add'));
         var ups = await tester.runAsync(() => db.select(db.savingsMoves).get());
