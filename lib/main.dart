@@ -49,14 +49,16 @@ Future<void> _startBackground(AppDatabase db, AppSettings settings) async {
   Reminders.instance.onOpen = (payload) {
     final nav = navigatorKey.currentState;
     if (nav == null) return;
-    final page = switch (payload.split(':').first) {
+    final Widget? page = switch (payload.split(':').first) {
       'todo' => const TodoPage(),
       'event' => const CalendarPage(),
       'application' => const InternshipsPage(),
       'wallet' => const WalletPage(),
       'habit' => const HabitsPage(),
-      _ => null,
+      _ => null, // "today" (briefing, weekly review) opens Home.
     };
+    // Start from Home so taps on several notifications don't pile pages up.
+    nav.popUntil((r) => r.isFirst);
     if (page != null) nav.push(MaterialPageRoute(builder: (_) => page));
   };
   await Reminders.instance.init(db);

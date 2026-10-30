@@ -301,7 +301,7 @@ class _Pill extends StatelessWidget {
 Future<void> editSpendTarget(BuildContext context) async {
   final settings = context.settings;
   final current = int.tryParse(settings.raw(spendTargetKey) ?? '');
-  final ctrl = TextEditingController(text: current == null ? '' : (current / 100).toStringAsFixed(0));
+  final ctrl = TextEditingController(text: current == null ? '' : moneyInput(current));
   final v = await showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -330,6 +330,8 @@ Future<void> editSpendTarget(BuildContext context) async {
   );
   if (v == null) return;
   final cents = parseMoney(v);
+  // Only an empty field (or Remove) clears the target; a typo keeps the old one.
+  if (v.trim().isNotEmpty && (cents == null || cents <= 0)) return;
   await settings.setRaw(spendTargetKey, cents == null || cents <= 0 ? '' : '$cents');
 }
 
@@ -762,7 +764,7 @@ class PaydayTile extends StatelessWidget {
     }
     final rule = parsePaydayRule(settings.raw(paydayKey));
     var goalId = active.any((g) => g.id == rule?.goalId) ? rule!.goalId : active.first.id;
-    final amount = TextEditingController(text: rule == null ? '' : (rule.cents / 100).toStringAsFixed(0));
+    final amount = TextEditingController(text: rule == null ? '' : moneyInput(rule.cents));
     final ok = await showDialog<bool>(
       context: context,
       builder: (d) => StatefulBuilder(

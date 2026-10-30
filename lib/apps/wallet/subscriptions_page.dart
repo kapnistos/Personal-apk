@@ -228,6 +228,7 @@ class _SubscriptionEditorState extends State<_SubscriptionEditor> {
   late int _period = widget.sub?.periodMonths ?? 1;
   late DateTime _next = widget.sub?.nextDate ?? addDays(dateOnly(DateTime.now()), 1);
   late bool _active = widget.sub?.active ?? true;
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -239,7 +240,8 @@ class _SubscriptionEditorState extends State<_SubscriptionEditor> {
 
   Future<void> _save() async {
     final cents = parseMoney(_amount.text);
-    if (_name.text.trim().isEmpty || cents == null || cents == 0) return;
+    if (_name.text.trim().isEmpty || cents == null || cents == 0 || _saving) return;
+    _saving = true;
     await context.db.saveSubscription(
       SubscriptionsCompanion(
         id: widget.sub == null ? const Value.absent() : Value(widget.sub!.id),
@@ -351,7 +353,9 @@ class _SubscriptionEditorState extends State<_SubscriptionEditor> {
                   value: _period,
                   underline: const SizedBox.shrink(),
                   items: [
-                    for (final m in [1, 3, 6, 12]) DropdownMenuItem(value: m, child: Text(periodLabel(m))),
+                    // Imported or synced payments can repeat every 2 or 4 months; the list must hold them.
+                    for (final m in {1, 3, 6, 12, _period}.toList()..sort())
+                      DropdownMenuItem(value: m, child: Text(periodLabel(m))),
                   ],
                   onChanged: (v) => setState(() => _period = v ?? 1),
                 ),
@@ -388,7 +392,9 @@ class _SubscriptionEditorState extends State<_SubscriptionEditor> {
                   onPressed: () async {
                     final d = await showDatePicker(
                       context: context,
-                      initialDate: _next,
+                      initialDate: _next.isBefore(DateTime(2000)) || _next.isAfter(DateTime(2100))
+                          ? DateTime.now()
+                          : _next,
                       firstDate: DateTime(2000),
                       lastDate: DateTime(2100),
                     );

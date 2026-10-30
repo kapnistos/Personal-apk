@@ -33,7 +33,10 @@ class _ShoppingPageState extends State<ShoppingPage> {
     final settings = context.settings;
     final cheapest = cheapestMap(settings);
     final remembered = rememberedStores(settings);
-    for (final (name, qty) in parseShoppingInput(_input.text)) {
+    // Clear first so a second Enter while this saves cannot add the same items again.
+    final text = _input.text;
+    _input.clear();
+    for (final (name, qty) in parseShoppingInput(text)) {
       await db.addShoppingItem(
         name,
         quantity: qty,
@@ -41,8 +44,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
         store: suggestStore(name, cheapest, remembered),
       );
     }
-    _input.clear();
-    _focus.requestFocus();
+    if (mounted) _focus.requestFocus();
   }
 
   Future<void> _sortAll(List<ShoppingItem> items) async {
@@ -56,11 +58,10 @@ class _ShoppingPageState extends State<ShoppingPage> {
         store: suggestStore(i.name, cheapest, remembered),
       );
     }
+    if (!mounted) return;
     setState(() => _byShop = true);
-    if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Sorted by the cheapest shop for each item')));
-    }
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Sorted by the cheapest shop for each item')));
   }
 
   Future<void> _askClaude(List<ShoppingItem> items) async {
@@ -104,7 +105,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
       await db.updateShoppingItem(i.id, store: store);
       await rememberStore(settings, i.name, store);
     }
-    setState(() => _byShop = true);
+    if (mounted) setState(() => _byShop = true);
     messenger.showSnackBar(
       SnackBar(
         content: Text(
@@ -292,7 +293,9 @@ class _ShoppingPageState extends State<ShoppingPage> {
               ),
               const SizedBox(height: 10),
               ContentWidth(
-                child: Row(
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     SegmentedButton<bool>(
                       showSelectedIcon: false,
@@ -304,7 +307,6 @@ class _ShoppingPageState extends State<ShoppingPage> {
                       selected: {_byShop},
                       onSelectionChanged: (v) => setState(() => _byShop = v.first),
                     ),
-                    const Spacer(),
                     if (open.isNotEmpty)
                       TextButton.icon(
                         onPressed: () => _askClaude(items),

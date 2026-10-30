@@ -573,15 +573,26 @@ class _NoteEditorState extends State<NoteEditor> {
     setState(() {});
   }
 
-  Future<void> _save() async {
-    if (!_dirty || _deleted) return;
+  Future<void>? _saving;
+
+  /// Saves run one after another, so a save on close can't insert the note a second time
+  /// while the first insert is still running.
+  Future<void> _save() {
+    if (!_dirty || _deleted) return _saving ?? Future.value();
     _dirty = false;
     final title = _title.text;
     final body = _body.text;
-    if (_id == null && title.trim().isEmpty && (body.trim().isEmpty || body == widget.startWith)) return;
-    _id = await _db.saveNote(id: _id, title: title, body: body);
-    if (_pinned) await _db.setNotePinned(_id!, true);
-    if (_color != 0) await _db.setNoteColor(_id!, _color);
+    final pinned = _pinned;
+    final color = _color;
+    final previous = _saving;
+    return _saving = () async {
+      await previous;
+      if (_deleted) return;
+      if (_id == null && title.trim().isEmpty && (body.trim().isEmpty || body == widget.startWith)) return;
+      _id = await _db.saveNote(id: _id, title: title, body: body);
+      if (pinned) await _db.setNotePinned(_id!, true);
+      if (color != 0) await _db.setNoteColor(_id!, color);
+    }();
   }
 
   @override
@@ -642,6 +653,8 @@ class _NoteEditorState extends State<NoteEditor> {
     _deleted = true;
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
+    // A save still running would otherwise bring the note back after it is deleted.
+    await _saving;
     final id = _id;
     if (id != null) {
       final snapshot = Note(
@@ -797,21 +810,32 @@ class _NoteEditorState extends State<NoteEditor> {
                     );
                   },
                 ),
-                const Spacer(),
-                for (var i = 0; i < noteColors.length; i++)
-                  GestureDetector(
-                    onTap: () => _setColor(i),
-                    child: Container(
-                      width: 22,
-                      height: 22,
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      decoration: BoxDecoration(
-                        color: i == 0 ? p.surface : noteColor(context, i),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: _color == i ? p.ink : p.line, width: _color == i ? 2 : 1),
-                      ),
+                // On narrow phones the colours scroll instead of spilling off the edge.
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    reverse: true,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (var i = 0; i < noteColors.length; i++)
+                          GestureDetector(
+                            onTap: () => _setColor(i),
+                            child: Container(
+                              width: 22,
+                              height: 22,
+                              margin: const EdgeInsets.symmetric(horizontal: 3),
+                              decoration: BoxDecoration(
+                                color: i == 0 ? p.surface : noteColor(context, i),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: _color == i ? p.ink : p.line, width: _color == i ? 2 : 1),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
+                ),
                 const SizedBox(width: 6),
               ],
             ),

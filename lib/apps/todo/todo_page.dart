@@ -276,10 +276,8 @@ Future<void> toggleTodoDone(BuildContext context, Todo todo) async {
               ? 'Done. It repeats ${todoRepeatLabels[todo.repeat]!.toLowerCase()}.'
               : 'Done: ${todo.title}',
         ),
-        // Undoing a repeating task would leave its next copy behind, so only plain tasks get it.
-        action: todo.repeat == 'none'
-            ? SnackBarAction(label: 'Undo', onPressed: () => db.setTodoDone(todo.id, false))
-            : null,
+        // Undo also takes away the next copy of a repeating task.
+        action: SnackBarAction(label: 'Undo', onPressed: () => db.setTodoDone(todo.id, false)),
       ),
     );
 }
@@ -595,7 +593,7 @@ QuickTask parseQuickTask(String input, {DateTime? now}) {
     } else if (time == null && prev == 'at' && RegExp(r'^\d{1,2}$').hasMatch(w) && int.parse(w) < 24) {
       time = (int.parse(w), 0);
       words.removeLast();
-    } else if (day == null && repeat == 'none' && prev == 'every') {
+    } else if (repeat == 'none' && prev == 'every' && (day == null || _weekday(w) == null)) {
       final wd = _weekday(w);
       final r = switch (w) {
         'day' => 'daily',
@@ -635,7 +633,8 @@ QuickTask parseQuickTask(String input, {DateTime? now}) {
     if (day == null && remind.isBefore(clock)) remind = addDays(remind, 1);
     day ??= dateOnly(remind);
   }
-  if (repeat == 'daily' || repeat == 'weekdays' || repeat == 'monthly' || repeat == 'yearly') day ??= today;
+  // A repeating task needs a date to repeat from.
+  if (repeat != 'none') day ??= today;
   return QuickTask(words.join(' '), due: day, remindAt: remind, repeat: repeat, important: important);
 }
 

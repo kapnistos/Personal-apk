@@ -47,9 +47,7 @@ const categoriesByKind = <EntryKind, List<CategoryInfo>>{
     CategoryInfo('Health insurance', Icons.health_and_safety_rounded, Color(0xFF8E5EA8)),
     CategoryInfo('Other tax', Icons.receipt_long_rounded, Color(0xFF6F6A60)),
   ],
-  EntryKind.transfer: [
-    CategoryInfo('Transfer', Icons.swap_horiz_rounded, Color(0xFF6F6A60)),
-  ],
+  EntryKind.transfer: [CategoryInfo('Transfer', Icons.swap_horiz_rounded, Color(0xFF6F6A60))],
 };
 
 CategoryInfo categoryInfo(String name) {
@@ -63,19 +61,19 @@ CategoryInfo categoryInfo(String name) {
 
 extension EntryKindX on EntryKind {
   String get label => switch (this) {
-        EntryKind.expense => 'Expense',
-        EntryKind.income => 'Income',
-        EntryKind.subscription => 'Subscription',
-        EntryKind.tax => 'Tax',
-        EntryKind.transfer => 'Transfer',
-      };
+    EntryKind.expense => 'Expense',
+    EntryKind.income => 'Income',
+    EntryKind.subscription => 'Subscription',
+    EntryKind.tax => 'Tax',
+    EntryKind.transfer => 'Transfer',
+  };
 
   /// +1 for money in, -1 for money out, 0 for moves between own accounts.
   int get sign => switch (this) {
-        EntryKind.income => 1,
-        EntryKind.transfer => 0,
-        _ => -1,
-      };
+    EntryKind.income => 1,
+    EntryKind.transfer => 0,
+    _ => -1,
+  };
 }
 
 class MonthSummary {
@@ -101,12 +99,12 @@ class MonthSummary {
 }
 
 /// Monthly cost of a subscription, for "per month" totals.
-int monthlyCents(Subscription s) => (s.amountCents / s.periodMonths).round();
+int monthlyCents(Subscription s) => (s.amountCents / (s.periodMonths < 1 ? 1 : s.periodMonths)).round();
 
 String periodLabel(int months) => switch (months) {
-      1 => 'Monthly',
-      3 => 'Quarterly',
-      6 => 'Every 6 months',
-      12 => 'Yearly',
-      _ => 'Every $months months',
-    };
+  1 => 'Monthly',
+  3 => 'Quarterly',
+  6 => 'Every 6 months',
+  12 => 'Yearly',
+  _ => 'Every $months months',
+};

@@ -28,9 +28,8 @@ List<Occurrence> expand(List<Event> events, Map<int, Calendar> calendars, DateTi
   for (final e in events) {
     final cal = calendars[e.calendarId];
     if (cal == null || !cal.visible) continue;
-    final length = e.end.difference(e.start);
     for (final s in occurrences(e, from, to)) {
-      out.add(Occurrence(e, s, s.add(length), Color(cal.color)));
+      out.add(Occurrence(e, s, occurrenceEnd(e, s), Color(cal.color)));
     }
   }
   out.sort((a, b) {
@@ -109,6 +108,4 @@ const reminderOptions = <int?, String>{
   9540: 'A week before at 9:00',
 };
 
-const calendarColors = [
-  0xFF3A78C9, 0xFF1F7A5A, 0xFFC0563F, 0xFF6650AE, 0xFFCF9418, 0xFFB5487A, 0xFF2D8C9E, 0xFF6F6A60,
-];
+const calendarColors = [0xFF3A78C9, 0xFF1F7A5A, 0xFFC0563F, 0xFF6650AE, 0xFFCF9418, 0xFFB5487A, 0xFF2D8C9E, 0xFF6F6A60];

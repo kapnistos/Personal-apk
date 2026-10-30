@@ -57,7 +57,13 @@ int? parseMoney(String input) {
   if (s.isEmpty) return null;
   final lastComma = s.lastIndexOf(',');
   final lastDot = s.lastIndexOf('.');
-  if (lastComma > lastDot) {
+  if (','.allMatches(s).length > 1 && lastDot < 0) {
+    // "1,234,567": commas only group thousands.
+    s = s.replaceAll(',', '');
+  } else if ('.'.allMatches(s).length > 1 && lastComma < 0) {
+    // "1.234.567": dots only group thousands.
+    s = s.replaceAll('.', '');
+  } else if (lastComma > lastDot) {
     s = s.replaceAll('.', '').replaceAll(',', '.');
   } else {
     s = s.replaceAll(',', '');
@@ -66,6 +72,9 @@ int? parseMoney(String input) {
   if (v == null) return null;
   return (v * 100).round();
 }
+
+/// Cents as text for an input field: "1500" for whole amounts, "12.50" otherwise, so editing keeps the cents.
+String moneyInput(int cents) => cents % 100 == 0 ? '${cents ~/ 100}' : (cents / 100).toStringAsFixed(2);
 
 String greeting(DateTime now) {
   final h = now.hour;
@@ -80,7 +89,13 @@ DateTime nextRepeat(DateTime d, String repeat) {
   DateTime plusDays(int n) => DateTime(d.year, d.month, d.day + n, d.hour, d.minute);
   return switch (repeat) {
     'daily' => plusDays(1),
-    'weekdays' => plusDays(d.weekday == DateTime.friday ? 3 : d.weekday == DateTime.saturday ? 2 : 1),
+    'weekdays' => plusDays(
+      d.weekday == DateTime.friday
+          ? 3
+          : d.weekday == DateTime.saturday
+          ? 2
+          : 1,
+    ),
     'weekly' => plusDays(7),
     'monthly' => addMonths(d, 1),
     'yearly' => addMonths(d, 12),

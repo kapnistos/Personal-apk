@@ -450,13 +450,13 @@ class AppDatabase extends _$AppDatabase {
           position: const Value(0),
         ),
         if (lab != null)
-        SpacesCompanion.insert(
-          name: 'Lab research',
-          icon: const Value('science'),
-          color: 0xFF7A5BC0,
-          calendarId: Value(lab),
-          position: const Value(1),
-        ),
+          SpacesCompanion.insert(
+            name: 'Lab research',
+            icon: const Value('science'),
+            color: 0xFF7A5BC0,
+            calendarId: Value(lab),
+            position: const Value(1),
+          ),
         SpacesCompanion.insert(
           name: 'University',
           icon: const Value('school'),
@@ -621,21 +621,43 @@ class AppDatabase extends _$AppDatabase {
   Future<void> updateTodo(Todo todo) => update(todos).replace(todo);
 
   /// Ticks a task off. A repeating task gets its next copy, moved on by one period.
+  /// Unticking it again takes that copy away, so ticking twice never leaves two.
   Future<void> setTodoDone(int id, bool done) => transaction(() async {
     final t = await todoById(id);
-    if (t == null) return;
+    if (t == null || t.done == done) return;
     await (update(todos)..where((t) => t.id.equals(id))).write(
       TodosCompanion(done: Value(done), completedAt: Value(done ? DateTime.now() : null)),
     );
-    if (!done || t.done || t.repeat == 'none') return;
-    final base = t.due ?? t.remindAt ?? dateOnly(DateTime.now());
+    if (t.repeat == 'none') return;
+    final base = t.due ?? t.remindAt ?? dateOnly(t.createdAt);
+    // Open copies of this task that come after it: the one a tick made.
+    final later =
+        (await (select(todos)..where(
+                  (x) =>
+                      x.id.isNotValue(id) &
+                      x.done.equals(false) &
+                      x.title.equals(t.title) &
+                      x.repeat.equals(t.repeat) &
+                      (t.spaceId == null ? x.spaceId.isNull() : x.spaceId.equals(t.spaceId!)),
+                ))
+                .get())
+            .where((x) => (x.due ?? x.remindAt) != null && (x.due ?? x.remindAt)!.isAfter(base))
+            .toList();
+    if (!done) {
+      if (later.isEmpty) return;
+      later.sort((a, b) => (a.due ?? a.remindAt)!.compareTo((b.due ?? b.remindAt)!));
+      await deleteTodo(later.first.id);
+      return;
+    }
+    if (later.isNotEmpty) return;
     var next = nextRepeat(base, t.repeat);
     // Catch up if the task was finished late, so the next one is not already overdue.
     final today = dateOnly(DateTime.now());
     while (dateOnly(next).isBefore(today)) {
       next = nextRepeat(next, t.repeat);
     }
-    final shift = next.difference(base);
+    // Whole days, so a reminder keeps its clock time across a summer time change.
+    final shift = daysBetween(base, next);
     await into(todos).insert(
       TodosCompanion.insert(
         title: t.title,
@@ -643,8 +665,8 @@ class AppDatabase extends _$AppDatabase {
         important: Value(t.important),
         repeat: Value(t.repeat),
         spaceId: Value(t.spaceId),
-        due: Value(t.due == null ? null : next),
-        remindAt: Value(t.remindAt?.add(shift)),
+        due: Value(t.due == null && t.remindAt != null ? null : dateOnly(next)),
+        remindAt: Value(t.remindAt == null ? null : addDays(t.remindAt!, shift)),
       ),
     );
   });
@@ -741,7 +763,8 @@ class AppDatabase extends _$AppDatabase {
               account: Value(s.account),
               date: next,
               subscriptionId: Value(s.id),
-              importKey: Value('sub:$key:${next.toIso8601String()}'),
+              // The day, not the clock time, so a date picked again in the editor cannot book it twice.
+              importKey: Value('sub:$key:${dateOnly(next).toIso8601String()}'),
             ),
             mode: InsertMode.insertOrIgnore,
           );
@@ -899,9 +922,10 @@ class AppDatabase extends _$AppDatabase {
   Future<void> setHabitDone(int habitId, DateTime day, bool done) async {
     final key = dayKey(day);
     if (done) {
-      await into(
-        habitChecks,
-      ).insert(HabitChecksCompanion.insert(habitId: habitId, day: key), mode: InsertMode.insertOrIgnore);
+      await into(habitChecks).insert(
+        HabitChecksCompanion.insert(habitId: habitId, day: key),
+        mode: InsertMode.insertOrIgnore,
+      );
     } else {
       await (delete(habitChecks)..where((c) => c.habitId.equals(habitId) & c.day.equals(key))).go();
     }

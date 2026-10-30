@@ -316,6 +316,11 @@ Future<List<PlannedReminder>> planReminders(AppDatabase db, DateTime now) async 
   return out;
 }
 
+/// When the occurrence of [e] starting at [start] ends. All-day events last whole
+/// days, so one that spans a clock change still ends at midnight.
+DateTime occurrenceEnd(Event e, DateTime start) =>
+    e.allDay ? addDays(start, daysBetween(e.start, e.end)) : start.add(e.end.difference(e.start));
+
 /// Start times of [e] that fall in [from, to), expanding repeats.
 List<DateTime> occurrences(Event e, DateTime from, DateTime to) {
   final out = <DateTime>[];
@@ -339,7 +344,7 @@ List<DateTime> occurrences(Event e, DateTime from, DateTime to) {
   var start = nth(i);
   var steps = 0;
   while (start.isBefore(to) && steps < 1000) {
-    final end = start.add(length);
+    final end = occurrenceEnd(e, start);
     if (end.isAfter(from) || (length == Duration.zero && !start.isBefore(from))) {
       out.add(start);
     }

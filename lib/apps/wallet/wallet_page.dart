@@ -750,7 +750,7 @@ class _Breakdown extends StatelessWidget {
   }
 
   Future<void> _editBudget(BuildContext context, String category, int? current) async {
-    final c = TextEditingController(text: current == null ? '' : (current / 100).toStringAsFixed(0));
+    final c = TextEditingController(text: current == null ? '' : moneyInput(current));
     final db = context.db;
     final v = await showDialog<String>(
       context: context,
@@ -768,7 +768,12 @@ class _Breakdown extends StatelessWidget {
         ],
       ),
     );
-    if (v != null) await db.setBudget(category, parseMoney(v));
+    c.dispose();
+    if (v == null) return;
+    final cents = parseMoney(v);
+    // Typos like "abc" or "-50" must not wipe a budget; only an empty field removes it.
+    if (v.trim().isNotEmpty && (cents == null || cents <= 0)) return;
+    await db.setBudget(category, cents);
   }
 }
 
@@ -960,6 +965,7 @@ class _EntryEditorState extends State<_EntryEditor> {
   late final _note = TextEditingController(text: widget.entry?.note ?? '');
   late final _account = TextEditingController(text: widget.entry?.account ?? widget.account ?? '');
   late DateTime _date = widget.entry?.date ?? DateTime.now();
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -970,12 +976,14 @@ class _EntryEditorState extends State<_EntryEditor> {
   }
 
   Future<void> _save() async {
-    final cents = parseMoney(_amount.text);
-    if (cents == null || cents == 0) return;
+    final cents = parseMoney(_amount.text)?.abs();
+    if (cents == null || cents == 0 || _saving) return;
+    // A second tap while saving would book the entry (and its round-up) twice.
+    _saving = true;
     final db = context.db;
     final roundUp = context.settings.raw(roundUpKey);
     final companion = EntriesCompanion(
-      amountCents: Value(cents.abs()),
+      amountCents: Value(cents),
       kind: Value(_kind),
       category: Value(_category),
       note: Value(_note.text.trim()),
@@ -991,7 +999,7 @@ class _EntryEditorState extends State<_EntryEditor> {
     } else {
       await db.updateEntry(
         widget.entry!.copyWith(
-          amountCents: cents.abs(),
+          amountCents: cents,
           kind: _kind,
           category: _category,
           note: _note.text.trim(),
@@ -1072,12 +1080,17 @@ class _EntryEditorState extends State<_EntryEditor> {
                 const SizedBox(width: 10),
                 OutlinedButton.icon(
                   onPressed: () async {
+                    final first = DateTime(2000);
+                    final last = addDays(DateTime.now(), 365);
+                    // An imported entry can sit outside the range, which the picker does not allow.
+                    final initial = _date.isBefore(first) ? first : (_date.isAfter(last) ? last : _date);
                     final d = await showDatePicker(
                       context: context,
-                      initialDate: _date,
-                      firstDate: DateTime(2000),
-                      lastDate: addDays(DateTime.now(), 365),
+                      initialDate: initial,
+                      firstDate: _date.isBefore(first) ? DateTime(_date.year) : first,
+                      lastDate: last,
                     );
+                    if (!mounted) return;
                     if (d != null) setState(() => _date = DateTime(d.year, d.month, d.day, _date.hour, _date.minute));
                   },
                   icon: const Icon(Icons.event_outlined, size: 18),

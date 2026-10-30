@@ -36,7 +36,7 @@ class AccountState {
     final end = DateTime(n.year, n.month + 1);
     for (final s in recurring) {
       if (s.nextDate.isBefore(end)) dueThisMonth += s.kind.sign * s.amountCents;
-      monthly += (s.kind.sign * s.amountCents / s.periodMonths).round();
+      monthly += s.kind.sign * monthlyCents(s);
     }
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/edition.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -40,8 +41,11 @@ class AiPage extends StatelessWidget {
                     Text('Your own assistant, inside Hub', style: text.headlineSmall),
                     const SizedBox(height: 6),
                     Text(
-                      'Built in and working on your own notes, tasks, calendar and money. '
-                      'DeepSeek first, or any AI you have a key for.',
+                      personalEdition
+                          ? 'Built in and working on your own notes, tasks, calendar and money, '
+                                'on your Claude subscription only.'
+                          : 'Built in and working on your own notes, tasks, calendar and money. '
+                                'DeepSeek first, or any AI you have a key for.',
                       style: TextStyle(color: p.muted, height: 1.4),
                     ),
                   ],
@@ -58,6 +62,12 @@ class AiPage extends StatelessWidget {
               trailing: Padding(padding: EdgeInsets.only(right: 10), child: SoonBadge()),
               child: Column(
                 children: [
+                  _Soon(
+                    Icons.support_agent_rounded,
+                    'Hub agent',
+                    'Say "12 euro lunch" or "note: call the landlord" and it adds the expense, note or task for you, '
+                        'using the model you chose',
+                  ),
                   _Soon(
                     Icons.smart_toy_outlined,
                     'Add your own agents',
@@ -174,7 +184,8 @@ class ModelPicker extends StatelessWidget {
     final p = Palette.of(context);
     final settings = context.settings;
     final chosen = settings.raw(settingKey) ?? 'anthropic.haiku';
-    final billing = settings.raw(billingKey) ?? 'plan';
+    // The owner's build only ever uses the subscription; no API keys.
+    final billing = personalEdition ? 'plan' : settings.raw(billingKey) ?? 'plan';
     String? lastProvider;
     return Section(
       title: 'Model',
@@ -187,7 +198,7 @@ class ModelPicker extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final m in aiModels) ...[
+            for (final m in aiModels.where((m) => !personalEdition || m.provider == 'Anthropic')) ...[
               if (m.provider != lastProvider) ...[
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
@@ -206,22 +217,26 @@ class ModelPicker extends StatelessWidget {
                 style: TextStyle(color: p.muted, fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: SegmentedButton<String>(
-                showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(value: 'plan', label: Text('My subscription')),
-                  ButtonSegment(value: 'api', label: Text('API key')),
-                ],
-                selected: {billing},
-                onSelectionChanged: (v) => settings.setRaw(billingKey, v.first),
+            if (!personalEdition)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: 'plan', label: Text('My subscription')),
+                    ButtonSegment(value: 'api', label: Text('API key')),
+                  ],
+                  selected: {billing},
+                  onSelectionChanged: (v) => settings.setRaw(billingKey, v.first),
+                ),
               ),
-            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: Text(
-                billing == 'plan'
+                personalEdition
+                    ? 'Uses only your own subscription, through the Claude app on this phone. Hub has no API key '
+                          'and never pays per use: every question comes out of your plan.'
+                    : billing == 'plan'
                     ? 'Uses the plan you already pay for, such as Claude Pro or ChatGPT Plus, through its own app. '
                           'No extra cost per question. Works today for Claude.'
                     : 'Pay per use with your own key. Costs depend on the model; Haiku, GPT mini and DeepSeek '
