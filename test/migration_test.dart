@@ -19,7 +19,7 @@ void main() {
     final spaces = await db.watchSpaces().first;
     expect(spaces.map((s) => s.name), ['Job', if (personalEdition) 'Lab research', 'University']);
     final cals = await db.watchCalendars().first;
-    expect(cals.map((c) => c.name), containsAll(['Work', 'Lab', 'Study']));
+    expect(cals.map((c) => c.name), containsAll(['Work', if (personalEdition) 'Lab', 'Study']));
     expect(cals.length, personalEdition ? 4 : 3);
     // New tables sync like the old ones.
     await db.addMove(await db.saveGoal(SavingsGoalsCompanion.insert(name: 'Trip', targetCents: 1000, color: 1)), 500);
