@@ -23,29 +23,37 @@ class ContentWidth extends StatelessWidget {
 
 /// A card with a small heading, used to group content on a page.
 class Section extends StatelessWidget {
-  const Section({super.key, required this.title, required this.child, this.trailing});
+  const Section({super.key, required this.title, required this.child, this.trailing, this.onTap});
   final String title;
   final Widget child;
   final Widget? trailing;
+
+  /// Opens what the section is about when the card itself is tapped, anywhere its rows do not take the tap.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(16, 14, trailing == null ? 16 : 6, 6),
-            child: Row(
-              children: [
-                Expanded(child: SectionLabel(title)),
-                ?trailing,
-              ],
+      child: InkWell(
+        onTap: onTap,
+        // Without a tap the card is not a stop for the keyboard either.
+        canRequestFocus: onTap != null,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(16, 14, trailing == null ? 16 : 6, 6),
+              child: Row(
+                children: [
+                  Expanded(child: SectionLabel(title)),
+                  ?trailing,
+                ],
+              ),
             ),
-          ),
-          child,
-        ],
+            child,
+          ],
+        ),
       ),
     );
   }

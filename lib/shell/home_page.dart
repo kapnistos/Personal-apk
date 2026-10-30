@@ -246,8 +246,11 @@ class _HomePageState extends State<HomePage> {
                     duration: const Duration(milliseconds: 200),
                     curve: Curves.easeOutCubic,
                     alignment: Alignment.topCenter,
-                    child: _editing
-                        ? ContentWidth(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_editing)
+                          ContentWidth(
                             maxWidth: 960,
                             child: Padding(
                               padding: const EdgeInsets.only(top: 10),
@@ -256,8 +259,19 @@ class _HomePageState extends State<HomePage> {
                                 style: TextStyle(color: p.muted),
                               ),
                             ),
-                          )
-                        : ContentWidth(maxWidth: 960, child: _hero(context)),
+                          ),
+                        // Hidden while arranging but kept alive, so the weather and the apps (your spaces
+                        // among them) are all there the moment you press Done, instead of loading again
+                        // and shifting under your finger.
+                        Offstage(
+                          offstage: _editing,
+                          child: TickerMode(
+                            enabled: !_editing,
+                            child: ContentWidth(maxWidth: 960, child: _hero(context)),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 16),
                   ContentWidth(
@@ -1260,6 +1274,7 @@ class _TodayCardState extends State<TodayCard> with WidgetsBindingObserver {
     final tomorrow = addDays(today, 1);
     return Section(
       title: 'Today',
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CalendarPage())),
       trailing: TextButton(
         onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CalendarPage())),
         child: const Text('Calendar'),
@@ -1402,6 +1417,7 @@ class _HeadlinesCardState extends State<HeadlinesCard> {
     final items = _news.briefing(perTopic: 1, max: 4);
     return Section(
       title: 'Headlines',
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NewsPage())),
       trailing: TextButton(
         onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NewsPage())),
         child: const Text('All news'),
@@ -1446,6 +1462,7 @@ class RecentNotesCard extends StatelessWidget {
         final notes = (snap.data ?? const <Note>[]).take(4).toList();
         return Section(
           title: 'Recent notes',
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotesPage())),
           trailing: IconButton(
             tooltip: 'New note',
             visualDensity: VisualDensity.compact,

@@ -1167,6 +1167,8 @@ class _Panel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Section(
     title: title,
+    // The whole card opens the same place as its button, not just the small word in the corner.
+    onTap: onMore,
     trailing: onMore == null ? null : TextButton(onPressed: onMore, child: Text(moreLabel)),
     child: Padding(
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 10),
@@ -1579,9 +1581,13 @@ class _AccountsSmall extends StatelessWidget {
 class _AccountsWide extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 14),
-      child: AccountsStrip(currency: context.settings.currency),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: () => _push(context, const WalletPage()),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 14),
+        child: AccountsStrip(currency: context.settings.currency),
+      ),
     ),
   );
 }
