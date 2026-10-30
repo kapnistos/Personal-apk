@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hub/core/edition.dart';
 import 'package:hub/core/db/database.dart';
 import 'package:hub/core/sync/sync_engine.dart';
 
@@ -54,8 +55,8 @@ void main() {
     await roundTrip(b, s);
     await roundTrip(a, s);
     expect((await phone.watchCities().first).length, 1);
-    expect((await pc.watchCalendars().first).length, 4);
-    expect((await server.watchCalendars().first).length, 4);
+    expect((await pc.watchCalendars().first).length, personalEdition ? 4 : 3);
+    expect((await server.watchCalendars().first).length, personalEdition ? 4 : 3);
   });
 
   test('a renamed starter calendar wins over the untouched copies', () async {

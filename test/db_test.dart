@@ -1,5 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hub/core/edition.dart';
 import 'package:hub/core/db/database.dart';
 import 'package:hub/core/settings.dart';
 
@@ -10,7 +11,7 @@ void main() {
     await settings.load();
     final cities = await db.watchCities().first;
     expect(cities.single.name, 'Amsterdam');
-    expect((await db.watchCalendars().first).length, 4);
+    expect((await db.watchCalendars().first).length, personalEdition ? 4 : 3);
     await db.close();
   });
 }

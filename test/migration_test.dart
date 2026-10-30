@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hub/core/edition.dart';
 import 'package:hub/core/db/database.dart';
 import 'package:hub/core/format.dart';
 
@@ -16,10 +17,10 @@ void main() {
     expect(todos.single.repeat, 'none');
     expect((await db.watchNotes().first).single.title, 'Old note');
     final spaces = await db.watchSpaces().first;
-    expect(spaces.map((s) => s.name), ['Job', 'Lab research', 'University']);
+    expect(spaces.map((s) => s.name), ['Job', if (personalEdition) 'Lab research', 'University']);
     final cals = await db.watchCalendars().first;
     expect(cals.map((c) => c.name), containsAll(['Work', 'Lab', 'Study']));
-    expect(cals.length, 4);
+    expect(cals.length, personalEdition ? 4 : 3);
     // New tables sync like the old ones.
     await db.addMove(await db.saveGoal(SavingsGoalsCompanion.insert(name: 'Trip', targetCents: 1000, color: 1)), 500);
     final gid = await db.customSelect('SELECT gid FROM savings_moves').getSingle();
