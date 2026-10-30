@@ -4,6 +4,11 @@ Builds are numbered by the CI run. Notable changes, newest first.
 
 ## October 2026
 
+### New look
+- Black background in dark mode, flat cards without outlines, pill-shaped tabs and filters, round icons.
+- Big balances with smaller cents; Wallet opens on the month's net figure with round Add, Recurring, Year and Import buttons.
+- Plain sentence-case headings instead of small capitals.
+
 ### Automations, backup and habits
 - Automations (Me → Automations): morning briefing, bill reminder the evening before, low-balance warning two days ahead, Sunday week review, overdue-task nudge, habit reminders. Each can be switched off or retimed.
 - Backup (Me → Backup): save everything to a file, restore it on any device, and an automatic daily copy kept for two weeks.

@@ -46,6 +46,7 @@ Future<void> loadFonts() async {
 int cal0(String name, List<Calendar> cals) => cals.firstWhere((c) => c.name == name).id;
 
 Future<void> seed(AppDatabase db, AppSettings settings) async {
+  await db.delete(db.todos).go(); // The owner's own tasks stay out of the pictures.
   await settings.setName('Alex');
   final now = DateTime.now();
   final today = dateOnly(now);
@@ -339,7 +340,7 @@ void main() {
       for (final e in shots.entries) {
         if (device == 'desktop' && !['home', 'calendar', 'wallet', 'weather'].contains(e.key)) continue;
         if (e.key == 'dashboard' && device == 'desktop') continue;
-        if (dark && !['home', 'calendar', 'wallet'].contains(e.key)) continue;
+        if (dark && !['home', 'calendar', 'wallet', 'todo', 'subscriptions', 'dashboard', 'me'].contains(e.key)) continue;
         testWidgets('$device ${dark ? 'dark' : 'light'} ${e.key}', (tester) async {
           // The whole home screen, top to bottom.
           tester.view.physicalSize = e.key == 'dashboard' ? Size(size.width, 7200) : size;

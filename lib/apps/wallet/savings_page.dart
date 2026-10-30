@@ -124,6 +124,7 @@ class _TotalCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
@@ -132,8 +133,7 @@ class _TotalCard extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontWeight: FontWeight.w500)),
         const SizedBox(height: 4),
-        Text(value,
-            style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w700, letterSpacing: -0.5)),
+        BigAmount(value, size: 38, color: Colors.white),
         const SizedBox(height: 6),
         Text(footer, style: TextStyle(color: Colors.white.withValues(alpha: 0.85))),
       ]),

@@ -69,10 +69,7 @@ class SubscriptionsPage extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Fixed costs per month', style: TextStyle(color: p.muted, fontSize: 13.5)),
-                              Text(
-                                money(outPerMonth, currency),
-                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-                              ),
+                              BigAmount(money(outPerMonth, currency), size: 30),
                             ],
                           ),
                         ),
@@ -112,8 +109,8 @@ class SubscriptionsPage extends StatelessWidget {
                                   width: 38,
                                   height: 38,
                                   decoration: BoxDecoration(
-                                    color: info.color.withValues(alpha: 0.14),
-                                    borderRadius: BorderRadius.circular(11),
+                                    color: info.color.withValues(alpha: 0.16),
+                                    shape: BoxShape.circle,
                                   ),
                                   child: Icon(info.icon, size: 20, color: info.color),
                                 ),

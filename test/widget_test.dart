@@ -84,7 +84,7 @@ void main() {
       await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 100)));
       await tester.pump(const Duration(milliseconds: 50));
       expect(find.text('Buy milk'), findsOneWidget);
-      expect(find.text('Tomorrow'), findsOneWidget);
+      expect(find.text('Tomorrow'), findsWidgets); // The group heading and the task's date.
     });
   });
 

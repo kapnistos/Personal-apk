@@ -129,9 +129,7 @@ class _InvestingTabState extends State<InvestingTab> {
                         Text('Portfolio value',
                             style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontWeight: FontWeight.w500)),
                         const SizedBox(height: 4),
-                        Text(money(value, currency),
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 34, fontWeight: FontWeight.w700, letterSpacing: -0.5)),
+                        BigAmount(money(value, currency), size: 38, color: Colors.white),
                         const SizedBox(height: 6),
                         Text(
                           invested == 0

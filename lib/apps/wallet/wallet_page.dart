@@ -86,6 +86,7 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
           const SizedBox(width: 4),
         ],
         bottom: TabBar(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           controller: _tabs,
           tabs: const [
             Tab(text: 'Spending'),
@@ -456,62 +457,83 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final white = Colors.white;
-    final dim = Colors.white.withValues(alpha: 0.75);
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF4B3A8C), Color(0xFF7460C0)],
+    final p = Palette.of(context);
+    return Column(
+      children: [
+        const SizedBox(height: 8),
+        Text('Net this month', style: TextStyle(color: p.muted, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 2),
+        BigAmount(money(summary.net, currency, signed: true), size: 44),
+        const SizedBox(height: 18),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _action(context, Icons.add_rounded, 'Add', () => editEntry(context)),
+            _action(
+              context,
+              Icons.autorenew_rounded,
+              'Recurring',
+              () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SubscriptionsPage())),
+            ),
+            _action(
+              context,
+              Icons.bar_chart_rounded,
+              'Year',
+              () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YearPage())),
+            ),
+            _action(context, Icons.file_download_outlined, 'Import', () => importBankFile(context)),
+          ],
         ),
-      ),
+        const SizedBox(height: 18),
+        Row(
+          children: [
+            Expanded(child: _stat(p, Icons.south_west_rounded, 'In', money(summary.income, currency), p.positive)),
+            const SizedBox(width: 10),
+            Expanded(child: _stat(p, Icons.north_east_rounded, 'Out', money(summary.out, currency), p.ink)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// A round action button with its name underneath.
+  Widget _action(BuildContext context, IconData icon, String label, VoidCallback onTap) {
+    final p = Palette.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Net this month',
-            style: TextStyle(color: dim, fontWeight: FontWeight.w500),
+          Material(
+            color: p.raised,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onTap,
+              child: SizedBox(width: 52, height: 52, child: Icon(icon, color: p.ink)),
+            ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            money(summary.net, currency, signed: true),
-            style: TextStyle(color: white, fontSize: 34, fontWeight: FontWeight.w600, letterSpacing: -1),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              _stat(Icons.south_west_rounded, 'In', money(summary.income, currency), dim, white),
-              const SizedBox(width: 24),
-              _stat(Icons.north_east_rounded, 'Out', money(summary.out, currency), dim, white),
-            ],
-          ),
+          const SizedBox(height: 6),
+          Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
         ],
       ),
     );
   }
 
-  Widget _stat(IconData icon, String label, String value, Color dim, Color white) => Row(
-    children: [
-      Container(
-        padding: const EdgeInsets.all(5),
-        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.16), shape: BoxShape.circle),
-        child: Icon(icon, size: 14, color: white),
-      ),
-      const SizedBox(width: 8),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: TextStyle(color: dim, fontSize: 12.5)),
-          Text(
-            value,
-            style: TextStyle(color: white, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    ],
+  Widget _stat(Palette p, IconData icon, String label, String value, Color color) => Container(
+    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+    decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(20)),
+    child: Row(
+      children: [
+        Icon(icon, size: 18, color: p.muted),
+        const SizedBox(width: 8),
+        Text(label, style: TextStyle(color: p.muted, fontSize: 14)),
+        const Spacer(),
+        Text(
+          value,
+          style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 15),
+        ),
+      ],
+    ),
   );
 }
 
@@ -650,7 +672,7 @@ class EntryTile extends StatelessWidget {
       leading: Container(
         width: 38,
         height: 38,
-        decoration: BoxDecoration(color: info.color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(11)),
+        decoration: BoxDecoration(color: info.color.withValues(alpha: 0.16), shape: BoxShape.circle),
         child: Icon(info.icon, size: 20, color: info.color),
       ),
       title: Text(entry.note.isEmpty ? entry.category : entry.note, maxLines: 1, overflow: TextOverflow.ellipsis),

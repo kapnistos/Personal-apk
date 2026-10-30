@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Hand-picked palette: warm paper tones with a deep green accent.
+/// Palette: near-black (or cool grey) ground, flat cards, one confident blue.
 class Palette {
   final Color background;
   final Color surface;
@@ -27,29 +27,29 @@ class Palette {
   });
 
   static const light = Palette(
-    background: Color(0xFFF4F2EC),
+    background: Color(0xFFF1F2F6),
     surface: Color(0xFFFFFFFF),
-    raised: Color(0xFFEDEAE2),
-    ink: Color(0xFF1D1C1A),
-    muted: Color(0xFF6F6A60),
-    line: Color(0xFFE3DFD5),
-    accent: Color(0xFF1F6F54),
+    raised: Color(0xFFE8E9EE),
+    ink: Color(0xFF0B0C0E),
+    muted: Color(0xFF6B6F78),
+    line: Color(0xFFE4E5EA),
+    accent: Color(0xFF1E5BF0),
     onAccent: Color(0xFFFFFFFF),
-    danger: Color(0xFFB4412F),
-    positive: Color(0xFF2D7A4B),
+    danger: Color(0xFFD8352F),
+    positive: Color(0xFF128A4E),
   );
 
   static const dark = Palette(
-    background: Color(0xFF111210),
-    surface: Color(0xFF1A1B19),
-    raised: Color(0xFF242522),
-    ink: Color(0xFFECEAE3),
-    muted: Color(0xFF9C978C),
-    line: Color(0xFF2C2D2A),
-    accent: Color(0xFF63C39A),
-    onAccent: Color(0xFF0D2219),
-    danger: Color(0xFFE07A66),
-    positive: Color(0xFF6BC68E),
+    background: Color(0xFF000000),
+    surface: Color(0xFF16171A),
+    raised: Color(0xFF232428),
+    ink: Color(0xFFFFFFFF),
+    muted: Color(0xFF8D9099),
+    line: Color(0xFF232428),
+    accent: Color(0xFF4F86FF),
+    onAccent: Color(0xFFFFFFFF),
+    danger: Color(0xFFFF5D57),
+    positive: Color(0xFF3DD68C),
   );
 
   static Palette of(BuildContext context) => Theme.of(context).brightness == Brightness.dark ? dark : light;
@@ -101,10 +101,11 @@ ThemeData buildTheme(Brightness brightness) {
 
   return base.copyWith(
     textTheme: text.copyWith(
-      headlineLarge: text.headlineLarge?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.8),
-      headlineMedium: text.headlineMedium?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.6),
-      headlineSmall: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.4),
-      titleLarge: text.titleLarge?.copyWith(fontWeight: FontWeight.w600, letterSpacing: -0.3),
+      displaySmall: text.displaySmall?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -1.2),
+      headlineLarge: text.headlineLarge?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -1.0),
+      headlineMedium: text.headlineMedium?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.8),
+      headlineSmall: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+      titleLarge: text.titleLarge?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.4),
       titleMedium: text.titleMedium?.copyWith(fontSize: 17, fontWeight: FontWeight.w600, letterSpacing: -0.1),
       titleSmall: text.titleSmall?.copyWith(fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: 0),
       bodyLarge: text.bodyLarge?.copyWith(fontSize: 16.5, letterSpacing: 0, height: 1.4),
@@ -121,43 +122,55 @@ ThemeData buildTheme(Brightness brightness) {
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
-      titleTextStyle: text.titleLarge?.copyWith(fontSize: 21, fontWeight: FontWeight.w600, letterSpacing: -0.3),
+      titleTextStyle: text.titleLarge?.copyWith(fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: -0.6),
     ),
     cardTheme: CardThemeData(
       color: p.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: p.line),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
     ),
-    dividerTheme: DividerThemeData(color: p.line, thickness: 1, space: 1),
+    // Tabs are a row of pills; the chosen one is solid.
+    tabBarTheme: TabBarThemeData(
+      dividerColor: Colors.transparent,
+      indicatorSize: TabBarIndicatorSize.tab,
+      indicator: ShapeDecoration(color: p.raised, shape: const StadiumBorder()),
+      labelColor: p.ink,
+      unselectedLabelColor: p.muted,
+      labelStyle: const TextStyle(fontFamily: 'Inter', fontSize: 15, fontWeight: FontWeight.w600),
+      unselectedLabelStyle: const TextStyle(fontFamily: 'Inter', fontSize: 15, fontWeight: FontWeight.w500),
+      overlayColor: WidgetStateProperty.all(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+    ),
+    dividerTheme: DividerThemeData(color: p.line, thickness: 0.6, space: 1),
     listTileTheme: ListTileThemeData(iconColor: p.muted, contentPadding: const EdgeInsets.symmetric(horizontal: 16)),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: p.raised,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       hintStyle: TextStyle(fontFamily: 'Inter', color: p.muted),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         borderSide: BorderSide(color: p.accent, width: 1.5),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        minimumSize: const Size(0, 44),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        minimumSize: const Size(0, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 22),
+        shape: const StadiumBorder(),
+        textStyle: const TextStyle(fontFamily: 'Inter', fontSize: 15.5, fontWeight: FontWeight.w600),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 44),
+        minimumSize: const Size(0, 48),
         foregroundColor: p.ink,
-        side: BorderSide(color: p.line),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        backgroundColor: p.raised,
+        side: BorderSide.none,
+        shape: const StadiumBorder(),
       ),
     ),
     floatingActionButtonTheme: FloatingActionButtonThemeData(
@@ -165,14 +178,14 @@ ThemeData buildTheme(Brightness brightness) {
       foregroundColor: p.onAccent,
       elevation: 0,
       highlightElevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: const StadiumBorder(),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: p.surface,
+      backgroundColor: p.background,
       surfaceTintColor: Colors.transparent,
-      indicatorColor: p.accent.withValues(alpha: 0.14),
+      indicatorColor: Colors.transparent,
       elevation: 0,
-      height: 64,
+      height: 66,
       labelTextStyle: WidgetStateProperty.resolveWith(
         (s) => TextStyle(
           fontFamily: 'Inter',
@@ -182,27 +195,29 @@ ThemeData buildTheme(Brightness brightness) {
         ),
       ),
       iconTheme: WidgetStateProperty.resolveWith(
-        (s) => IconThemeData(color: s.contains(WidgetState.selected) ? p.accent : p.muted),
+        (s) => IconThemeData(color: s.contains(WidgetState.selected) ? p.ink : p.muted, size: 25),
       ),
     ),
     navigationRailTheme: NavigationRailThemeData(
       backgroundColor: p.surface,
-      indicatorColor: p.accent.withValues(alpha: 0.14),
-      selectedIconTheme: IconThemeData(color: p.accent),
+      indicatorColor: p.raised,
+      selectedIconTheme: IconThemeData(color: p.ink),
       unselectedIconTheme: IconThemeData(color: p.muted),
       selectedLabelTextStyle: TextStyle(fontFamily: 'Inter', color: p.ink, fontWeight: FontWeight.w600, fontSize: 13),
       unselectedLabelTextStyle: TextStyle(fontFamily: 'Inter', color: p.muted, fontSize: 13),
     ),
     chipTheme: ChipThemeData(
       backgroundColor: p.raised,
-      selectedColor: p.accent,
-      secondaryLabelStyle: TextStyle(fontFamily: 'Inter', color: p.onAccent, fontWeight: FontWeight.w600),
+      selectedColor: p.ink,
+      checkmarkColor: p.background,
+      secondaryLabelStyle: TextStyle(fontFamily: 'Inter', color: p.background, fontWeight: FontWeight.w600),
       side: BorderSide.none,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape: const StadiumBorder(),
+      showCheckmark: false,
       labelStyle: TextStyle(
         fontFamily: 'Inter',
-        fontWeight: FontWeight.w500,
-        color: WidgetStateColor.resolveWith((s) => s.contains(WidgetState.selected) ? p.onAccent : p.ink),
+        fontWeight: FontWeight.w600,
+        color: WidgetStateColor.resolveWith((s) => s.contains(WidgetState.selected) ? p.background : p.ink),
       ),
     ),
     snackBarTheme: SnackBarThemeData(
@@ -210,29 +225,28 @@ ThemeData buildTheme(Brightness brightness) {
       backgroundColor: p.ink,
       contentTextStyle: TextStyle(fontFamily: 'Inter', color: p.background),
       actionTextColor: brightness == Brightness.dark ? Palette.light.accent : Palette.dark.accent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
     bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: p.surface,
       surfaceTintColor: Colors.transparent,
       showDragHandle: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: p.surface,
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
     ),
     popupMenuTheme: PopupMenuThemeData(
       color: p.surface,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: p.line),
+        borderRadius: BorderRadius.circular(18),
       ),
     ),
     checkboxTheme: CheckboxThemeData(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      shape: const CircleBorder(),
       side: BorderSide(color: p.muted, width: 1.5),
     ),
     pageTransitionsTheme: const PageTransitionsTheme(

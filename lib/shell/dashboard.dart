@@ -1041,8 +1041,8 @@ class _QuickAdd extends StatelessWidget {
                               width: small ? 40 : 46,
                               height: small ? 40 : 46,
                               decoration: BoxDecoration(
-                                color: color.withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(14),
+                                color: color.withValues(alpha: 0.16),
+                                shape: BoxShape.circle,
                               ),
                               child: Icon(icon, color: color),
                             ),

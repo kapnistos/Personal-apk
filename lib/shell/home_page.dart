@@ -59,13 +59,8 @@ class _HomePageState extends State<HomePage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            DateFormat('EEEE d MMMM').format(now).toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 13,
-                              letterSpacing: 0.8,
-                              fontWeight: FontWeight.w600,
-                              color: p.muted,
-                            ),
+                            DateFormat('EEEE d MMMM').format(now),
+                            style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w500, color: p.muted),
                           ),
                           const SizedBox(height: 4),
                           Text(

@@ -191,10 +191,7 @@ class AccountCard extends StatelessWidget {
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
-                    child: Text(
-                      money(state.balance, currency),
-                      style: const TextStyle(color: fg, fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: -0.5),
-                    ),
+                    child: BigAmount(money(state.balance, currency), size: 32, color: fg),
                   ),
                 ] else
                   OutlinedButton(

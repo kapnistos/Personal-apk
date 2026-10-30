@@ -51,13 +51,8 @@ class SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        text.toUpperCase(),
-        style: TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.9,
-          color: Palette.of(context).muted,
-        ),
+        text,
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Palette.of(context).muted),
       );
 }
 
@@ -82,7 +77,7 @@ class EmptyState extends StatelessWidget {
               Container(
                 width: 64,
                 height: 64,
-                decoration: BoxDecoration(color: p.raised, borderRadius: BorderRadius.circular(20)),
+                decoration: BoxDecoration(color: p.raised, shape: BoxShape.circle),
                 child: Icon(icon, size: 30, color: p.muted),
               ),
               const SizedBox(height: 16),
@@ -98,7 +93,7 @@ class EmptyState extends StatelessWidget {
   }
 }
 
-/// Rounded square with an icon, in a mini-app's colour.
+/// A flat circle with an icon, in a mini-app's colour.
 class AppGlyph extends StatelessWidget {
   const AppGlyph({super.key, required this.icon, required this.color, this.size = 48});
   final IconData icon;
@@ -112,14 +107,42 @@ class AppGlyph extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(size * 0.3),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color.lerp(color, Colors.white, 0.12)!, color],
-        ),
+        shape: BoxShape.circle,
       ),
-      child: Icon(icon, color: Colors.white, size: size * 0.5),
+      child: Icon(icon, color: Colors.white, size: size * 0.48),
+    );
+  }
+}
+
+/// A large money figure with the cents set smaller, the way bank apps show a balance.
+class BigAmount extends StatelessWidget {
+  const BigAmount(this.text, {super.key, this.size = 40, this.color});
+  final String text;
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? Palette.of(context).ink;
+    final m = RegExp(r'^(.*?)([.,]\d{2})(\D*)$').firstMatch(text);
+    final style = TextStyle(
+      fontSize: size,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -size * 0.03,
+      color: c,
+      height: 1.1,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    if (m == null) return Text(text, style: style, maxLines: 1);
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(text: m[1]),
+          TextSpan(text: '${m[2]}${m[3]}', style: style.copyWith(fontSize: size * 0.6, letterSpacing: 0)),
+        ],
+      ),
+      style: style,
+      maxLines: 1,
     );
   }
 }
