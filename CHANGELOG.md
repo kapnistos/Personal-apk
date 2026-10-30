@@ -4,6 +4,9 @@ Builds are numbered by the CI run. Notable changes, newest first.
 
 ## October 2026
 
+### Fixes
+- Empty screens scroll instead of overflowing on small phones.
+
 ### Simpler AI tab, and OpenRouter
 - The AI tab is now the chat itself: a Chat or Hub agent switch, the conversation and a box to type in. A small model chip at the top opens AI settings. There is a Stop button while it thinks, a copy button under each answer, and a New chat button.
 - OpenRouter: one key, any model. Paste any API key and Hub works out whose it is (OpenRouter, Anthropic, OpenAI, DeepSeek or Groq), checks it and is ready. With OpenRouter you pick from its live model list, with prices, and a few suggestions on top.
