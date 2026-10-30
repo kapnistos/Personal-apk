@@ -17,7 +17,6 @@ import '../apps/spaces/my_spaces.dart';
 import '../apps/todo/todo_page.dart';
 import '../apps/wallet/insights.dart' show SpendPlan, spendTargetKey;
 import '../apps/wallet/wallet_model.dart';
-import '../apps/wallet/wallet_page.dart';
 import '../apps/weather/weather_page.dart';
 import '../apps/weather/weather_service.dart';
 import '../core/db/database.dart';
@@ -29,7 +28,13 @@ import '../core/widgets.dart';
 import 'dashboard.dart';
 import 'me_page.dart';
 import 'search_page.dart';
-import 'shell.dart' show navFogHeight;
+import 'shell.dart' show ShellTab, frostedBlur, frostedEdge, frostedGlass, navFogHeight;
+
+/// How tall the ask bar (and, while arranging, the Add and Done bar) at the bottom of Home is.
+const homeAskHeight = 52.0;
+
+/// How far a snack bar shown on Home floats up, so it sits above the ask bar instead of on it.
+const homeSnackLift = navFogHeight + homeAskHeight + 12;
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.onOpenTab});
@@ -43,8 +48,6 @@ class _HomePageState extends State<HomePage> {
   final _dash = GlobalKey<DashboardState>();
   final _ask = TextEditingController();
   bool _editing = false;
-
-  static const _askHeight = 56.0;
 
   @override
   void dispose() {
@@ -148,40 +151,20 @@ class _HomePageState extends State<HomePage> {
     final p = Palette.of(context);
     final now = DateTime.now();
     if (_editing) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      // Add and Done sit in the bar at the bottom, so they stay in reach while you scroll.
+      return Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Edit home',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-              ),
-              FilledButton(onPressed: () => setState(() => _editing = false), child: const Text('Done')),
-            ],
+          Expanded(
+            child: Text(
+              'Edit home',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _RoundButton(
-                icon: Icons.restart_alt_rounded,
-                tooltip: 'Back to the starting layout',
-                onTap: _confirmReset,
-              ),
-              const SizedBox(width: 8),
-              _RoundButton(icon: Icons.apps_rounded, tooltip: 'Choose apps', onTap: () => pickVisibleApps(context)),
-              const Spacer(),
-              _RoundButton(
-                icon: Icons.add_rounded,
-                tooltip: 'Add a widget',
-                onTap: () => _dash.currentState?.addWidget(),
-              ),
-            ],
-          ),
+          _RoundButton(icon: Icons.restart_alt_rounded, tooltip: 'Back to the starting layout', onTap: _confirmReset),
+          const SizedBox(width: 8),
+          _RoundButton(icon: Icons.apps_rounded, tooltip: 'Choose apps', onTap: () => pickVisibleApps(context)),
         ],
       );
     }
@@ -221,9 +204,9 @@ class _HomePageState extends State<HomePage> {
         const SizedBox(height: 18),
         const WeatherHero(),
         _TodayStrip(
-          onCalendar: () => widget.onOpenTab(1),
-          onTasks: () => widget.onOpenTab(2),
-          onWallet: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WalletPage())),
+          onCalendar: () => widget.onOpenTab(ShellTab.calendar),
+          onTasks: () => widget.onOpenTab(ShellTab.todo),
+          onWallet: () => widget.onOpenTab(ShellTab.wallet),
         ),
         const SizedBox(height: 6),
         const AppGrid(),
@@ -250,7 +233,7 @@ class _HomePageState extends State<HomePage> {
             SafeArea(
               bottom: false,
               child: ListView(
-                padding: EdgeInsets.fromLTRB(16, 12, 16, askBottom + _askHeight + 24),
+                padding: EdgeInsets.fromLTRB(16, 12, 16, askBottom + homeAskHeight + 24),
                 children: [
                   ContentWidth(
                     maxWidth: 960,
@@ -284,13 +267,13 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
-            if (!_editing) ...[
+            ...[
               // A soft fog behind the ask bar, so the page fades out under it as it does under the bottom bar.
               Positioned(
                 left: 0,
                 right: 0,
                 bottom: underBar ? pad - navFogHeight : 0,
-                height: (underBar ? navFogHeight + 2 : askBottom) + _askHeight + 30,
+                height: (underBar ? navFogHeight + 2 : askBottom) + homeAskHeight + 30,
                 child: IgnorePointer(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
@@ -308,7 +291,15 @@ class _HomePageState extends State<HomePage> {
                 right: 16,
                 bottom: askBottom,
                 child: ContentWidth(
-                  child: _QuickAsk(controller: _ask, height: _askHeight, onSend: _sendAsk),
+                  // While arranging, the same glass holds Add and Done, so they are in reach however far down
+                  // you are.
+                  child: _editing
+                      ? _EditBar(
+                          height: homeAskHeight,
+                          onAdd: () => _dash.currentState?.addWidget(),
+                          onDone: () => setState(() => _editing = false),
+                        )
+                      : _QuickAsk(controller: _ask, height: homeAskHeight, onSend: _sendAsk),
                 ),
               ),
             ],
@@ -349,7 +340,83 @@ class _RoundButton extends StatelessWidget {
   }
 }
 
-/// "Add a task, expense or question": one line that goes straight to the Hub agent.
+/// "Add a task, expense or question": one line that goes straight to the Hub agent. It is made of the same
+/// frosted glass as the bottom bar and set in the same type as the bar's labels, so the two read as one piece.
+/// A pill of the bottom bar's frosted glass.
+class _Glass extends StatelessWidget {
+  const _Glass({required this.height, required this.padding, required this.child});
+  final double height;
+  final EdgeInsets padding;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(height / 2);
+    return ClipRRect(
+      borderRadius: radius,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: frostedBlur, sigmaY: frostedBlur),
+        child: Container(
+          height: height,
+          padding: padding,
+          decoration: BoxDecoration(
+            color: frostedGlass(context),
+            borderRadius: radius,
+            border: Border.fromBorderSide(frostedEdge(context)),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+/// Add and Done while Home is being arranged.
+class _EditBar extends StatelessWidget {
+  const _EditBar({required this.height, required this.onAdd, required this.onDone});
+  final double height;
+  final VoidCallback onAdd;
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final label = Theme.of(context).navigationBarTheme.labelTextStyle?.resolve(const {}) ?? const TextStyle();
+    return _Glass(
+      height: height,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Tooltip(
+                message: 'Add a widget',
+                excludeFromSemantics: true,
+                child: TextButton.icon(
+                  onPressed: onAdd,
+                  style: TextButton.styleFrom(foregroundColor: p.ink, textStyle: label.copyWith(fontSize: 15)),
+                  icon: const Icon(Icons.add_rounded, size: 20),
+                  label: const Text('Add a widget', maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: onDone,
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(0, 40),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+            ),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _QuickAsk extends StatelessWidget {
   const _QuickAsk({required this.controller, required this.height, required this.onSend});
   final TextEditingController controller;
@@ -359,63 +426,71 @@ class _QuickAsk extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(height / 2),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          height: height,
-          padding: const EdgeInsets.only(left: 18, right: 6),
-          decoration: BoxDecoration(
-            color: (dark ? p.raised : p.surface).withValues(alpha: 0.86),
-            borderRadius: BorderRadius.circular(height / 2),
-            border: Border.all(color: p.line.withValues(alpha: dark ? 0.9 : 1), width: 0.8),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.auto_awesome_outlined, color: p.muted, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  textInputAction: TextInputAction.send,
-                  textCapitalization: TextCapitalization.sentences,
-                  onSubmitted: (_) => onSend(),
-                  style: const TextStyle(fontSize: 16),
-                  decoration: InputDecoration(
-                    hintText: 'Add a task, expense or question',
-                    hintMaxLines: 1,
-                    hintStyle: TextStyle(color: p.muted, fontSize: 16, overflow: TextOverflow.ellipsis),
-                    filled: false,
-                    isCollapsed: true,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                  ),
-                ),
+    final label = Theme.of(context).navigationBarTheme.labelTextStyle?.resolve(const {}) ?? const TextStyle();
+    return _Glass(
+      height: height,
+      padding: const EdgeInsets.only(left: 16, right: 7),
+      child: Row(
+        children: [
+          Icon(Icons.auto_awesome_outlined, color: p.muted, size: 19),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              textInputAction: TextInputAction.send,
+              textCapitalization: TextCapitalization.sentences,
+              onSubmitted: (_) => onSend(),
+              style: label.copyWith(fontSize: 14, color: p.ink),
+              decoration: InputDecoration(
+                hintText: 'Add a task, expense or question',
+                hintMaxLines: 1,
+                hintStyle: label.copyWith(fontSize: 14, color: p.muted, overflow: TextOverflow.ellipsis),
+                filled: false,
+                isCollapsed: true,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
               ),
-              const SizedBox(width: 6),
-              Tooltip(
+            ),
+          ),
+          const SizedBox(width: 4),
+          // A quiet arrow until there is something to send; then it fills in.
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (context, v, _) {
+              final ready = v.text.trim().isNotEmpty;
+              return Tooltip(
                 message: 'Ask Hub',
                 child: Semantics(
                   button: true,
                   child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: onSend,
                     child: Pressable(
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(color: p.ink, shape: BoxShape.circle),
-                        child: Icon(Icons.arrow_upward_rounded, color: p.background, size: 23),
+                      child: SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: Center(
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 160),
+                            curve: Curves.easeOutCubic,
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: ready ? p.ink : Colors.transparent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(Icons.arrow_upward_rounded, color: ready ? p.background : p.muted, size: 21),
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              );
+            },
           ),
-        ),
+        ],
       ),
     );
   }
@@ -927,9 +1002,71 @@ class WeatherGlance extends StatelessWidget {
       stream: context.db.watchCities(),
       builder: (context, snap) {
         final city = selectedCity(context, snap.data ?? const <City>[]);
-        if (city == null) return const SizedBox.shrink();
+        // Without a city the widget still shows, as a card that leads to choosing one.
+        if (city == null) return _NoCityCard(compact: compact, loading: !snap.hasData);
         return WeatherGlanceCard(key: ValueKey(city.id), city: city, compact: compact);
       },
+    );
+  }
+}
+
+class _NoCityCard extends StatelessWidget {
+  const _NoCityCard({required this.compact, required this.loading});
+  final bool compact;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final dim = Colors.white.withValues(alpha: 0.8);
+    return Material(
+      borderRadius: BorderRadius.circular(22),
+      clipBehavior: Clip.antiAlias,
+      child: Ink(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF5B7A99), Color(0xFF8AA4BD)],
+          ),
+        ),
+        child: InkWell(
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WeatherPage())),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Weather',
+                        style: TextStyle(color: dim, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const Icon(Icons.wb_sunny_rounded, color: Colors.white, size: 24),
+                  ],
+                ),
+                if (compact) const Spacer() else const SizedBox(height: 14),
+                Text(
+                  loading ? '--' : 'Choose a city',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w600, height: 1.2),
+                ),
+                if (!loading)
+                  Text(
+                    'Tap to add one',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: dim, fontSize: 13),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
