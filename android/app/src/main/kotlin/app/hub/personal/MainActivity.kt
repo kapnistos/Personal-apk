@@ -1,4 +1,4 @@
-package com.georgios.hub
+package app.hub.personal
 
 import io.flutter.embedding.android.FlutterActivity
 

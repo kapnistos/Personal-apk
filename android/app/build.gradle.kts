@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.georgios.hub"
+    namespace = "app.hub.personal"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -16,7 +16,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.georgios.hub"
+        applicationId = "app.hub.personal"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

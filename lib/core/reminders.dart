@@ -84,7 +84,7 @@ class Reminders {
           android: AndroidInitializationSettings('ic_stat_hub'),
           windows: WindowsInitializationSettings(
             appName: 'Hub',
-            appUserModelId: 'Georgios.Hub',
+            appUserModelId: 'Hub.App',
             guid: '6a1f4c9e-8b2d-4f3a-9c7e-2d5b8a1e0f43',
           ),
         ),
