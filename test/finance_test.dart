@@ -11,8 +11,10 @@ void main() {
     expect(plan.daysLeft, 22);
     expect(plan.left, 90000);
     expect(plan.perDay, 4090);
-    expect(plan.expectedByNow, (150000 * 10 / 31).round());
-    expect(plan.paceDiff, plan.expectedByNow - 60000);
+    // Bills to come are set aside first; only the rest is spread over the days.
+    expect(plan.everydayBudget, 130000);
+    expect(plan.expectedByNow, (130000 * 10 / 31).round());
+    expect(plan.paceDiff, plan.expectedByNow - 40000);
     expect(plan.over, isFalse);
   });
 
@@ -33,9 +35,7 @@ void main() {
     expect(roundUpCents(340), 60);
     expect(roundUpCents(500), 0);
     final db = AppDatabase(NativeDatabase.memory());
-    final goal = await db.saveGoal(
-      SavingsGoalsCompanion.insert(name: 'Trip', targetCents: 100000, color: 0xFF000000),
-    );
+    final goal = await db.saveGoal(SavingsGoalsCompanion.insert(name: 'Trip', targetCents: 100000, color: 0xFF000000));
     expect(await applyRoundUp(db, '$goal', 1234, 'Coffee'), 66);
     expect(await applyRoundUp(db, '', 1234, 'Coffee'), 0);
     expect(await applyRoundUp(db, '999', 1234, 'Coffee'), 0);
@@ -54,9 +54,9 @@ void main() {
     );
     final goal = await db.saveGoal(SavingsGoalsCompanion.insert(name: 'Fund', targetCents: 1, color: 0));
     await db.addMove(goal, 50000);
-    await db.into(db.holdings).insert(
-      HoldingsCompanion.insert(name: 'ETF', units: 2, investedCents: 10000, price: 75.5),
-    );
+    await db
+        .into(db.holdings)
+        .insert(HoldingsCompanion.insert(name: 'ETF', units: 2, investedCents: 10000, price: 75.5));
     final w = await computeNetWorth(db, now: DateTime(2026, 10, 30));
     expect((w.cards, w.savings, w.investments, w.total), (100000, 50000, 15100, 165100));
     await db.close();

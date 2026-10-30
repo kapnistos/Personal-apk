@@ -9,7 +9,7 @@ import 'package:hub/core/format.dart';
 import 'package:hub/core/settings.dart';
 
 /// Builds [page] on a small 320 x 640 phone with some wallet data already in place.
-Future<void> pumpSmall(WidgetTester tester, Widget page, Future<void> Function() check) async {
+Future<void> pumpSmall(WidgetTester tester, Widget page, Future<void> Function() check, {String? target}) async {
   tester.view.physicalSize = const Size(320, 640);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -18,6 +18,7 @@ Future<void> pumpSmall(WidgetTester tester, Widget page, Future<void> Function()
   final now = DateTime.now();
   await tester.runAsync(() async {
     await settings.load();
+    if (target != null) await settings.setRaw('wallet.target', target);
     await db.setBudget('Groceries', 20000);
     for (var i = 0; i < 6; i++) {
       await db.addEntry(
@@ -71,4 +72,26 @@ void main() {
       expect(find.text('Gym'), findsWidgets);
     });
   });
+
+  for (final target in [null, '150000']) {
+    testWidgets('day-by-day pace card with ${target == null ? 'no budget' : 'a budget'} fits large text', (
+      tester,
+    ) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await pumpSmall(tester, const WalletPage(), target: target, () async {
+        final list = find.descendant(of: find.byType(CustomScrollView), matching: find.byType(Scrollable)).first;
+        await tester.scrollUntilVisible(find.text('No-spend days'), 200, scrollable: list);
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        expect(find.text('Day by day'), findsOneWidget);
+        if (target == null) {
+          expect(find.text('Set a monthly budget'), findsOneWidget);
+        } else {
+          expect(find.text('Safe to spend today'), findsOneWidget);
+          expect(find.textContaining('Projected by'), findsOneWidget);
+        }
+      });
+    });
+  }
 }

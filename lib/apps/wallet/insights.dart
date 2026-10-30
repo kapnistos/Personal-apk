@@ -9,45 +9,19 @@ import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'accounts_page.dart' show AccountState;
+import 'pace.dart';
 import 'wallet_logic.dart';
 import 'wallet_model.dart';
+
+export 'pace.dart';
 
 /// Raw settings keys for the wallet's targets.
 const spendTargetKey = 'wallet.target';
 const roundUpKey = 'wallet.roundup';
 
-/// How this month is going against a monthly spending target.
-class SpendPlan {
-  SpendPlan({required this.target, required this.spent, required this.billsAhead, required DateTime now}) {
-    final today = dateOnly(now);
-    final monthStart = DateTime(today.year, today.month);
-    final monthEnd = DateTime(today.year, today.month + 1);
-    daysInMonth = daysBetween(monthStart, monthEnd);
-    daysLeft = daysBetween(today, monthEnd); // Today counts as a day still to spend.
-    left = target - spent - billsAhead;
-    perDay = daysLeft == 0 ? 0 : (left / daysLeft).floor();
-    final dayOfMonth = daysInMonth - daysLeft + 1;
-    // Where spending "should" be by the end of today if spread evenly.
-    expectedByNow = (target * dayOfMonth / daysInMonth).round();
-  }
-
-  final int target;
-  final int spent;
-
-  /// Recurring payments still to leave this month.
-  final int billsAhead;
-  late final int daysInMonth;
-  late final int daysLeft;
-  late final int left;
-  late final int perDay;
-  late final int expectedByNow;
-
-  /// Positive when spending (bills to come included) is under the even pace, negative when over it.
-  int get paceDiff => expectedByNow - spent - billsAhead;
-  bool get over => left < 0;
-  double get usedFraction => target <= 0 ? 0 : ((spent + billsAhead) / target).clamp(0, 1).toDouble();
-  double get paceFraction => target <= 0 ? 0 : (expectedByNow / target).clamp(0, 1).toDouble();
-}
+/// Amber for "over pace": a heads-up, not yet a problem. Darker on light grounds so text stays readable.
+Color paceAmber(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark ? const Color(0xFFF0A23B) : const Color(0xFFB5650D);
 
 /// One category that is noticeably different from the last three months.
 class CategoryInsight {
@@ -218,7 +192,8 @@ class SpendingHero extends StatelessWidget {
           _Amount(money(spentSoFar, currency)),
           const SizedBox(height: 12),
           _StatusLine(
-            good: diff >= 0,
+            color: diff >= 0 ? Palette.of(context).positive : Palette.of(context).danger,
+            icon: diff >= 0 ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded,
             strong: diff >= 0 ? '${money(diff, currency)} under budget' : '${money(-diff, currency)} over budget',
           ),
           const SizedBox(height: 20),
@@ -236,15 +211,23 @@ class SpendingHero extends StatelessWidget {
     return StreamBuilder<List<Subscription>>(
       stream: context.db.watchSubscriptions(),
       builder: (context, snap) {
-        final end = DateTime(now.year, now.month + 1);
-        final today = dateOnly(now);
-        final billsAhead = (snap.data ?? const <Subscription>[])
-            .where((s) => s.active && s.kind.sign < 0 && !s.nextDate.isBefore(today) && s.nextDate.isBefore(end))
-            .fold<int>(0, (t, s) => t + s.amountCents);
-        // Booked recurring payments are already entries; count only what hasn't been booked.
-        final plan = SpendPlan(target: target, spent: spentSoFar, billsAhead: billsAhead, now: now);
+        final bills = billsLeftThisMonth(snap.data ?? const <Subscription>[], now);
+        // Booked recurring payments are already entries (and move nextDate on), so they are not counted twice.
+        final plan = SpendPlan(
+          target: target,
+          spent: spentSoFar,
+          billsAhead: bills.cents,
+          billsPaid: fixedCostsBooked(monthEntries, now),
+          now: now,
+        );
         final pace = plan.paceDiff;
         final p = Palette.of(context);
+        final (color, strong) = switch (plan.pace) {
+          SpendPace.under => (p.positive, '${money(pace, currency)} under pace'),
+          SpendPace.onTrack => (p.positive, 'On track'),
+          SpendPace.ahead => (paceAmber(context), '${money(-pace, currency)} over pace'),
+          SpendPace.over => (p.danger, 'Over budget'),
+        };
         return _HeroShell(
           children: [
             _HeroTop(left: plan.over ? 'Over budget by' : 'Left to spend', right: 'of ${money(target, currency)}'),
@@ -252,11 +235,14 @@ class SpendingHero extends StatelessWidget {
             _Amount(money(plan.left.abs(), currency), color: plan.over ? p.danger : null),
             const SizedBox(height: 12),
             _StatusLine(
-              good: pace >= 0,
-              strong: pace >= 0 ? '${money(pace, currency)} under pace' : '${money(-pace, currency)} over pace',
+              color: color,
+              icon: plan.pace.index <= SpendPace.onTrack.index
+                  ? Icons.check_circle_outline_rounded
+                  : Icons.error_outline_rounded,
+              strong: strong,
               rest: [
                 if (!plan.over && plan.daysLeft > 0) '${money(plan.perDay, currency)} a day left',
-                if (billsAhead > 0) '${money(billsAhead, currency)} in bills to come',
+                if (plan.over && bills.cents > 0) '${money(bills.cents, currency)} in bills to come',
               ].join(' · '),
             ),
             const SizedBox(height: 20),
@@ -267,6 +253,7 @@ class SpendingHero extends StatelessWidget {
               budget: target,
               currency: currency,
               noSpendDays: free,
+              paceStart: plan.billsPaid,
             ),
           ],
         );
@@ -368,21 +355,21 @@ class _Amount extends StatelessWidget {
 
 /// "✓ €203.11 under pace · €130.58 a day left".
 class _StatusLine extends StatelessWidget {
-  const _StatusLine({required this.good, required this.strong, this.rest = ''});
-  final bool good;
+  const _StatusLine({required this.color, required this.icon, required this.strong, this.rest = ''});
+  final Color color;
+  final IconData icon;
   final String strong;
   final String rest;
 
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    final color = good ? p.positive : p.danger;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 1),
-          child: Icon(good ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded, size: 20, color: color),
+          child: Icon(icon, size: 20, color: color),
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -473,6 +460,7 @@ class _ChartBlock extends StatelessWidget {
     required this.budget,
     required this.currency,
     required this.noSpendDays,
+    this.paceStart = 0,
   });
   final DateTime month;
   final List<int> cumulative;
@@ -480,6 +468,9 @@ class _ChartBlock extends StatelessWidget {
   final int? budget;
   final String currency;
   final int noSpendDays;
+
+  /// Where the pace line starts: the bills already booked this month, so rent on the 1st is not "over".
+  final int paceStart;
 
   @override
   Widget build(BuildContext context) {
@@ -502,6 +493,7 @@ class _ChartBlock extends StatelessWidget {
                 cumulative: cumulative,
                 daysInMonth: daysInMonth,
                 budget: budget,
+                paceStart: paceStart,
                 budgetLabel: budget == null ? null : '${moneyWhole(budget!, currency)} budget',
                 labelStyle: small.copyWith(fontSize: scaler.scale(13)),
                 line: p.accent,
@@ -602,6 +594,7 @@ class SpendChartPainter extends CustomPainter {
     required this.grid,
     required this.dot,
     required this.dotRing,
+    this.paceStart = 0,
   });
   final List<int> cumulative;
   final int daysInMonth;
@@ -613,6 +606,7 @@ class SpendChartPainter extends CustomPainter {
   final Color grid;
   final Color dot;
   final Color dotRing;
+  final int paceStart;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -643,12 +637,12 @@ class SpendChartPainter extends CustomPainter {
       final by = y(budget!);
       canvas.drawLine(Offset(0, by), Offset(w, by), gridPaint);
       label!.paint(canvas, Offset(w - label.width, by - label.height - 4));
-      // Even pace: nothing on day 0, the whole budget by the last day.
+      // Even pace: the booked bills on day 0, the whole budget by the last day.
       final pacePaint = Paint()
         ..color = pace.withValues(alpha: 0.8)
         ..strokeWidth = 1.5
         ..strokeCap = StrokeCap.round;
-      final start = Offset(0, bottom);
+      final start = Offset(0, y(math.min(paceStart, budget!)));
       final end = Offset(w, by);
       final length = (end - start).distance;
       const dash = 5.0, gap = 4.0;
@@ -698,6 +692,7 @@ class SpendChartPainter extends CustomPainter {
   bool shouldRepaint(SpendChartPainter old) =>
       old.cumulative != cumulative ||
       old.budget != budget ||
+      old.paceStart != paceStart ||
       old.daysInMonth != daysInMonth ||
       old.line != line ||
       old.dot != dot ||
@@ -1042,7 +1037,8 @@ class PatternsCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             SizedBox(
-              height: 72,
+              // Bars plus a day label that grows with the text size.
+              height: 52 + MediaQuery.textScalerOf(context).scale(18),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [

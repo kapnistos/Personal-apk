@@ -36,8 +36,12 @@ class SavingsTab extends StatelessWidget {
           final goals = gSnap.data ?? const <SavingsGoal>[];
           final moves = mSnap.data ?? const <SavingsMove>[];
           final saved = <int, int>{};
+          final first = <int, DateTime>{};
           for (final m in moves) {
             saved[m.goalId] = (saved[m.goalId] ?? 0) + m.amountCents;
+            if (m.amountCents > 0 && (first[m.goalId] == null || m.date.isBefore(first[m.goalId]!))) {
+              first[m.goalId] = m.date;
+            }
           }
           final total = saved.values.fold<int>(0, (a, b) => a + b);
           final now = DateTime.now();
@@ -78,7 +82,7 @@ class SavingsTab extends StatelessWidget {
                 ContentWidth(
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 10),
-                    child: GoalCard(goal: g, saved: saved[g.id] ?? 0, currency: currency),
+                    child: GoalCard(goal: g, saved: saved[g.id] ?? 0, currency: currency, firstMove: first[g.id]),
                   ),
                 ),
               if (archived.isNotEmpty) ...[
@@ -163,11 +167,50 @@ class _TotalCard extends StatelessWidget {
   }
 }
 
+/// "On track", "€40 ahead" or "€120 behind" against an even pace from the day the goal was made.
+class _GoalTrack extends StatelessWidget {
+  const _GoalTrack({required this.track, required this.currency});
+  final GoalPace track;
+  final String currency;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final (color, text) = switch (track.state) {
+      GoalState.reached => (p.positive, 'Goal reached'),
+      GoalState.onTrack => (p.positive, 'On track'),
+      GoalState.ahead => (p.positive, '${money(track.gap, currency)} ahead of plan'),
+      GoalState.behind => (paceAmber(context), '${money(-track.gap, currency)} behind plan'),
+    };
+    return Row(
+      children: [
+        Icon(
+          track.state == GoalState.behind ? Icons.error_outline_rounded : Icons.check_circle_outline_rounded,
+          size: 16,
+          color: color,
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class GoalCard extends StatelessWidget {
-  const GoalCard({super.key, required this.goal, required this.saved, required this.currency});
+  const GoalCard({super.key, required this.goal, required this.saved, required this.currency, this.firstMove});
   final SavingsGoal goal;
   final int saved;
   final String currency;
+
+  /// The earliest money put in, when it predates the goal itself (an imported or back-dated move).
+  final DateTime? firstMove;
 
   @override
   Widget build(BuildContext context) {
@@ -175,6 +218,13 @@ class GoalCard extends StatelessWidget {
     final color = Color(goal.color);
     final ratio = goal.targetCents <= 0 ? 0.0 : (saved / goal.targetCents).clamp(0.0, 1.0);
     final left = goal.targetCents - saved;
+    final track = goalPace(
+      target: goal.targetCents,
+      saved: saved,
+      created: firstMove != null && firstMove!.isBefore(goal.createdAt) ? firstMove! : goal.createdAt,
+      deadline: goal.deadline,
+      now: DateTime.now(),
+    );
     String? pace;
     if (goal.deadline != null && left > 0) {
       final months = monthsLeft(goal.deadline!);
@@ -214,8 +264,10 @@ class GoalCard extends StatelessWidget {
                 ),
                 if (left <= 0)
                   Text('Goal reached', style: TextStyle(color: p.positive, fontSize: 14))
-                else if (pace != null)
-                  Text(pace, style: TextStyle(color: p.muted, fontSize: 14)),
+                else ...[
+                  if (track != null) ...[const SizedBox(height: 2), _GoalTrack(track: track, currency: currency)],
+                  if (pace != null) Text(pace, style: TextStyle(color: p.muted, fontSize: 14)),
+                ],
                 const SizedBox(height: 6),
                 Row(
                   children: [

@@ -16,6 +16,7 @@ import 'bank_import.dart';
 import 'insights.dart';
 import 'investing_page.dart';
 import 'month_bar.dart' show pickMonth;
+import 'pace_card.dart';
 import 'savings_page.dart';
 import 'year_page.dart';
 import 'subscriptions_page.dart';
@@ -390,6 +391,7 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
               ),
               block(const _Actions(), bottom: 20),
               if (isCurrent) block(_AccountsList(currency: currency), bottom: 20),
+              block(PaceCard(month: _month, monthEntries: all, currency: currency), bottom: 20),
               block(_InOut(summary: summary, currency: currency)),
               block(_Trend(month: _month, currency: currency, onPick: _go)),
               if (isCurrent) block(_Upcoming(currency: currency)),
@@ -801,7 +803,8 @@ class _Trend extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(
-                  height: 116,
+                  // Bars plus two labels that grow with the text size.
+                  height: 76 + MediaQuery.textScalerOf(context).scale(38),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
