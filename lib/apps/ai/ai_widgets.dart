@@ -191,3 +191,104 @@ class AiLabel extends StatelessWidget {
     ),
   );
 }
+
+/// A model's answer as styled text: **bold**, *italic*, `code`, headings, lists and code blocks become
+/// type instead of stray symbols. One span tree, so the whole answer stays selectable and copyable.
+TextSpan aiMarkdown(String text, {required TextStyle base, required Color codeBackground}) {
+  final mono = base.copyWith(fontFamily: 'monospace', fontSize: (base.fontSize ?? 16) * 0.88);
+  final spans = <InlineSpan>[];
+  final lines = text.replaceAll('\r\n', '\n').split('\n');
+  var inCode = false;
+  var first = true;
+  void newline() {
+    if (!first) spans.add(const TextSpan(text: '\n'));
+    first = false;
+  }
+
+  for (final raw in lines) {
+    final line = raw.trimRight();
+    if (line.trimLeft().startsWith('```')) {
+      inCode = !inCode;
+      continue;
+    }
+    if (inCode) {
+      newline();
+      spans.add(
+        TextSpan(
+          text: line,
+          style: mono.copyWith(backgroundColor: codeBackground),
+        ),
+      );
+      continue;
+    }
+    newline();
+    final heading = RegExp(r'^\s{0,3}#{1,6}\s+(.*)$').firstMatch(line);
+    if (heading != null) {
+      spans.add(
+        TextSpan(
+          children: _inline(heading[1]!, base, mono, codeBackground),
+          style: base.copyWith(fontWeight: FontWeight.w700),
+        ),
+      );
+      continue;
+    }
+    final bullet = RegExp(r'^(\s*)[-*•]\s+(.*)$').firstMatch(line);
+    if (bullet != null) {
+      final indent = bullet[1]!.length >= 2 ? '      ' : '';
+      spans.add(TextSpan(text: '$indent•  ', style: base));
+      spans.addAll(_inline(bullet[2]!, base, mono, codeBackground));
+      continue;
+    }
+    final numbered = RegExp(r'^\s*(\d{1,3})[.)]\s+(.*)$').firstMatch(line);
+    if (numbered != null) {
+      spans.add(
+        TextSpan(
+          text: '${numbered[1]}.  ',
+          style: base.copyWith(fontWeight: FontWeight.w600),
+        ),
+      );
+      spans.addAll(_inline(numbered[2]!, base, mono, codeBackground));
+      continue;
+    }
+    if (RegExp(r'^\s*(-{3,}|\*{3,}|_{3,})\s*$').hasMatch(line)) continue;
+    spans.addAll(_inline(line.replaceFirst(RegExp(r'^\s*>\s?'), ''), base, mono, codeBackground));
+  }
+  return TextSpan(style: base, children: spans);
+}
+
+final _inlinePattern = RegExp(
+  r'\*\*(.+?)\*\*|__(.+?)__|`([^`]+)`|(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?!\w)|(?<!\w)_(?!\s)(.+?)(?<!\s)_(?!\w)',
+);
+
+List<InlineSpan> _inline(String s, TextStyle base, TextStyle mono, Color codeBackground) {
+  final out = <InlineSpan>[];
+  var at = 0;
+  for (final m in _inlinePattern.allMatches(s)) {
+    if (m.start > at) out.add(TextSpan(text: s.substring(at, m.start)));
+    if (m[1] != null || m[2] != null) {
+      out.add(
+        TextSpan(
+          text: m[1] ?? m[2],
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      );
+    } else if (m[3] != null) {
+      out.add(
+        TextSpan(
+          text: m[3],
+          style: mono.copyWith(backgroundColor: codeBackground),
+        ),
+      );
+    } else {
+      out.add(
+        TextSpan(
+          text: m[4] ?? m[5],
+          style: const TextStyle(fontStyle: FontStyle.italic),
+        ),
+      );
+    }
+    at = m.end;
+  }
+  if (at < s.length) out.add(TextSpan(text: s.substring(at)));
+  return out;
+}

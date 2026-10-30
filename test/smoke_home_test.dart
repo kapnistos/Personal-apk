@@ -65,7 +65,7 @@ void main() {
             await settle();
             await tap(find.text('Hub agent'));
             await settle();
-            expect(find.text('Tell it what to add'), findsOneWidget);
+            expect(find.text('Ask your Hub'), findsOneWidget);
             await tap(find.text('Chat'));
             await settle();
             await tap(find.byTooltip('AI settings'));

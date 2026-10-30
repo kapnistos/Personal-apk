@@ -16,16 +16,8 @@ import 'package:hub/core/settings.dart';
 import 'package:hub/main.dart';
 import 'package:hub/shell/search_page.dart';
 
-import 'ai_test.dart' show anthropicOk, json;
+import 'ai_test.dart' show anthropicOk, json, settle;
 import 'widget_test.dart' show pumpWithDb;
-
-/// Lets database work started from the UI finish: real time for the queries, then a frame.
-Future<void> settle(WidgetTester tester) async {
-  for (var i = 0; i < 12; i++) {
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
-    await tester.pump(const Duration(milliseconds: 50));
-  }
-}
 
 void main() {
   test('the version under About matches pubspec.yaml', () {
@@ -34,12 +26,12 @@ void main() {
   });
 
   group('chat memory', () {
-    test('keeps the last 50 turns and survives bad data', () {
-      final turns = [for (var i = 0; i < 60; i++) SavedTurn(i.isEven ? 'user' : 'assistant', 'm$i')];
+    test('keeps the last 200 turns and survives bad data', () {
+      final turns = [for (var i = 0; i < 260; i++) SavedTurn(i.isEven ? 'user' : 'assistant', 'm$i')];
       final back = ChatMemory.decode(ChatMemory.encode(turns));
       expect(back.length, ChatMemory.limit);
-      expect(back.first.text, 'm10');
-      expect(back.last.text, 'm59');
+      expect(back.first.text, 'm60');
+      expect(back.last.text, 'm259');
       expect(ChatMemory.decode('not json'), isEmpty);
       expect(ChatMemory.decode('[{"r":1},{"r":"user","t":"ok"}]').single.text, 'ok');
     });
@@ -145,8 +137,15 @@ void main() {
 
         await tester.tap(find.byTooltip('New chat'));
         await tester.pump(const Duration(milliseconds: 300));
-        expect(find.text('Here is your plan.'), findsNothing);
+        expect(find.byType(SelectableText), findsNothing);
         expect(ChatMemory(settings).load(false), isEmpty);
+        // The old chat waits under Recent, and opens again from there.
+        expect(find.text('Recent'), findsOneWidget);
+        expect(ChatMemory(settings).list(agent: false).single.name, 'Plan my day');
+        await tester.tap(find.text('Here is your plan.'));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.byType(SelectableText), findsNWidgets(2));
+        expect(ChatMemory(settings).load(false).length, 2);
       },
     );
   });

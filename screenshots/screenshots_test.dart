@@ -11,6 +11,8 @@ import 'package:hub/apps/ai/ai_chat_page.dart';
 import 'package:hub/apps/ai/ai_page.dart';
 import 'package:hub/apps/ai/ai_service.dart';
 import 'package:hub/apps/ai/ai_settings_sheet.dart';
+import 'package:hub/apps/ai/ai_usage.dart';
+import 'package:hub/apps/ai/chat_history_page.dart';
 import 'package:hub/apps/ai/chat_memory.dart';
 import 'package:hub/core/edition.dart';
 import 'package:hub/apps/calendar/calendar_page.dart';
@@ -67,19 +69,60 @@ Future<void> seed(AppDatabase db, AppSettings settings) async {
       OpenRouterModel('anthropic/claude-haiku-4.5', 'Anthropic: Claude Haiku 4.5', context: 200000, inPrice: 1, outPrice: 5),
     ], DateTime.now()),
   );
-  await settings.setRaw(
-    ChatMemory.keyFor(false),
-    ChatMemory.encode(const [
-      SavedTurn('user', 'Plan my day'),
-      SavedTurn(
-        'assistant',
-        'You have a lecture at 10:00 and the report is due today. Do the report first thing, '
-            'then the lecture. Groceries after 17:00, and you are under budget this week.',
-      ),
-      SavedTurn('user', 'What did I spend this week?'),
-      SavedTurn('assistant', 'About €86 since Monday. Most of it on groceries and one dinner out.'),
-    ]),
-  );
+  // Saved chats: the open one in Chat, and older ones in History for both modes.
+  final memory = ChatMemory(settings);
+  final t0 = DateTime.now();
+  Future<void> chat(bool agent, String id, int hoursAgo, List<SavedTurn> turns, {String title = ''}) async {
+    final at = t0.subtract(Duration(hours: hoursAgo));
+    await memory.save(Conversation(id: id, agent: agent, title: title, created: at, updated: at, turns: turns));
+  }
+
+  await chat(false, 'shot-old-1', 24 * 9, const [
+    SavedTurn('user', 'Explain entropy like I am revising for an exam'),
+    SavedTurn('assistant', 'Entropy measures how many ways energy can be spread out.', inputTokens: 420, outputTokens: 260, cost: 0.0017),
+  ]);
+  await chat(false, 'shot-old-2', 30, const [
+    SavedTurn('user', 'Write a short reply to the landlord about the boiler'),
+    SavedTurn('assistant', 'Hi Mark, the boiler stopped again this morning. Could someone come by this week?', inputTokens: 380, outputTokens: 90, cost: 0.0008),
+  ]);
+  await chat(true, 'shot-agent-1', 3, const [
+    SavedTurn('user', 'What subscriptions do I pay for?'),
+    SavedTurn(
+      'assistant',
+      'Six recurring payments, about €1,104 a month. The big ones are rent (€950) and health insurance (€138).',
+      inputTokens: 2650,
+      outputTokens: 120,
+      cost: 0.0033,
+      tools: ['get_recurring'],
+    ),
+  ]);
+  await chat(false, 'shot-today', 0, const [
+    SavedTurn('user', 'Plan my day'),
+    SavedTurn(
+      'assistant',
+      'You have a lecture at **10:00** and the report is due today. Do the report first thing, '
+          'then the lecture.\n\n- Groceries after 17:00\n- You are under budget this week',
+      inputTokens: 597,
+      outputTokens: 114,
+      cost: 0.0012,
+      tools: ['get_calendar', 'get_tasks'],
+    ),
+    SavedTurn('user', 'What did I spend this week?'),
+    SavedTurn(
+      'assistant',
+      'About €86 since Monday. Most of it on groceries and one dinner out.',
+      inputTokens: 812,
+      outputTokens: 40,
+      cost: 0.0010,
+      tools: ['get_transactions'],
+    ),
+  ]);
+  await memory.setCurrent(false, 'shot-today');
+  final usage = AiUsage(settings);
+  for (final (days, i, o, c) in [(0, 1409, 154, 0.0022), (1, 380, 90, 0.0008), (9, 420, 260, 0.0017)]) {
+    await usage.record('anthropic/claude-haiku-4.5', i, o, c, at: t0.subtract(Duration(days: days)));
+  }
+  await usage.record('claude-code/sonnet', 5200, 640, null, at: t0.subtract(const Duration(days: 2)));
   final now = DateTime.now();
   final today = dateOnly(now);
   final week = today.subtract(Duration(days: today.weekday - 1));
@@ -394,6 +437,7 @@ void main() {
     'spaces': () => const SpacesPage(),
     'habits': () => const HabitsPage(),
     'agent': () => const AiChatPage(agent: true),
+    'history': () => const ChatHistoryPage(agent: false),
     'news': () => const NewsPage(),
     'savings': () => const WalletPage(initialTab: 1),
     'investing': () => const WalletPage(initialTab: 2),
@@ -406,7 +450,7 @@ void main() {
       for (final e in shots.entries) {
         if (device == 'desktop' && !['home', 'calendar', 'wallet', 'weather'].contains(e.key)) continue;
         if (e.key == 'dashboard' && device == 'desktop') continue;
-        if (dark && !['home', 'calendar', 'wallet', 'todo', 'subscriptions', 'dashboard', 'me', 'ai', 'chat', 'savings'].contains(e.key)) continue;
+        if (dark && !['home', 'calendar', 'wallet', 'todo', 'subscriptions', 'dashboard', 'me', 'ai', 'chat', 'history', 'agent', 'savings'].contains(e.key)) continue;
         testWidgets('$device ${dark ? 'dark' : 'light'} ${e.key}', (tester) async {
           // The whole home screen, top to bottom.
           tester.view.physicalSize = e.key == 'dashboard' ? Size(size.width, 7200) : size;
