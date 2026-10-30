@@ -93,20 +93,32 @@ class DashItem {
     if (date != null) 'date': DateFormat('yyyy-MM-dd').format(date!),
   };
 
-  static DashItem fromJson(Map<String, dynamic> j) => DashItem(
-    id: j['id'] as String,
-    type: j['type'] as String,
-    size: j['size'] as String? ?? 'l',
-    shape: j['shape'] as String? ?? 'rounded',
-    style: j['style'] as String? ?? 'card',
-    color: j['color'] as int?,
-    shortcuts: [
-      for (final s in (j['shortcuts'] as List?) ?? const []) Shortcut.fromJson((s as Map).cast<String, dynamic>()),
-    ],
-    label: j['label'] as String?,
-    text: j['text'] as String?,
-    date: DateTime.tryParse(j['date'] as String? ?? ''),
-  );
+  static DashItem fromJson(Map<String, dynamic> j) {
+    T? as<T>(Object? v) => v is T ? v : null;
+    return DashItem(
+      id: as<String>(j['id']) ?? '',
+      type: as<String>(j['type']) ?? '',
+      size: as<String>(j['size']) ?? 'l',
+      shape: dashShapes.containsKey(j['shape']) ? j['shape'] as String : 'rounded',
+      style: dashStyles.contains(j['style']) ? j['style'] as String : 'card',
+      color: as<int>(j['color']),
+      shortcuts: [
+        // One broken shortcut is left out rather than taking the whole widget with it.
+        for (final s in as<List>(j['shortcuts']) ?? const []) ?_tryShortcut(s),
+      ],
+      label: as<String>(j['label']),
+      text: as<String>(j['text']),
+      date: DateTime.tryParse(as<String>(j['date']) ?? ''),
+    );
+  }
+
+  static Shortcut? _tryShortcut(Object? j) {
+    try {
+      return j is Map ? Shortcut.fromJson(j.cast<String, dynamic>()) : null;
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 /// A kind of widget that can go on the home screen.
@@ -238,7 +250,11 @@ const _allKinds = [
   ], 'm'),
 ];
 
-DashKind kindOf(String type) => dashKinds.firstWhere((k) => k.type == type, orElse: () => dashKinds.first);
+DashKind? _maybeKind(String type) => dashKinds.where((k) => k.type == type).firstOrNull;
+
+/// The kind of a widget. A kind this build does not know gets a neutral stand-in, never another widget's look.
+DashKind kindOf(String type) =>
+    _maybeKind(type) ?? DashKind(type, 'Widget', '', Icons.widgets_outlined, 0xFF5F6B7A, const ['m'], 'm');
 
 /// What a new install shows.
 List<DashItem> defaultDashboard() => [
@@ -270,22 +286,59 @@ const _layoutKey = 'home.layout';
 const homeGreetingKey = 'home.greeting';
 const homeDensityKey = 'home.density';
 
-List<DashItem> loadDashboard(AppSettings s) {
-  final raw = s.raw(_layoutKey);
-  if (raw == null) return defaultDashboard();
-  try {
-    return [for (final j in jsonDecode(raw) as List) DashItem.fromJson((j as Map).cast<String, dynamic>())]
-        .where((i) => dashKinds.any((k) => k.type == i.type))
-        // Home draws the big weather card itself; a saved one would show the same forecast twice.
-        .where((i) => !(i.type == 'weather' && i.size == 'l'))
-        .toList();
-  } catch (_) {
-    return defaultDashboard();
+/// Widgets older versions had that Home now draws itself, above the widgets: search and the apps.
+const _retiredKinds = {'search', 'apps'};
+
+/// A saved layout: the widgets this build can show, and the ones it cannot ([kept]: a kind from a newer
+/// version, or one only the personal build offers). Those are written back untouched, so opening Home in
+/// another build never deletes them.
+class DashLayout {
+  DashLayout(this.items, [this.kept = const []]);
+  final List<DashItem> items;
+  final List<Map<String, dynamic>> kept;
+
+  /// Reads the saved layout. A broken entry is skipped on its own; only a layout that is not a list at all
+  /// falls back to the starting widgets.
+  static DashLayout read(AppSettings s) {
+    final raw = s.raw(_layoutKey);
+    if (raw == null) return DashLayout(defaultDashboard());
+    final Object? list;
+    try {
+      list = jsonDecode(raw);
+    } catch (_) {
+      return DashLayout(defaultDashboard());
+    }
+    if (list is! List) return DashLayout(defaultDashboard());
+    final items = <DashItem>[];
+    final kept = <Map<String, dynamic>>[];
+    final ids = <String>{};
+    for (final (n, j) in list.indexed) {
+      if (j is! Map) continue;
+      final map = j.cast<String, dynamic>();
+      final item = DashItem.fromJson(map);
+      if (item.type.isEmpty || _retiredKinds.contains(item.type)) continue;
+      // Home draws the big weather card itself; a saved one would show the same forecast twice.
+      if (item.type == 'weather' && item.size == 'l') continue;
+      if (_maybeKind(item.type) == null) {
+        kept.add(map);
+        continue;
+      }
+      // Every widget needs its own id: two the same would trip up moving them.
+      final id = item.id.isEmpty || ids.contains(item.id) ? 'r$n-${item.type}' : item.id;
+      ids.add(id);
+      items.add(id == item.id ? item : (DashItem.fromJson({...map, 'id': id})));
+    }
+    return DashLayout(items, kept);
   }
+
+  String encode() => jsonEncode([for (final i in items) i.toJson(), ...kept]);
 }
 
+List<DashItem> loadDashboard(AppSettings s) => DashLayout.read(s).items;
+
+/// Saves [items] as the layout, keeping any saved widgets this build cannot show.
 Future<void> saveDashboard(AppSettings s, List<DashItem> items) =>
-    s.setRaw(_layoutKey, jsonEncode([for (final i in items) i.toJson()]));
+    s.setRaw(_layoutKey, DashLayout(items, DashLayout.read(s).kept).encode());
 
 /// The home screen's widgets. Hold any of them (or tap Edit) to arrange; then tap one to restyle it, drag to move it.
 class Dashboard extends StatefulWidget {
@@ -298,7 +351,8 @@ class Dashboard extends StatefulWidget {
 }
 
 class DashboardState extends State<Dashboard> {
-  late List<DashItem> _items = loadDashboard(context.settings);
+  late DashLayout _read = DashLayout.read(context.settings);
+  late List<DashItem> _items = _read.items;
   late String? _layout = context.settings.raw(_layoutKey);
   String? _dragging;
 
@@ -309,14 +363,15 @@ class DashboardState extends State<Dashboard> {
     final raw = context.settings.raw(_layoutKey);
     if (raw != _layout && _dragging == null) {
       _layout = raw;
-      _items = loadDashboard(context.settings);
+      _read = DashLayout.read(context.settings);
+      _items = _read.items;
     }
   }
 
   void _save() {
     if (!mounted) return;
     setState(() {});
-    _layout = jsonEncode([for (final i in _items) i.toJson()]);
+    _layout = DashLayout(_items, _read.kept).encode();
     context.settings.setRaw(_layoutKey, _layout!);
   }
 
@@ -345,21 +400,37 @@ class DashboardState extends State<Dashboard> {
     HapticFeedback.lightImpact();
     _items.removeAt(at);
     _save();
-    showUndo(context, '${kindOf(item.type).title} removed', () {
+    void undo() {
       if (!mounted || _items.contains(item)) return;
       _items.insert(at.clamp(0, _items.length), item);
       _save();
-    });
+    }
+
+    // Floats above Home's bottom bar, so Add and Done stay reachable while it shows.
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('${kindOf(item.type).title} removed'),
+          action: SnackBarAction(label: 'Undo', onPressed: undo),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, homeSnackLift),
+        ),
+      );
   }
 
   /// Scrolls the page while a widget is dragged near the top or bottom edge.
   void _autoScroll(DragUpdateDetails d) {
     final position = Scrollable.maybeOf(context)?.position;
     if (position == null) return;
-    final h = MediaQuery.sizeOf(context).height;
+    // The edges of what you can see: below the status bar, above the bottom bar.
+    final pad = MediaQuery.paddingOf(context);
+    final top = pad.top;
+    final bottom = MediaQuery.sizeOf(context).height - pad.bottom;
     const edge = 80.0;
     final y = d.globalPosition.dy;
-    final step = y < edge ? -(edge - y) / 4 : (y > h - edge ? (y - (h - edge)) / 4 : 0.0);
+    final step = y < top + edge
+        ? -(top + edge - y).clamp(0, edge * 2) / 4
+        : (y > bottom - edge ? (y - (bottom - edge)).clamp(0, edge * 2) / 4 : 0.0);
     if (step == 0) return;
     position.jumpTo((position.pixels + step).clamp(position.minScrollExtent, position.maxScrollExtent));
   }
@@ -389,7 +460,9 @@ class DashboardState extends State<Dashboard> {
   }
 
   void resetLayout() {
-    _items = defaultDashboard();
+    _dragging = null;
+    _read = DashLayout(defaultDashboard());
+    _items = _read.items;
     _save();
   }
 
@@ -656,21 +729,19 @@ class DashboardState extends State<Dashboard> {
         ],
       ),
     );
-    final editingBody = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        bar,
-        GestureDetector(
-          onTap: () => _customise(item),
-          child: AnimatedScale(
-            // A slight shrink tells you the widgets can be moved.
-            scale: 0.97,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-            child: IgnorePointer(child: body),
-          ),
-        ),
-      ],
+    // The widget's own buttons are switched off while arranging, so the whole card, bar included, must take
+    // the touch itself: a tap opens its options and a hold picks it up.
+    final editingBody = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _customise(item),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          bar,
+          // A slight shrink tells you the widgets can be moved.
+          Transform.scale(scale: 0.97, child: IgnorePointer(child: body)),
+        ],
+      ),
     );
     return DragTarget<String>(
       onWillAcceptWithDetails: (d) {

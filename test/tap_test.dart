@@ -192,10 +192,10 @@ void main() {
 
           // Every bottom tab.
           final nav = find.byType(NavigationBar);
-          for (final (i, tab) in ['Calendar', 'To-do', 'AI', 'Home'].indexed) {
+          for (final (i, tab) in ['Calendar', 'Wallet', 'To-do', 'AI', 'Home'].indexed) {
             await tester.tap(find.descendant(of: nav, matching: find.text(tab)));
             await settle();
-            expect(tester.widget<NavigationBar>(nav).selectedIndex, (i + 1) % 4, reason: 'tab $tab');
+            expect(tester.widget<NavigationBar>(nav).selectedIndex, (i + 1) % 5, reason: 'tab $tab');
           }
         },
       );
