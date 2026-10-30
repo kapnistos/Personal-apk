@@ -30,13 +30,32 @@ void main() {
     dir.deleteSync(recursive: true);
   });
 
+  test('a version 5 database (the October 30 release) upgrades and keeps its data', () async {
+    final dir = Directory.systemTemp.createTempSync('hub');
+    final file = File('${dir.path}/hub.db');
+    File('test/fixtures/v5.db').copySync(file.path);
+    final db = AppDatabase(NativeDatabase(file));
+    expect((await db.watchNotes().first).single.title, 'Kept note');
+    expect((await db.watchTodos().first).single.title, 'Kept task');
+    expect((await db.watchShopping().first).single.store, 'Albert Heijn');
+    final abn = (await db.watchAccounts().first).first;
+    expect(abn.balanceCents, 123456);
+    // Habits are new in version 6 and sync like the rest.
+    final h = await db.saveHabit(HabitsCompanion.insert(name: 'Read', color: 1));
+    await db.setHabitDone(h, DateTime(2026, 10, 30), true);
+    final gid = await db.customSelect('SELECT gid FROM habit_checks').getSingle();
+    expect(gid.read<String?>('gid'), isNotNull);
+    await db.close();
+    dir.deleteSync(recursive: true);
+  });
+
   test('finishing a repeating task adds the next one', () async {
     final db = AppDatabase(NativeDatabase.memory());
     final today = dateOnly(DateTime.now());
     final id = await db.addTodo('Gym', due: today, remindAt: today.add(const Duration(hours: 18)), repeat: 'weekly');
     await db.setTodoDone(id, true);
     final todos = await db.watchTodos().first;
-    final open = todos.where((t) => !t.done).single;
+    final open = todos.where((t) => !t.done && t.title == 'Gym').single;
     expect(open.due, addDays(today, 7));
     expect(open.remindAt, DateTime(today.year, today.month, today.day + 7, 18));
     expect(open.repeat, 'weekly');

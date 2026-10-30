@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../apps/calendar/calendar_model.dart';
 import '../apps/calendar/calendar_page.dart';
 import '../apps/calendar/event_editor.dart';
+import '../apps/habits/habits_page.dart';
 import '../apps/internships/internships_page.dart';
 import '../apps/news/news_page.dart';
 import '../apps/news/news_service.dart';
@@ -168,6 +169,15 @@ const dashKinds = [
     'm',
     'l',
   ], 'l'),
+  DashKind(
+    'habits',
+    'Habits',
+    'Tick off today\'s habits, see streaks',
+    Icons.local_fire_department_outlined,
+    0xFFD9822B,
+    ['s', 'm', 'l'],
+    'm',
+  ),
   DashKind('shopping', 'Shopping', 'What to buy, and where', Icons.shopping_basket_outlined, 0xFF2F8F5B, [
     's',
     'm',
@@ -786,6 +796,7 @@ class _DashBody extends StatelessWidget {
       'money' => _Money(small: small),
       'accounts' => small ? const _AccountsSmall() : _AccountsWide(),
       'shopping' => _Shopping(small: small),
+      'habits' => _HabitsWidget(size: size),
       'savings' => _Savings(small: small),
       'investing' => _Investing(small: small),
       'deadlines' => _Deadlines(small: small),
@@ -1795,6 +1806,58 @@ class _Shopping extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _HabitsWidget extends StatelessWidget {
+  const _HabitsWidget({required this.size});
+  final String size;
+
+  @override
+  Widget build(BuildContext context) {
+    final db = context.db;
+    final today = dateOnly(DateTime.now());
+    return StreamBuilder<List<Habit>>(
+      stream: db.watchHabits(),
+      builder: (context, hSnap) => StreamBuilder<List<HabitCheck>>(
+        stream: db.watchHabitChecks(addDays(today, -400)),
+        builder: (context, cSnap) {
+          final habits = hSnap.data ?? const <Habit>[];
+          final byHabit = <int, Set<String>>{};
+          for (final c in cSnap.data ?? const <HabitCheck>[]) {
+            (byHabit[c.habitId] ??= {}).add(c.day);
+          }
+          final due = habits.where((h) => habitDueOn(h, today)).toList();
+          final key = AppDatabase.dayKey(today);
+          final doneCount = due.where((h) => byHabit[h.id]?.contains(key) ?? false).length;
+          if (size == 's') {
+            final best = habits.isEmpty
+                ? 0
+                : habits.map((h) => habitStreak(h, byHabit[h.id] ?? const {})).reduce((a, b) => a > b ? a : b);
+            return StatTile(
+              icon: Icons.local_fire_department_outlined,
+              label: 'Habits',
+              color: habitColor,
+              value: habits.isEmpty ? 'Start one' : '$doneCount/${due.length}',
+              caption: habits.isEmpty ? 'Read, gym, water…' : 'done today · best streak $best',
+              onTap: () => _push(context, const HabitsPage()),
+            );
+          }
+          return _Panel(
+            title: 'Habits · $doneCount/${due.length} today',
+            onMore: () => _push(context, const HabitsPage()),
+            children: [
+              if (habits.isEmpty) const _Muted('Add a habit to track it here.'),
+              for (final h in (size == 'm' ? due.take(4) : due))
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                  child: HabitCard(habit: h, done: byHabit[h.id] ?? const {}, compact: size == 'm'),
+                ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

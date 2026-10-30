@@ -193,6 +193,13 @@ void main() {
     await db.close();
   });
 
+  test('a new install starts with my open tasks, once', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    expect((await db.watchTodos().first).length, myTasks.length);
+    expect(await db.restoreTasks(), 0);
+    await db.close();
+  });
+
   test('an account balance counts entries made after it was set', () async {
     final db = AppDatabase(NativeDatabase.memory());
     final abn = (await db.watchAccounts().first).first;

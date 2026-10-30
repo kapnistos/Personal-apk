@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/db/database.dart';
@@ -247,6 +248,7 @@ class TodoTile extends StatelessWidget {
                 shape: const CircleBorder(),
                 activeColor: TileColors.todo,
                 onChanged: (v) {
+                  if (v ?? false) HapticFeedback.lightImpact();
                   db.setTodoDone(todo.id, v ?? false);
                   if ((v ?? false) && todo.repeat != 'none') {
                     ScaffoldMessenger.of(context)
@@ -310,6 +312,7 @@ class TodoTile extends StatelessWidget {
       ),
       confirmDismiss: (dir) async {
         if (dir == DismissDirection.startToEnd) {
+          if (!todo.done) HapticFeedback.lightImpact();
           await db.setTodoDone(todo.id, !todo.done);
           return false;
         }

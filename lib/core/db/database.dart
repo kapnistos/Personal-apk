@@ -53,6 +53,39 @@ class Spaces extends Table {
   IntColumn get position => integer().withDefault(const Constant(0))();
 }
 
+/// A daily habit to keep, like reading or the gym.
+class Habits extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+
+  /// Key into habitIcons.
+  TextColumn get icon => text().withDefault(const Constant('check'))();
+  IntColumn get color => integer()();
+
+  /// Days it applies to, Monday first: "1111100" is weekdays.
+  TextColumn get days => text().withDefault(const Constant('1111111'))();
+
+  /// Reminder time "HH:MM", or empty for none.
+  TextColumn get remindAt => text().withDefault(const Constant(''))();
+  BoolColumn get archived => boolean().withDefault(const Constant(false))();
+  IntColumn get position => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+/// A day a habit was done.
+class HabitChecks extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get habitId => integer()();
+
+  /// yyyy-mm-dd
+  TextColumn get day => text()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {habitId, day},
+  ];
+}
+
 /// Something to buy, and the shop it is cheapest at.
 class ShoppingItems extends Table {
   IntColumn get id => integer().autoIncrement()();
@@ -294,13 +327,15 @@ class Settings extends Table {
     Applications,
     Accounts,
     ShoppingItems,
+    Habits,
+    HabitChecks,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? driftDatabase(name: 'hub'));
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -324,6 +359,7 @@ class AppDatabase extends _$AppDatabase {
       await _seedSpaces();
       await _seedAccounts();
       await restoreRecurring();
+      await restoreTasks();
       await _installSync();
       await _fixSpaceGids();
     },
@@ -360,12 +396,22 @@ class AppDatabase extends _$AppDatabase {
         }
         await _fixSpaceGids();
       }
+      if (from < 6) {
+        await m.createTable(habits);
+        await m.createTable(habitChecks);
+        for (final sql in syncInstallStatements(only: habitTables)) {
+          await customStatement(sql);
+        }
+      }
     },
     beforeOpen: (details) async {
       // Sync triggers assume this stays off (it is SQLite's default).
       await customStatement('PRAGMA recursive_triggers = OFF');
     },
   );
+
+  /// Tables added in version 6 that sync.
+  static const habitTables = ['habits', 'habit_checks'];
 
   /// Tables added in version 5 that sync.
   static const spaceTables = [
@@ -453,6 +499,18 @@ class AppDatabase extends _$AppDatabase {
           nextDate: next,
         ),
       );
+      added++;
+    }
+    return added;
+  }
+
+  /// The owner's open tasks (my_recurring.dart). Adds the ones missing (by title). Returns how many it added.
+  Future<int> restoreTasks() async {
+    final have = {for (final t in await select(todos).get()) t.title.trim().toLowerCase()};
+    var added = 0;
+    for (final title in myTasks) {
+      if (have.contains(title.toLowerCase())) continue;
+      await into(todos).insert(TodosCompanion.insert(title: title));
       added++;
     }
     return added;
@@ -810,6 +868,39 @@ class AppDatabase extends _$AppDatabase {
       await into(workDays).insertOnConflictUpdate(
         WorkDaysCompanion.insert(day: dayKey(d), status: status, hours: Value(hours), note: Value(note)),
       );
+    }
+  }
+
+  // Habits
+
+  Stream<List<Habit>> watchHabits() =>
+      (select(habits)
+            ..where((h) => h.archived.equals(false))
+            ..orderBy([(h) => OrderingTerm.asc(h.position), (h) => OrderingTerm.asc(h.id)]))
+          .watch();
+
+  Future<int> saveHabit(HabitsCompanion h) => into(habits).insertOnConflictUpdate(h);
+
+  Future<void> deleteHabit(int id) => transaction(() async {
+    await (delete(habitChecks)..where((c) => c.habitId.equals(id))).go();
+    await (delete(habits)..where((h) => h.id.equals(id))).go();
+  });
+
+  /// Checks from [from] on, for streaks and the week view.
+  Stream<List<HabitCheck>> watchHabitChecks(DateTime from) =>
+      (select(habitChecks)..where((c) => c.day.isBiggerOrEqualValue(dayKey(from)))).watch();
+
+  Future<List<HabitCheck>> habitChecksSince(DateTime from) =>
+      (select(habitChecks)..where((c) => c.day.isBiggerOrEqualValue(dayKey(from)))).get();
+
+  Future<void> setHabitDone(int habitId, DateTime day, bool done) async {
+    final key = dayKey(day);
+    if (done) {
+      await into(
+        habitChecks,
+      ).insert(HabitChecksCompanion.insert(habitId: habitId, day: key), mode: InsertMode.insertOrIgnore);
+    } else {
+      await (delete(habitChecks)..where((c) => c.habitId.equals(habitId) & c.day.equals(key))).go();
     }
   }
 

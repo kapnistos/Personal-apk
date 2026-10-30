@@ -27,6 +27,8 @@ const syncedTables = [
   'applications',
   'accounts',
   'shopping_items',
+  'habits',
+  'habit_checks',
 ];
 
 /// Tables keyed by a natural key instead of an id; the key doubles as the gid.
@@ -40,10 +42,16 @@ const syncForeignKeys = {
   'todos': {'space_id': 'spaces'},
   'space_items': {'space_id': 'spaces'},
   'savings_moves': {'goal_id': 'savings_goals'},
+  'habit_checks': {'habit_id': 'habits'},
 };
 
 /// Foreign keys a row cannot live without; such rows wait until the parent has arrived.
-const syncRequiredKeys = {'events': 'calendar_id', 'space_items': 'space_id', 'savings_moves': 'goal_id'};
+const syncRequiredKeys = {
+  'events': 'calendar_id',
+  'space_items': 'space_id',
+  'savings_moves': 'goal_id',
+  'habit_checks': 'habit_id',
+};
 
 /// Rows that stay on one device: feed calendars and their events are re-downloaded per device.
 const syncLocalOnly = {'events': 'uid IS NOT NULL'};

@@ -1,6 +1,9 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hub/apps/habits/habits_page.dart';
+import 'package:hub/apps/shopping/shopping_page.dart';
+import 'package:hub/shell/automations_page.dart' show BackupPage;
 import 'package:hub/apps/calendar/calendar_page.dart';
 import 'package:hub/apps/notes/notes_page.dart';
 import 'package:hub/apps/todo/todo_page.dart';
@@ -59,6 +62,9 @@ void main() {
     'wallet savings': () => const WalletPage(initialTab: 1),
     'wallet investing': () => const WalletPage(initialTab: 2),
     'year overview': () => const YearPage(),
+    'habits': () => const HabitsPage(),
+    'shopping': () => const ShoppingPage(),
+    'backup': () => const BackupPage(),
   };
   for (final e in pages.entries) {
     testWidgets('${e.key} page builds', (tester) async {

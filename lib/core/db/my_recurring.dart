@@ -16,3 +16,6 @@ class RecurringSeed {
 ///   RecurringSeed('Rent', 95000, EntryKind.subscription, 'Rent', DateTime(2026, 11, 1)),
 ///   RecurringSeed('Salary', 250000, EntryKind.income, 'Salary', DateTime(2026, 11, 25)),
 final myRecurring = <RecurringSeed>[];
+
+/// Your own open tasks, added on a fresh install.
+const myTasks = <String>[];

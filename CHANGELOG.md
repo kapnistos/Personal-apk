@@ -4,6 +4,13 @@ Builds are numbered by the CI run. Notable changes, newest first.
 
 ## October 2026
 
+### Automations, backup and habits
+- Automations (Me → Automations): morning briefing, bill reminder the evening before, low-balance warning two days ahead, Sunday week review, overdue-task nudge, habit reminders. Each can be switched off or retimed.
+- Backup (Me → Backup): save everything to a file, restore it on any device, and an automatic daily copy kept for two weeks.
+- New Habits app and Home widget: daily or chosen days, streaks, 30-day rate, reminders.
+- A fresh install starts with your open tasks as well as your recurring list.
+- Small vibrations when ticking tasks and shopping items.
+
 ### Home and shortcuts
 - Home is now a dashboard. Hold a widget to resize, reshape, restyle, recolour, move or remove it; add from 18 widget types.
 - Shortcuts widget: open X, Instagram, Reddit, TikTok, GitHub, LinkedIn, Outlook, Gmail, banks or any link in one tap.

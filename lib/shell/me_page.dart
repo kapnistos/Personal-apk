@@ -7,6 +7,7 @@ import '../core/sync/sync_service.dart';
 import '../core/settings.dart';
 import '../core/theme.dart';
 import '../core/widgets.dart';
+import 'automations_page.dart';
 
 class MePage extends StatelessWidget {
   const MePage({super.key});
@@ -28,8 +29,10 @@ class MePage extends StatelessWidget {
                 child: ListTile(
                   leading: CircleAvatar(
                     backgroundColor: p.accent,
-                    child: Text(s.name.isEmpty ? '?' : s.name.characters.first.toUpperCase(),
-                        style: TextStyle(color: p.onAccent, fontWeight: FontWeight.w700)),
+                    child: Text(
+                      s.name.isEmpty ? '?' : s.name.characters.first.toUpperCase(),
+                      style: TextStyle(color: p.onAccent, fontWeight: FontWeight.w700),
+                    ),
                   ),
                   title: Text(s.name.isEmpty ? 'Add your name' : s.name),
                   subtitle: const Text('Used for the greeting on Home'),
@@ -64,34 +67,42 @@ class MePage extends StatelessWidget {
             ContentWidth(
               child: Section(
                 title: 'Weather',
-                child: Column(children: [
-                  ListTile(
-                    title: const Text('Temperature'),
-                    trailing: SegmentedButton<TempUnit>(
-                      showSelectedIcon: false,
-                      style: SegmentedButton.styleFrom(visualDensity: VisualDensity.compact),
-                      segments: const [
-                        ButtonSegment(value: TempUnit.celsius, label: Text('°C')),
-                        ButtonSegment(value: TempUnit.fahrenheit, label: Text('°F')),
-                      ],
-                      selected: {s.tempUnit},
-                      onSelectionChanged: (v) => s.setTempUnit(v.first),
+                child: Column(
+                  children: [
+                    ListTile(
+                      title: const Text('Temperature'),
+                      trailing: SegmentedButton<TempUnit>(
+                        showSelectedIcon: false,
+                        style: SegmentedButton.styleFrom(visualDensity: VisualDensity.compact),
+                        segments: const [
+                          ButtonSegment(value: TempUnit.celsius, label: Text('°C')),
+                          ButtonSegment(value: TempUnit.fahrenheit, label: Text('°F')),
+                        ],
+                        selected: {s.tempUnit},
+                        onSelectionChanged: (v) => s.setTempUnit(v.first),
+                      ),
                     ),
-                  ),
-                  ListTile(
-                    title: const Text('Google Weather key'),
-                    subtitle: Text(s.googleWeatherKey.isEmpty
-                        ? 'Not set. Using Open-Meteo for the long-term forecast.'
-                        : 'Set. Google Weather is used for the forecast.'),
-                    trailing: const Icon(Icons.key_rounded, size: 20),
-                    onTap: () async {
-                      final v = await _prompt(context, 'Google Maps Platform API key', s.googleWeatherKey,
-                          help: 'Create a key in Google Cloud with the Weather API enabled. Leave empty to use Open-Meteo.');
-                      if (v != null) s.setGoogleWeatherKey(v);
-                    },
-                  ),
-                  const SizedBox(height: 4),
-                ]),
+                    ListTile(
+                      title: const Text('Google Weather key'),
+                      subtitle: Text(
+                        s.googleWeatherKey.isEmpty
+                            ? 'Not set. Using Open-Meteo for the long-term forecast.'
+                            : 'Set. Google Weather is used for the forecast.',
+                      ),
+                      trailing: const Icon(Icons.key_rounded, size: 20),
+                      onTap: () async {
+                        final v = await _prompt(
+                          context,
+                          'Google Maps Platform API key',
+                          s.googleWeatherKey,
+                          help: 'Create a key in Google Cloud with the Weather API enabled. Leave empty to use Open-Meteo.',
+                        );
+                        if (v != null) s.setGoogleWeatherKey(v);
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -104,11 +115,36 @@ class MePage extends StatelessWidget {
                     value: s.currency,
                     underline: const SizedBox.shrink(),
                     items: [
-                      for (final c in const ['EUR', 'USD', 'GBP', 'CHF'])
-                        DropdownMenuItem(value: c, child: Text(c)),
+                      for (final c in const ['EUR', 'USD', 'GBP', 'CHF']) DropdownMenuItem(value: c, child: Text(c)),
                     ],
                     onChanged: (v) => s.setCurrency(v ?? 'EUR'),
                   ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ContentWidth(
+              child: Section(
+                title: 'Automations and backup',
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.auto_mode_rounded),
+                      title: const Text('Automations'),
+                      subtitle: const Text('Morning briefing, bill reminders, low balance, weekly review'),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () =>
+                          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AutomationsPage())),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.backup_outlined),
+                      title: const Text('Backup and restore'),
+                      subtitle: const Text('Save everything to a file, or bring it back'),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BackupPage())),
+                    ),
+                    const SizedBox(height: 4),
+                  ],
                 ),
               ),
             ),
@@ -120,9 +156,11 @@ class MePage extends StatelessWidget {
                 title: 'Notifications',
                 child: ListTile(
                   title: const Text('Allow reminders'),
-                  subtitle: Text(Reminders.instance.supported
-                      ? 'Needed for to-do and calendar reminders'
-                      : 'Not available on this device'),
+                  subtitle: Text(
+                    Reminders.instance.supported
+                        ? 'Needed for to-do and calendar reminders'
+                        : 'Not available on this device',
+                  ),
                   trailing: const Icon(Icons.notifications_active_outlined, size: 20),
                   onTap: () async {
                     final db = context.db;
@@ -154,13 +192,17 @@ Future<String?> _prompt(BuildContext context, String title, String initial, {Str
     context: context,
     builder: (d) => AlertDialog(
       title: Text(title),
-      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        TextField(controller: c, autofocus: true, onSubmitted: (v) => Navigator.pop(d, v)),
-        if (help != null) ...[
-          const SizedBox(height: 10),
-          Text(help, style: TextStyle(color: Palette.of(d).muted, fontSize: 13.5)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(controller: c, autofocus: true, onSubmitted: (v) => Navigator.pop(d, v)),
+          if (help != null) ...[
+            const SizedBox(height: 10),
+            Text(help, style: TextStyle(color: Palette.of(d).muted, fontSize: 13.5)),
+          ],
         ],
-      ]),
+      ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(d), child: const Text('Cancel')),
         FilledButton(onPressed: () => Navigator.pop(d, c.text), child: const Text('Save')),
@@ -217,7 +259,10 @@ class _SyncSectionState extends State<_SyncSection> {
       _pendingClient = false;
     });
     if (mode == 'server') {
-      await s.setSync(mode: 'server', token: s.syncToken.isEmpty || s.syncMode != 'server' ? SyncService.newToken() : s.syncToken);
+      await s.setSync(
+        mode: 'server',
+        token: s.syncToken.isEmpty || s.syncMode != 'server' ? SyncService.newToken() : s.syncToken,
+      );
     } else if (mode == 'off') {
       await s.setSync(mode: 'off');
     } else {
@@ -258,58 +303,75 @@ class _SyncSectionState extends State<_SyncSection> {
       title: 'Sync',
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          SegmentedButton<String>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: 'off', label: Text('Off')),
-              ButtonSegment(value: 'server', label: Text('Server')),
-              ButtonSegment(value: 'client', label: Text('Connect')),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SegmentedButton<String>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: 'off', label: Text('Off')),
+                ButtonSegment(value: 'server', label: Text('Server')),
+                ButtonSegment(value: 'client', label: Text('Connect')),
+              ],
+              selected: {mode},
+              onSelectionChanged: (v) => _setMode(v.first),
+            ),
+            const SizedBox(height: 12),
+            if (mode == 'off')
+              Text(
+                'Sync keeps notes, tasks, calendars and the wallet the same on all your devices, '
+                'through your own always-on laptop. Nothing goes to a cloud.',
+                style: TextStyle(color: p.muted, height: 1.45),
+              ),
+            if (mode == 'server') ...[
+              Text(
+                'Keep Hub open on this laptop. On your phone, choose "Connect" and enter:',
+                style: TextStyle(color: p.muted, height: 1.45),
+              ),
+              const SizedBox(height: 10),
+              _copyRow(context, 'Address', _ips.firstOrNull ?? 'this computer\'s IP'),
+              _copyRow(context, 'Sync key', s.syncToken),
+              if (_ips.length > 1)
+                Text('Other addresses: ${_ips.skip(1).join(', ')}', style: TextStyle(color: p.muted, fontSize: 13)),
             ],
-            selected: {mode},
-            onSelectionChanged: (v) => _setMode(v.first),
-          ),
-          const SizedBox(height: 12),
-          if (mode == 'off')
-            Text(
-              'Sync keeps notes, tasks, calendars and the wallet the same on all your devices, '
-              'through your own always-on laptop. Nothing goes to a cloud.',
-              style: TextStyle(color: p.muted, height: 1.45),
-            ),
-          if (mode == 'server') ...[
-            Text('Keep Hub open on this laptop. On your phone, choose "Connect" and enter:',
-                style: TextStyle(color: p.muted, height: 1.45)),
-            const SizedBox(height: 10),
-            _copyRow(context, 'Address', _ips.firstOrNull ?? 'this computer\'s IP'),
-            _copyRow(context, 'Sync key', s.syncToken),
-            if (_ips.length > 1)
-              Text('Other addresses: ${_ips.skip(1).join(', ')}', style: TextStyle(color: p.muted, fontSize: 13)),
-          ],
-          if (mode == 'client') ...[
-            TextField(controller: _url, decoration: const InputDecoration(hintText: 'Server address, e.g. 100.101.102.103')),
-            const SizedBox(height: 8),
-            TextField(controller: _token, decoration: const InputDecoration(hintText: 'Sync key')),
-            const SizedBox(height: 10),
-            Row(children: [
-              FilledButton(
-                onPressed: _busy ? null : _connect,
-                child: Text(_busy ? 'Checking…' : (s.syncMode == 'client' && !_pendingClient ? 'Save' : 'Connect')),
+            if (mode == 'client') ...[
+              TextField(
+                controller: _url,
+                decoration: const InputDecoration(hintText: 'Server address, e.g. 100.101.102.103'),
               ),
-              const SizedBox(width: 10),
-              if (s.syncMode == 'client')
-                OutlinedButton(onPressed: SyncService.instance.syncNow, child: const Text('Sync now')),
-            ]),
-          ],
-          if (_error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_error!, style: TextStyle(color: p.danger))),
-          if (s.syncMode != 'off')
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: ValueListenableBuilder<String>(
-                valueListenable: SyncService.instance.status,
-                builder: (context, v, _) => Text(v, style: TextStyle(color: p.muted, fontSize: 13.5)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _token,
+                decoration: const InputDecoration(hintText: 'Sync key'),
               ),
-            ),
-        ]),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  FilledButton(
+                    onPressed: _busy ? null : _connect,
+                    child: Text(_busy ? 'Checking…' : (s.syncMode == 'client' && !_pendingClient ? 'Save' : 'Connect')),
+                  ),
+                  const SizedBox(width: 10),
+                  if (s.syncMode == 'client')
+                    OutlinedButton(onPressed: SyncService.instance.syncNow, child: const Text('Sync now')),
+                ],
+              ),
+            ],
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Text(_error!, style: TextStyle(color: p.danger)),
+              ),
+            if (s.syncMode != 'off')
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: ValueListenableBuilder<String>(
+                  valueListenable: SyncService.instance.status,
+                  builder: (context, v, _) => Text(v, style: TextStyle(color: p.muted, fontSize: 13.5)),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -318,15 +380,22 @@ class _SyncSectionState extends State<_SyncSection> {
     final p = Palette.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(children: [
-        SizedBox(width: 72, child: Text(label, style: TextStyle(color: p.muted))),
-        Expanded(child: SelectableText(value, style: const TextStyle(fontWeight: FontWeight.w600))),
-        IconButton(
-          tooltip: 'Copy',
-          icon: const Icon(Icons.copy_rounded, size: 18),
-          onPressed: () => Clipboard.setData(ClipboardData(text: value)),
-        ),
-      ]),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 72,
+            child: Text(label, style: TextStyle(color: p.muted)),
+          ),
+          Expanded(
+            child: SelectableText(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ),
+          IconButton(
+            tooltip: 'Copy',
+            icon: const Icon(Icons.copy_rounded, size: 18),
+            onPressed: () => Clipboard.setData(ClipboardData(text: value)),
+          ),
+        ],
+      ),
     );
   }
 }

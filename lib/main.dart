@@ -8,7 +8,10 @@ import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'apps/calendar/calendar_page.dart';
 import 'apps/calendar/feed_sync.dart';
 import 'apps/internships/internships_page.dart';
+import 'apps/habits/habits_page.dart';
 import 'apps/todo/todo_page.dart';
+import 'apps/wallet/wallet_page.dart';
+import 'core/backup.dart';
 import 'core/db/database.dart';
 import 'core/reminders.dart';
 import 'core/settings.dart';
@@ -31,6 +34,8 @@ Future<void> _startBackground(AppDatabase db, AppSettings settings) async {
   await settings.startSync();
   AppLifecycleListener(onResume: SyncService.instance.syncNow);
   await db.bookDueSubscriptions();
+  // A copy of everything, once a day, kept for two weeks (Me → Backup).
+  if (settings.raw('auto.backup') != 'off') unawaited(autoBackup(db));
   unawaited(FeedSync.instance.syncStale(db));
   Timer.periodic(const Duration(minutes: 30), (_) => FeedSync.instance.syncStale(db));
   Reminders.instance.onOpen = (payload) {
@@ -40,6 +45,8 @@ Future<void> _startBackground(AppDatabase db, AppSettings settings) async {
       'todo' => const TodoPage(),
       'event' => const CalendarPage(),
       'application' => const InternshipsPage(),
+      'wallet' => const WalletPage(),
+      'habit' => const HabitsPage(),
       _ => null,
     };
     if (page != null) nav.push(MaterialPageRoute(builder: (_) => page));
@@ -53,10 +60,24 @@ Future<void> _startBackground(AppDatabase db, AppSettings settings) async {
     await Reminders.instance.resync(db);
   }
   Timer? debounce;
-  db.tableUpdates(TableUpdateQuery.onAllTables([db.todos, db.events, db.applications])).listen((_) {
-    debounce?.cancel();
-    debounce = Timer(const Duration(seconds: 2), () => Reminders.instance.resync(db));
-  });
+  db
+      .tableUpdates(
+        TableUpdateQuery.onAllTables([
+          db.todos,
+          db.events,
+          db.applications,
+          db.subscriptions,
+          db.accounts,
+          db.entries,
+          db.habits,
+          db.habitChecks,
+          db.settings,
+        ]),
+      )
+      .listen((_) {
+        debounce?.cancel();
+        debounce = Timer(const Duration(seconds: 2), () => Reminders.instance.resync(db));
+      });
 }
 
 /// Lets a tapped notification open the right page.

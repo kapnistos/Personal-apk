@@ -4,6 +4,7 @@ import '../core/mini_app.dart';
 import '../core/theme.dart';
 import 'calendar/calendar_page.dart';
 import 'claude/claude_page.dart';
+import 'habits/habits_page.dart';
 import 'internships/internships_page.dart';
 import 'mail/mail_page.dart';
 import 'news/news_page.dart';
@@ -64,6 +65,14 @@ final miniApps = <MiniApp>[
     icon: Icons.shopping_basket_rounded,
     color: shoppingColor,
     builder: (_) => const ShoppingPage(),
+  ),
+  MiniApp(
+    id: 'habits',
+    title: 'Habits',
+    subtitle: 'Daily habits and streaks',
+    icon: Icons.local_fire_department_rounded,
+    color: habitColor,
+    builder: (_) => const HabitsPage(),
   ),
   MiniApp(
     id: 'job',

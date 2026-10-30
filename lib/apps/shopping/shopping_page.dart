@@ -409,7 +409,10 @@ class _ItemTile extends StatelessWidget {
         leading: Checkbox(
           shape: const CircleBorder(),
           value: item.done,
-          onChanged: (v) => db.updateShoppingItem(item.id, done: v ?? false),
+          onChanged: (v) {
+            HapticFeedback.selectionClick();
+            db.updateShoppingItem(item.id, done: v ?? false);
+          },
         ),
         title: Text(
           item.name,

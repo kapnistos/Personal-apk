@@ -6,6 +6,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 
+import 'automations.dart';
 import 'db/database.dart';
 import 'format.dart';
 
@@ -31,26 +32,39 @@ class Reminders {
   ];
 
   static NotificationDetails _details({bool todo = false}) => NotificationDetails(
-        android: AndroidNotificationDetails(
-          'reminders',
-          'Reminders',
-          channelDescription: 'To-do, calendar and internship reminders',
-          importance: Importance.high,
-          priority: Priority.high,
-          category: AndroidNotificationCategory.reminder,
-          icon: 'ic_stat_hub',
-          color: const Color(0xFF1F6F54),
-          actions: todo ? _todoActions : null,
-        ),
-        windows: WindowsNotificationDetails(
-          actions: todo
-              ? const [
-                  WindowsAction(content: 'Done', arguments: 'done'),
-                  WindowsAction(content: 'Snooze 10 min', arguments: 'snooze'),
-                ]
-              : const [],
-        ),
-      );
+    android: AndroidNotificationDetails(
+      'reminders',
+      'Reminders',
+      channelDescription: 'To-do, calendar and internship reminders',
+      importance: Importance.high,
+      priority: Priority.high,
+      category: AndroidNotificationCategory.reminder,
+      icon: 'ic_stat_hub',
+      color: const Color(0xFF1F6F54),
+      actions: todo ? _todoActions : null,
+    ),
+    windows: WindowsNotificationDetails(
+      actions: todo
+          ? const [
+              WindowsAction(content: 'Done', arguments: 'done'),
+              WindowsAction(content: 'Snooze 10 min', arguments: 'snooze'),
+            ]
+          : const [],
+    ),
+  );
+
+  static const _automationDetails = NotificationDetails(
+    android: AndroidNotificationDetails(
+      'automations',
+      'Briefings and alerts',
+      channelDescription: 'Morning briefing, bill reminders, low-balance alerts, weekly review and habits',
+      importance: Importance.defaultImportance,
+      icon: 'ic_stat_hub',
+      color: Color(0xFF1F6F54),
+      styleInformation: BigTextStyleInformation(''),
+    ),
+    windows: WindowsNotificationDetails(),
+  );
 
   bool get supported => !kIsWeb && (Platform.isAndroid || Platform.isWindows);
 
@@ -117,7 +131,9 @@ class Reminders {
   Future<bool?> allowed() async {
     if (!_ready) return null;
     if (Platform.isAndroid) {
-      return _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.areNotificationsEnabled();
+      return _plugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.areNotificationsEnabled();
     }
     return true;
   }
@@ -153,8 +169,14 @@ class Reminders {
       for (final t in await db.todosWithReminders()) {
         final at = t.remindAt!;
         if (at.isBefore(now) || at.isAfter(horizon)) continue;
-        await _schedule(100000 + t.id, at, t.title, t.due == null ? 'To-do' : 'Due ${friendlyDay(t.due!)}',
-            payload: 'todo:${t.id}', todo: true);
+        await _schedule(
+          100000 + t.id,
+          at,
+          t.title,
+          t.due == null ? 'To-do' : 'Due ${friendlyDay(t.due!)}',
+          payload: 'todo:${t.id}',
+          todo: true,
+        );
         count++;
       }
 
@@ -162,19 +184,34 @@ class Reminders {
         if (a.status == 'rejected' || a.status == 'offer') continue;
         final name = [a.company, if (a.role.isNotEmpty) a.role].join(' · ');
         if (a.remindAt != null && a.remindAt!.isAfter(now) && a.remindAt!.isBefore(horizon)) {
-          await _schedule(300000 + a.id, a.remindAt!, 'Internship: $name',
-              a.deadline == null ? 'Time to work on this application' : 'Deadline ${friendlyDay(a.deadline!)}',
-              payload: 'application:${a.id}');
+          await _schedule(
+            300000 + a.id,
+            a.remindAt!,
+            'Internship: $name',
+            a.deadline == null ? 'Time to work on this application' : 'Deadline ${friendlyDay(a.deadline!)}',
+            payload: 'application:${a.id}',
+          );
         }
         // Two days before an open deadline, at 9:00.
         final d = a.deadline;
         if (d != null && (a.status == 'wishlist' || a.status == 'preparing')) {
           final warn = DateTime(d.year, d.month, d.day - 2, 9);
           if (warn.isAfter(now) && warn.isBefore(horizon)) {
-            await _schedule(400000 + a.id, warn, 'Apply soon: $name', 'Deadline ${friendlyDay(d)}',
-                payload: 'application:${a.id}');
+            await _schedule(
+              400000 + a.id,
+              warn,
+              'Apply soon: $name',
+              'Deadline ${friendlyDay(d)}',
+              payload: 'application:${a.id}',
+            );
           }
         }
+      }
+
+      // Briefings, bill reminders, low-balance warnings, weekly review, habits.
+      for (final p in await planAutomations(db, now: now)) {
+        await _schedule(p.id, p.at, p.title, p.body, payload: p.payload, quiet: true);
+        count++;
       }
 
       var n = 0;
@@ -183,8 +220,13 @@ class Reminders {
           final at = start.subtract(Duration(minutes: e.remindMinutes!));
           if (at.isBefore(now)) continue;
           final when = e.allDay ? friendlyDay(start) : '${friendlyDay(start)} ${_hm(start)}';
-          await _schedule(200000 + n, at, e.title, [when, if (e.location.isNotEmpty) e.location].join(' · '),
-              payload: 'event:${e.id}');
+          await _schedule(
+            200000 + n,
+            at,
+            e.title,
+            [when, if (e.location.isNotEmpty) e.location].join(' · '),
+            payload: 'event:${e.id}',
+          );
           n++;
           count++;
           // Android allows each app about 500 pending alarms; stay well below.
@@ -196,19 +238,25 @@ class Reminders {
     }
   }
 
-  Future<void> _schedule(int id, DateTime at, String title, String body, {String? payload, bool todo = false}) =>
-      _plugin.zonedSchedule(
-        id: id,
-        scheduledDate: tz.TZDateTime.from(at, tz.local),
-        notificationDetails: _details(todo: todo),
-        androidScheduleMode: _exact ? AndroidScheduleMode.exactAllowWhileIdle : AndroidScheduleMode.inexactAllowWhileIdle,
-        title: title,
-        body: body,
-        payload: payload,
-      );
+  Future<void> _schedule(
+    int id,
+    DateTime at,
+    String title,
+    String body, {
+    String? payload,
+    bool todo = false,
+    bool quiet = false,
+  }) => _plugin.zonedSchedule(
+    id: id,
+    scheduledDate: tz.TZDateTime.from(at, tz.local),
+    notificationDetails: quiet ? _automationDetails : _details(todo: todo),
+    androidScheduleMode: _exact ? AndroidScheduleMode.exactAllowWhileIdle : AndroidScheduleMode.inexactAllowWhileIdle,
+    title: title,
+    body: body,
+    payload: payload,
+  );
 
-  static String _hm(DateTime d) =>
-      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  static String _hm(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 }
 
 /// Start times of [e] that fall in [from, to), expanding repeats.
@@ -225,12 +273,12 @@ List<DateTime> occurrences(Event e, DateTime from, DateTime to) {
     _ => 0,
   };
   DateTime nth(int n) => switch (e.repeat) {
-        'daily' => DateTime(e.start.year, e.start.month, e.start.day + n, e.start.hour, e.start.minute),
-        'weekly' => DateTime(e.start.year, e.start.month, e.start.day + 7 * n, e.start.hour, e.start.minute),
-        'monthly' => addMonths(e.start, n),
-        'yearly' => addMonths(e.start, 12 * n),
-        _ => n == 0 ? e.start : to,
-      };
+    'daily' => DateTime(e.start.year, e.start.month, e.start.day + n, e.start.hour, e.start.minute),
+    'weekly' => DateTime(e.start.year, e.start.month, e.start.day + 7 * n, e.start.hour, e.start.minute),
+    'monthly' => addMonths(e.start, n),
+    'yearly' => addMonths(e.start, 12 * n),
+    _ => n == 0 ? e.start : to,
+  };
   var start = nth(i);
   var steps = 0;
   while (start.isBefore(to) && steps < 1000) {
