@@ -24,24 +24,33 @@ class SpaceWords {
   final String meetings;
 
   static SpaceWords of(String icon) => switch (icon) {
-        'school' => const SpaceWords(
-            plan: 'Study plan',
-            planHint: 'Chapters, assignments, revision sessions',
-            dates: 'Exams and deadlines',
-            meetings: 'Lectures and meetings'),
-        'science' => const SpaceWords(
-            plan: 'Research plan',
-            planHint: 'Experiments, analyses, writing',
-            dates: 'Important dates',
-            meetings: 'Meetings and lab sessions'),
-        'work' => const SpaceWords(
-            plan: 'Tasks', planHint: 'Things to do at work', dates: 'Important dates', meetings: 'Shifts and meetings'),
-        _ => const SpaceWords(plan: 'Plan', planHint: 'Things to do', dates: 'Important dates', meetings: 'Meetings'),
-      };
+    'school' => const SpaceWords(
+      plan: 'Study plan',
+      planHint: 'Chapters, assignments, revision sessions',
+      dates: 'Exams and deadlines',
+      meetings: 'Lectures and meetings',
+    ),
+    'science' => const SpaceWords(
+      plan: 'Research plan',
+      planHint: 'Experiments, analyses, writing',
+      dates: 'Important dates',
+      meetings: 'Meetings and lab sessions',
+    ),
+    'work' => const SpaceWords(
+      plan: 'Tasks',
+      planHint: 'Things to do at work',
+      dates: 'Important dates',
+      meetings: 'Shifts and meetings',
+    ),
+    _ => const SpaceWords(plan: 'Plan', planHint: 'Things to do', dates: 'Important dates', meetings: 'Meetings'),
+  };
 }
 
 /// Work log statuses, in the order a tap cycles through them.
 const workStatuses = ['work', 'remote', 'off', 'holiday', 'sick'];
+
+/// Every status a day can have; public holidays are set from the day sheet, not by tapping.
+const allWorkStatuses = [...workStatuses, 'public'];
 
 const workStatusLabels = {
   'work': 'Worked',
@@ -49,6 +58,7 @@ const workStatusLabels = {
   'off': 'Day off',
   'holiday': 'Holiday',
   'sick': 'Sick',
+  'public': 'Public holiday',
 };
 
 const workStatusColors = {
@@ -57,4 +67,5 @@ const workStatusColors = {
   'off': Color(0xFF8A8478),
   'holiday': Color(0xFFCF9418),
   'sick': Color(0xFFC0563F),
+  'public': Color(0xFF6D68B8),
 };

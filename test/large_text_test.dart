@@ -35,6 +35,7 @@ void main() {
     'subscriptions': () => const SubscriptionsPage(),
     'me': () => const MePage(),
     'university': () => const SpacePage(spaceId: 2),
+    'job': () => const SpaceLauncher(gid: 'seed-job', fallbackName: 'Job'),
     'news': () => const NewsPage(),
   };
   for (final e in pages.entries) {

@@ -229,7 +229,12 @@ Future<void> seed(AppDatabase db, AppSettings settings) async {
     final day = DateTime(now.year, now.month, d);
     if (day.weekday == DateTime.saturday) continue;
     await db.setWorkDay(day, day.weekday == DateTime.sunday ? 'off' : (d == 9 ? 'sick' : (d == 16 ? 'holiday' : 'work')),
-        hours: day.weekday >= 6 ? null : 8);
+        hours: day.weekday >= 6 ? null : const [8.0, 9.0, 8.5, 7.5, 8.0, 9.5][d % 6]);
+  }
+  // A few planned days ahead.
+  for (var d = 1; d <= 4; d++) {
+    final day = addDays(today, d);
+    if (day.weekday <= 5) await db.setWorkDay(day, 'work', hours: d.isEven ? 6 : 9);
   }
 
   // Internships.
