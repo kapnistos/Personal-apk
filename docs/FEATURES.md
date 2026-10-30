@@ -100,6 +100,10 @@ The layout is saved on the device. **Back to the starting layout** (in edit mode
 
 **Spending**
 
+- **Am I on track?** The top card shows what is left to spend this month and whether you are under or over pace.
+  Below Accounts, **Day by day** has a bar for each day, green dots for no-spend days, **safe to spend today**,
+  where the month will end at this rate, and the bills still to come. Recurring bills are counted as fixed costs
+  first, so the pace only measures everyday spending.
 - Month view with a month picker, a "Now" button and swipe to change month.
 - In, out and net; a six-month trend; spending by category against budgets.
 - **Bank cards:** one card per account (ABN AMRO, Revolut and Eurobank come ready; add more). Set the balance once and Hub keeps it current from the entries booked to that account. Each card shows money in and out this month and the next payment. Open a card to choose which recurring payments go through it and see its activity.
@@ -107,7 +111,8 @@ The layout is saved on the device. **Back to the starting layout** (in edit mode
 - **Import** bank exports: Revolut CSV, ABN AMRO TXT, Eurobank CSV. **Export** everything to CSV.
 - **Year overview** with totals per category and taxes.
 
-**Savings:** goals with targets and deadlines, deposits and withdrawals, how much a month you need.
+**Savings:** goals with targets and deadlines, deposits and withdrawals, how much a month you need, and whether you
+are on track, ahead or behind plan.
 
 **Investing:** holdings (ETFs, stocks, crypto, funds) with live prices from Yahoo Finance, converted to your currency; value, gain and allocation.
 
@@ -136,7 +141,11 @@ Each space has its own calendar and these sections:
 - **Plan:** tasks with a progress bar and inline add (a study plan, a research plan).
 - **Saved:** notes, links and files that belong to the space.
 
-**Job** also has a **work log**: tap a day to mark it worked, worked from home, off, holiday or sick; hold it to add hours and a note. Counters for the month and a yearly summary with holidays left (the allowance is adjustable).
+**Job** also has a **work log**: tap a day to mark it worked, worked from home, off, holiday or sick; hold it to enter
+hours worked (or planned, on future days), start and end times with a break, or a public holiday. Set your contract
+under the tune button, as hours a week or hours per weekday. Hub shows hours worked and planned against expected
+for the month and the week, your overtime balance or the hours still owed, what you need per remaining workday, and
+a balance for the year next to holidays left.
 
 <br clear="right">
 
@@ -173,7 +182,13 @@ Each space has its own calendar and these sections:
 - **Claude Code (my plan)** answers with your own Claude plan through Claude Code (`claude -p`) on your computer, or on
   the laptop running Hub in Server mode when you are on your phone, with Haiku, Sonnet or Opus. You sign in by running
   `claude` once yourself; Hub never handles the login. Setup is in `server/README.md`.
-- Coming soon: your own agents, such as Instinct, working on your Hub.
+- **The Hub agent reads all your data** through tools: calendar for any dates, recurring payments and subscriptions,
+  transactions, balances, savings, investments, notes, tasks, habits, shopping, spaces, the work log and weather.
+  Each answer says what it looked at. Models without tool support get a full snapshot in the prompt instead.
+- **History**: every conversation is kept per mode. Reopen, search, rename or delete them; the empty chat lists the
+  latest three.
+- **Usage**: tokens per message and per conversation, totals for today, this month and all time per model, and cost
+  for OpenRouter models (from OpenRouter's reported cost or its price list). Open it from AI settings.
 
 ## Claude
 

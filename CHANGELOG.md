@@ -4,6 +4,25 @@ Builds are numbered by the CI run. Notable changes, newest first.
 
 ## October 2026
 
+### Wallet tab, an agent that knows your data, Job hours
+- **Wallet is a tab** next to Home, Calendar, To-do and AI. Back from any tab goes to Home; back on Home closes the app.
+- **Am I on track?** Wallet's "Day by day" card: a bar per day, no-spend days, safe to spend today, where the month will
+  end, and bills still to come. Rent and other recurring bills count as fixed costs, so an early-month rent payment
+  no longer looks like overspending. Savings goals with a deadline say whether you are ahead or behind plan.
+- **The Hub agent sees everything**: calendar for any dates (all calendars, repeats, all-day events), recurring
+  payments and subscriptions, transactions, balances, savings, investments, notes, tasks with or without dates,
+  habits, shopping, spaces, work log and weather. Changes still wait for your tap on Add.
+- **Chat history**: every conversation is kept, with a History page to reopen, search, rename or delete them.
+- **Token usage**: per message, per conversation, and totals for today, this month and all time, with cost for
+  OpenRouter models.
+- **Job hours**: hours worked or planned per day (or start and end times), contract hours per week or per weekday,
+  and an overtime balance or hours still owed for the week, month and year.
+- **Edit home, reworked**: tap or hold anywhere on a widget, Done sits at the bottom, one damaged widget no longer
+  resets the whole layout, and Weather shows a "Choose a city" card instead of an empty slot.
+- **Widgets open their app after resizing**: at Medium and Large the whole card opens Wallet, Tasks, Habits and so
+  on, not just the small link in the corner.
+- The ask bar on Home uses the same see-through glass and font as the tab bar.
+
 ### Fixes
 - Empty screens scroll instead of overflowing on small phones.
 
