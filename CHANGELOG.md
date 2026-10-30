@@ -4,6 +4,15 @@ Builds are numbered by the CI run. Notable changes, newest first.
 
 ## October 2026
 
+### AI tab and easier editing
+- AI replaces Me in the bottom bar. Settings now open from your profile picture on Home.
+- AI tab: what works today (shopping price check, Claude) and what is coming: DeepSeek, a model picker with a recommendation for each, your own API key, a Hub agent and personal agents.
+- Hold any Home widget to start editing; controls now sit above each widget instead of covering it. Resetting the layout asks first.
+
+### Wallet targets
+- Monthly spending target: what is left, a daily allowance, whether you are on pace, bills still to come, no-spend days.
+- Net worth across cards, savings and investments; round-ups into a savings goal; categories compared with your usual month.
+
 ### New look
 - Black background in dark mode, flat cards without outlines, pill-shaped tabs and filters, round icons.
 - Big balances with smaller cents; Wallet opens on the month's net figure with round Add, Recurring, Year and Import buttons.
@@ -30,8 +39,7 @@ Builds are numbered by the CI run. Notable changes, newest first.
 - Month picker with "Now", swipe between months, year overview, CSV export.
 
 ### Planning
-- Job, Lab research and University spaces with dates, meetings, plans and saved items; Job has a work-day log.
-- Internship tracker with deadlines and reminders.
+- University space with dates, meetings, plans and saved items.
 - To-do: quick add in plain words, repeating tasks, Done and Snooze from the notification.
 - Notes: colours, checklists, masonry layout.
 - Calendar: swipe between periods and an endless agenda.

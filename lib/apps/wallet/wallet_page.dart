@@ -13,6 +13,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'accounts_page.dart';
 import 'bank_import.dart';
+import 'insights.dart';
 import 'investing_page.dart';
 import 'month_bar.dart';
 import 'savings_page.dart';
@@ -180,6 +181,13 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
               if (isCurrent)
                 SliverToBoxAdapter(
                   child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: ContentWidth(child: LeftToSpendCard(monthEntries: all, currency: currency)),
+                  ),
+                ),
+              if (isCurrent)
+                SliverToBoxAdapter(
+                  child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
                     child: ContentWidth(child: AccountsStrip(currency: currency)),
                   ),
@@ -204,6 +212,14 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                   child: ContentWidth(
                     child: _Breakdown(summary: summary, currency: currency),
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: ContentWidth(
+                    child: InsightsCard(month: _month, thisMonth: summary.byCategory, currency: currency),
                   ),
                 ),
               ),
@@ -737,6 +753,7 @@ class _EntryEditorState extends State<_EntryEditor> {
     final cents = parseMoney(_amount.text);
     if (cents == null || cents == 0) return;
     final db = context.db;
+    final roundUp = context.settings.raw(roundUpKey);
     final companion = EntriesCompanion(
       amountCents: Value(cents.abs()),
       kind: Value(_kind),
@@ -747,6 +764,10 @@ class _EntryEditorState extends State<_EntryEditor> {
     );
     if (widget.entry == null) {
       await db.addEntry(companion);
+      if (_kind == EntryKind.expense) {
+        final label = _note.text.trim().isEmpty ? _category : _note.text.trim();
+        await applyRoundUp(db, roundUp, cents, label);
+      }
     } else {
       await db.updateEntry(
         widget.entry!.copyWith(

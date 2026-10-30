@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../apps/ai/ai_page.dart';
 import '../apps/calendar/calendar_page.dart';
 import '../apps/todo/todo_page.dart';
 import '../core/theme.dart';
 import 'home_page.dart';
-import 'me_page.dart';
 import 'search_page.dart';
 
 /// Top-level navigation: bottom bar on phones, side rail on wide windows.
@@ -23,7 +23,7 @@ class _ShellState extends State<Shell> {
     (Icons.grid_view_outlined, Icons.grid_view_rounded, 'Home'),
     (Icons.calendar_today_outlined, Icons.calendar_today_rounded, 'Calendar'),
     (Icons.check_circle_outline_rounded, Icons.check_circle_rounded, 'To-do'),
-    (Icons.person_outline_rounded, Icons.person_rounded, 'Me'),
+    (Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'AI'),
   ];
 
   void select(int i) => setState(() => _index = i);
@@ -34,7 +34,7 @@ class _ShellState extends State<Shell> {
       HomePage(onOpenTab: select),
       const CalendarPage(),
       const TodoPage(),
-      const MePage(),
+      const AiPage(),
     ];
     final body = CallbackShortcuts(
       bindings: {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/edition.dart';
 import '../core/mini_app.dart';
 import '../core/theme.dart';
 import 'calendar/calendar_page.dart';
@@ -17,7 +18,9 @@ import 'wallet/wallet_page.dart';
 import 'weather/weather_page.dart';
 
 /// Every mini-app on the home screen, in display order.
-final miniApps = <MiniApp>[
+final miniApps = _allApps.where((a) => personalEdition || !personalOnlyApps.contains(a.id)).toList();
+
+final _allApps = <MiniApp>[
   MiniApp(
     id: 'weather',
     title: 'Weather',

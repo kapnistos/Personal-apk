@@ -20,6 +20,7 @@ import '../core/settings.dart';
 import '../core/theme.dart';
 import '../core/widgets.dart';
 import 'dashboard.dart';
+import 'me_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.onOpenTab});
@@ -78,18 +79,34 @@ class _HomePageState extends State<HomePage> {
                       IconButton(
                         tooltip: 'Back to the starting layout',
                         icon: const Icon(Icons.restart_alt_rounded),
-                        onPressed: () => _dash.currentState?.resetLayout(),
+                        onPressed: () async {
+                          final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Start over?'),
+                              content: const Text('Home goes back to the starting widgets. Your data stays.'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Reset')),
+                              ],
+                            ),
+                          );
+                          if (ok == true) _dash.currentState?.resetLayout();
+                        },
                       ),
                       FilledButton(onPressed: () => setState(() => _editing = false), child: const Text('Done')),
                     ] else ...[
-                      IconButton(
+                      IconButton.filledTonal(
                         tooltip: 'Edit home',
-                        icon: Icon(Icons.dashboard_customize_outlined, color: p.muted),
+                        style: IconButton.styleFrom(backgroundColor: p.raised, foregroundColor: p.ink),
+                        icon: const Icon(Icons.dashboard_customize_outlined),
                         onPressed: () => setState(() => _editing = true),
                       ),
                       const SizedBox(width: 4),
                       GestureDetector(
-                        onTap: () => widget.onOpenTab(3),
+                        // Your profile holds every setting.
+                        onTap: () =>
+                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MePage())),
                         child: CircleAvatar(
                           radius: 22,
                           backgroundColor: p.raised,
@@ -109,7 +126,7 @@ class _HomePageState extends State<HomePage> {
                   child: Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
-                      'Tap a widget to change its size, shape and colour. Hold and drag to move it.',
+                      'Tap a widget to change its size, shape and colour. Hold and drag it to move it.',
                       style: TextStyle(color: p.muted),
                     ),
                   ),

@@ -40,8 +40,6 @@ For each widget you can choose:
 | Shopping | How much to buy and at which shops |
 | Savings | Saved towards goals |
 | Investing | Portfolio value and gain |
-| Applications | Internship deadlines |
-| Work days | Days worked this month and holidays left |
 | Headlines | Latest news |
 | Notes | Latest notes |
 
@@ -65,7 +63,7 @@ The layout is saved on the device. **Back to the starting layout** (in edit mode
 <img src="../screenshots/out/phone-light-calendar.png" width="220" align="right" alt="Calendar">
 
 - Day, week, month and agenda views. Swipe sideways to move through time; the agenda keeps loading as you scroll.
-- Several calendars with colours, show or hide each. Personal, Work, Lab and Study come ready.
+- Several calendars with colours, show or hide each. Personal, Work and Study come ready.
 - Repeating events (daily, weekly, monthly, yearly, custom), all-day events, reminders.
 - Subscribe to any `.ics` link (university timetable, sports fixtures, holidays). Hub refreshes it.
 
@@ -79,7 +77,7 @@ The layout is saved on the device. **Back to the starting layout** (in edit mode
 - Filters: Open, Today, Important, Done. Groups: Overdue, Today, Tomorrow, This week, Later, No date.
 - Reminders as notifications with **Done** and **Snooze 10 min** buttons, exact to the minute where the phone allows.
 - Repeating tasks: tick one off and the next appears.
-- Tasks can belong to a space (Job, Lab, University).
+- Tasks can belong to a space (such as University).
 - Swipe right to complete, left to delete (with undo).
 
 <br clear="right">
@@ -126,29 +124,16 @@ The layout is saved on the device. **Back to the starting layout** (in edit mode
 
 <br clear="right">
 
-## Job, Lab research and University
+## University
 
 <img src="../screenshots/out/phone-light-university.png" width="220" align="right" alt="University space">
 
-Each space has its own calendar and these sections:
+University has its own calendar and these sections:
 
 - **Important dates** with a countdown (exams, deadlines, conferences).
 - **Meetings** for the next two weeks.
 - **Plan:** tasks with a progress bar and inline add (a study plan, a research plan).
 - **Saved:** notes, links and files that belong to the space.
-
-**Job** also has a **work log**: tap a day to mark it worked, worked from home, off, holiday or sick; hold it to add hours and a note. Counters for the month and a yearly summary with holidays left (the allowance is adjustable).
-
-<br clear="right">
-
-## Internships
-
-<img src="../screenshots/out/phone-light-internships.png" width="220" align="right" alt="Internships">
-
-- A pipeline: Want to apply → Preparing → Applied → Interview → Offer (or Rejected).
-- "Apply this week" banner for close deadlines.
-- Reminders on a date you choose, and automatically two days before the deadline.
-- A checklist per application (CV, letter, references…), notes and a link to the posting.
 
 <br clear="right">
 

@@ -25,18 +25,18 @@ your phone and PC to share data, one of your own computers acts as the server (s
 
 | Mini-app | In short |
 | --- | --- |
-| **Home** | A dashboard of widgets. Hold one to resize it (small, medium, large), change its shape, style and colour, move it, or remove it. 18 widget types, including app shortcuts. |
+| **Home** | A dashboard of widgets. Hold any widget (or tap Edit) to arrange: resize (small, medium, large), change shape, style and colour, drag to move, or remove. Over 15 widget types, including app shortcuts. Tap your profile picture for settings. |
 | **Weather** | Pick any place or use your location. Buienradar for rain in the next hours (NL/BE), Open-Meteo or Google Weather for the days ahead. |
 | **Calendar** | Day, week, month and an endless agenda. Swipe between periods, several calendars, repeats, reminders, subscribed .ics calendars. |
 | **To-do** | Quick add in plain words ("gym friday 7pm every week !"), reminders with Done and Snooze from the notification, repeating tasks, smart groups. |
 | **Notes** | Coloured notes in a masonry grid, checklists you can tick from the preview, pinning, search. |
-| **Wallet** | Spending by month, budgets, recurring payments and income, bank cards with live balances, savings goals, an investment portfolio with live prices, year overview and CSV import/export. |
-| **Shopping** | Type everything in one line. Each item goes under the shop where it is usually cheapest, and Claude can check against current offers. |
-| **Job / Lab / University** | A space each: important dates with countdowns, meetings, a plan with progress, saved notes, links and files. Job adds a work-day log with holidays left. |
-| **Internships** | A pipeline from "want to apply" to "offer", deadlines with reminders, a checklist per application. |
+| **Wallet** | A monthly spending target with what is left and a daily allowance, net worth, round-ups into savings, "compared with your usual month" insights, spending by month, budgets, recurring payments and income, bank cards with live balances, savings goals, an investment portfolio with live prices, year overview and CSV import/export. |
+| **Shopping** | Type everything in one line. Each item goes under the shop where it is usually cheapest, with an integrated AI price check against current offers. |
+| **University** | Important dates with countdowns, meetings, a study plan with progress, saved notes, links and files. |
 | **News** | Headlines from public RSS feeds across General, Netherlands, Greece, Politics, AI, Tech, Investing, Economy, Sports and Science. Add any feed. |
 | **Mail** | Gmail, Outlook and Proton Mail (through Proton Mail Bridge) over IMAP/SMTP. |
-| **Claude** | Opens the Claude app with a prompt ready. Uses your own Claude plan; Hub never calls a paid API. |
+| **Claude** | Opens the Claude app with a prompt ready. Uses your own Claude plan. |
+| **AI** | Its own tab. Today: the shopping price check and Claude. Coming soon: a DeepSeek API integration, a choice of models (Anthropic, OpenAI, DeepSeek, Llama) with a recommendation for each, your own API key, a Hub agent that adds expenses, notes and tasks from a sentence, and personal agents. |
 
 The full tour, screen by screen, is in **[docs/FEATURES.md](docs/FEATURES.md)**.
 

@@ -22,7 +22,7 @@ lib/
   apps/
     registry.dart         The mini-apps on the home screen
     <app>/                One folder per mini-app (weather, calendar, todo, notes, wallet, shopping,
-                          spaces, internships, news, mail, claude)
+                          spaces, news, mail, claude)
 test/                     Unit, widget and migration tests
 screenshots/              Golden tests that render the README screenshots from demo data
 server/                   Windows laptop setup script for sync and Proton Mail Bridge
@@ -72,7 +72,6 @@ devices merge them instead of duplicating.
 - Task reminders with **Done** and **Snooze** actions, exact alarms where allowed.
 - Event reminders, including repeats (only the next occurrences are scheduled, and the schedule is rebuilt
   when data changes).
-- Internship reminders and an automatic one two days before each deadline.
 
 Tapping a notification opens the right page.
 

@@ -9,6 +9,7 @@ import '../../core/format.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'insights.dart';
 
 const goalColors = [0xFF1F7A5A, 0xFF3A78C9, 0xFFCF9418, 0xFFB5487A, 0xFF6650AE, 0xFF2D8C9E, 0xFFC0563F];
 
@@ -47,6 +48,8 @@ class SavingsTab extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
             children: [
+              ContentWidth(child: NetWorthCard(currency: currency)),
+              const SizedBox(height: 12),
               ContentWidth(
                 child: _TotalCard(
                   label: 'Saved in total',
@@ -57,6 +60,8 @@ class SavingsTab extends StatelessWidget {
                   color: const Color(0xFF1F7A5A),
                 ),
               ),
+              const SizedBox(height: 12),
+              ContentWidth(child: RoundUpTile(goals: goals)),
               const SizedBox(height: 12),
               if (goals.isEmpty)
                 const EmptyState(

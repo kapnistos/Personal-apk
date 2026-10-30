@@ -7,9 +7,10 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hub/apps/ai/ai_page.dart';
+import 'package:hub/core/edition.dart';
 import 'package:hub/apps/calendar/calendar_page.dart';
 import 'package:hub/apps/claude/claude_page.dart';
-import 'package:hub/apps/internships/internships_page.dart';
 import 'package:hub/apps/news/news_page.dart';
 import 'package:hub/apps/news/news_service.dart';
 import 'package:hub/apps/spaces/space_page.dart';
@@ -48,6 +49,7 @@ int cal0(String name, List<Calendar> cals) => cals.firstWhere((c) => c.name == n
 Future<void> seed(AppDatabase db, AppSettings settings) async {
   await db.delete(db.todos).go(); // The owner's own tasks stay out of the pictures.
   await settings.setName('Alex');
+  await settings.setRaw('wallet.target', '180000');
   final now = DateTime.now();
   final today = dateOnly(now);
   final week = today.subtract(Duration(days: today.weekday - 1));
@@ -312,6 +314,8 @@ Future<void> seed(AppDatabase db, AppSettings settings) async {
 }
 
 void main() {
+  // Pictures in the docs show the public build: no Job, Lab or Internships.
+  personalEdition = false;
   setUpAll(loadFonts);
 
   final shots = <String, Widget Function()?>{
@@ -324,10 +328,9 @@ void main() {
     'subscriptions': () => const SubscriptionsPage(),
     'claude': () => const ClaudePage(),
     'me': () => const MePage(),
+    'ai': () => const AiPage(),
     'mail': () => const MailPage(),
     'university': () => const SpacePage(spaceId: 3),
-    'job': () => const SpacePage(spaceId: 1),
-    'internships': () => const InternshipsPage(),
     'news': () => const NewsPage(),
     'savings': () => const WalletPage(initialTab: 1),
     'investing': () => const WalletPage(initialTab: 2),
@@ -340,7 +343,7 @@ void main() {
       for (final e in shots.entries) {
         if (device == 'desktop' && !['home', 'calendar', 'wallet', 'weather'].contains(e.key)) continue;
         if (e.key == 'dashboard' && device == 'desktop') continue;
-        if (dark && !['home', 'calendar', 'wallet', 'todo', 'subscriptions', 'dashboard', 'me'].contains(e.key)) continue;
+        if (dark && !['home', 'calendar', 'wallet', 'todo', 'subscriptions', 'dashboard', 'me', 'ai', 'savings'].contains(e.key)) continue;
         testWidgets('$device ${dark ? 'dark' : 'light'} ${e.key}', (tester) async {
           // The whole home screen, top to bottom.
           tester.view.physicalSize = e.key == 'dashboard' ? Size(size.width, 7200) : size;

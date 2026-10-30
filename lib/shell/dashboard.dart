@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../apps/calendar/calendar_model.dart';
@@ -21,6 +22,7 @@ import '../apps/wallet/accounts_page.dart';
 import '../apps/wallet/investing_page.dart';
 import '../apps/wallet/wallet_model.dart';
 import '../apps/wallet/wallet_page.dart';
+import '../core/edition.dart';
 import '../core/db/database.dart';
 import '../core/format.dart';
 import '../core/settings.dart';
@@ -118,7 +120,10 @@ class DashKind {
   final bool ownCard;
 }
 
-const dashKinds = [
+/// Widget kinds this build offers.
+final dashKinds = [for (final k in _allKinds) if (personalEdition || !personalOnlyWidgets.contains(k.type)) k];
+
+const _allKinds = [
   DashKind('search', 'Search', 'Search notes, tasks, events and mail', Icons.search_rounded, 0xFF5F6B7A, [
     'm',
     'l',
@@ -242,7 +247,7 @@ List<DashItem> loadDashboard(AppSettings s) {
 Future<void> saveDashboard(AppSettings s, List<DashItem> items) =>
     s.setRaw(_layoutKey, jsonEncode([for (final i in items) i.toJson()]));
 
-/// The home screen's widgets. Long-press any of them to move, resize, restyle or remove it.
+/// The home screen's widgets. Hold any of them (or tap Edit) to arrange; then tap one to restyle it, drag to move it.
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key, required this.editing, required this.onEditing});
   final bool editing;
@@ -506,38 +511,42 @@ class DashboardState extends State<Dashboard> {
     );
     if (size == 's') body = SizedBox(height: 164, child: body);
     if (!widget.editing) {
-      return GestureDetector(onLongPress: () => _customise(item), child: body);
+      // Like an Android home screen: hold any widget to start arranging.
+      return GestureDetector(
+        onLongPress: () {
+          HapticFeedback.mediumImpact();
+          widget.onEditing(true);
+        },
+        child: body,
+      );
     }
-    final editingBody = Stack(
-      clipBehavior: Clip.none,
+    final p = Palette.of(context);
+    final radius = dashShapes[item.shape] ?? 22;
+    // Controls sit in a bar above the widget, never on top of its content.
+    final editingBody = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        IgnorePointer(child: body),
-        Positioned.fill(
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(dashShapes[item.shape] ?? 22),
-              onTap: () => _customise(item),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(dashShapes[item.shape] ?? 22),
-                  border: Border.all(color: Palette.of(context).accent.withValues(alpha: 0.7), width: 2),
+        SizedBox(
+          height: 34,
+          child: Row(
+            children: [
+              Icon(Icons.drag_indicator_rounded, size: 18, color: p.muted),
+              const SizedBox(width: 2),
+              Expanded(
+                child: Text(
+                  kind.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: p.muted),
                 ),
               ),
-            ),
-          ),
-        ),
-        Positioned(
-          top: -8,
-          right: -6,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _Badge(icon: Icons.tune_rounded, onTap: () => _customise(item)),
+              _Badge(icon: Icons.tune_rounded, tooltip: 'Customise', onTap: () => _customise(item)),
               const SizedBox(width: 6),
               _Badge(
                 icon: Icons.close_rounded,
+                tooltip: 'Remove',
                 onTap: () {
+                  HapticFeedback.lightImpact();
                   _items.remove(item);
                   _save();
                 },
@@ -545,7 +554,16 @@ class DashboardState extends State<Dashboard> {
             ],
           ),
         ),
-        const Positioned(left: 10, top: 8, child: _DragHint()),
+        GestureDetector(
+          onTap: () => _customise(item),
+          child: Container(
+            foregroundDecoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(color: p.accent.withValues(alpha: 0.55), width: 1.5),
+            ),
+            child: IgnorePointer(child: body),
+          ),
+        ),
       ],
     );
     return DragTarget<String>(
@@ -563,7 +581,10 @@ class DashboardState extends State<Dashboard> {
           child: LongPressDraggable<String>(
             data: item.id,
             delay: const Duration(milliseconds: 250),
-            onDragStarted: () => setState(() => _dragging = item.id),
+            onDragStarted: () {
+              HapticFeedback.selectionClick();
+              setState(() => _dragging = item.id);
+            },
             onDragEnd: (_) => setState(() => _dragging = null),
             feedback: Material(
               color: Colors.transparent,
@@ -604,39 +625,28 @@ class _Label extends StatelessWidget {
 }
 
 class _Badge extends StatelessWidget {
-  const _Badge({required this.icon, required this.onTap});
+  const _Badge({required this.icon, required this.tooltip, required this.onTap});
   final IconData icon;
+  final String tooltip;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    return Material(
-      color: p.ink,
-      shape: const CircleBorder(),
-      elevation: 2,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 16, color: p.background),
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: p.raised,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(5),
+            child: Icon(icon, size: 17, color: p.ink),
+          ),
         ),
       ),
-    );
-  }
-}
-
-class _DragHint extends StatelessWidget {
-  const _DragHint();
-
-  @override
-  Widget build(BuildContext context) {
-    final p = Palette.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(color: p.ink.withValues(alpha: 0.75), borderRadius: BorderRadius.circular(8)),
-      child: Icon(Icons.drag_indicator_rounded, size: 16, color: p.background),
     );
   }
 }
