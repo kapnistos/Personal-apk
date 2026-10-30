@@ -115,51 +115,60 @@ class _TodoPageState extends State<TodoPage> {
                     ),
                   ),
                   Expanded(
-                    child: groups.isEmpty
-                        ? EmptyState(
-                            icon: switch (_filter) {
-                              TodoFilter.done => Icons.history_rounded,
-                              TodoFilter.important => Icons.star_outline_rounded,
-                              TodoFilter.today => Icons.wb_sunny_outlined,
-                              TodoFilter.open => Icons.check_circle_outline_rounded,
-                            },
-                            title: switch (_filter) {
-                              TodoFilter.done => 'Nothing completed yet',
-                              TodoFilter.important => 'Nothing starred',
-                              TodoFilter.today => 'Nothing left for today',
-                              TodoFilter.open => 'All clear',
-                            },
-                            message: switch (_filter) {
-                              TodoFilter.done => 'Finished tasks show up here.',
-                              TodoFilter.important => 'Tap the star on a task, or end it with "!" when you add it.',
-                              TodoFilter.today => 'Enjoy the rest of the day.',
-                              TodoFilter.open =>
-                                'Add a task below. Try "Call the bank tomorrow 10:00" or "Gym every monday 18:00".',
-                            },
-                          )
-                        : ContentWidth(
-                            child: ListView(
-                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                              children: [
-                                for (final (label, items) in groups) ...[
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
-                                    child: Row(
-                                      children: [
-                                        SectionLabel(label),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          '${items.length}',
-                                          style: TextStyle(fontSize: 12.5, color: Palette.of(context).muted),
+                    // A quick cross-fade when switching filters, so the list does not jump.
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeIn,
+                      child: KeyedSubtree(
+                        key: ValueKey((_filter, groups.isEmpty)),
+                        child: groups.isEmpty
+                            ? EmptyState(
+                                icon: switch (_filter) {
+                                  TodoFilter.done => Icons.history_rounded,
+                                  TodoFilter.important => Icons.star_outline_rounded,
+                                  TodoFilter.today => Icons.wb_sunny_outlined,
+                                  TodoFilter.open => Icons.check_circle_outline_rounded,
+                                },
+                                title: switch (_filter) {
+                                  TodoFilter.done => 'Nothing completed yet',
+                                  TodoFilter.important => 'Nothing starred',
+                                  TodoFilter.today => 'Nothing left for today',
+                                  TodoFilter.open => 'All clear',
+                                },
+                                message: switch (_filter) {
+                                  TodoFilter.done => 'Finished tasks show up here.',
+                                  TodoFilter.important => 'Tap the star on a task, or end it with "!" when you add it.',
+                                  TodoFilter.today => 'Enjoy the rest of the day.',
+                                  TodoFilter.open =>
+                                    'Add a task below. Try "Call the bank tomorrow 10:00" or "Gym every monday 18:00".',
+                                },
+                              )
+                            : ContentWidth(
+                                child: ListView(
+                                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                                  children: [
+                                    for (final (label, items) in groups) ...[
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
+                                        child: Row(
+                                          children: [
+                                            SectionLabel(label),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              '${items.length}',
+                                              style: TextStyle(fontSize: 12.5, color: Palette.of(context).muted),
+                                            ),
+                                          ],
                                         ),
-                                      ],
-                                    ),
-                                  ),
-                                  for (final t in items) TodoTile(todo: t, space: spaces[t.spaceId]),
-                                ],
-                              ],
-                            ),
-                          ),
+                                      ),
+                                      for (final t in items) TodoTile(todo: t, space: spaces[t.spaceId]),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                      ),
+                    ),
                   ),
                   _QuickAdd(spaceId: widget.spaceId),
                 ],

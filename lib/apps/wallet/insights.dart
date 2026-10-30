@@ -496,8 +496,14 @@ class _NetWorthCardState extends State<NetWorthCard> {
                           decoration: BoxDecoration(color: x.$3, shape: BoxShape.circle),
                         ),
                         const SizedBox(width: 8),
-                        Text(x.$1, style: TextStyle(color: p.muted)),
-                        const Spacer(),
+                        Expanded(
+                          child: Text(
+                            x.$1,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: p.muted),
+                          ),
+                        ),
                         Text(money(x.$2, currency), style: const TextStyle(fontWeight: FontWeight.w600)),
                       ],
                     ),

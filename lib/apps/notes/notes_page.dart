@@ -239,8 +239,10 @@ class _GroupLabel extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) =>
-      Padding(padding: const EdgeInsets.fromLTRB(4, 10, 4, 8), child: SectionLabel(text));
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity,
+    child: Padding(padding: const EdgeInsets.fromLTRB(4, 10, 4, 8), child: SectionLabel(text)),
+  );
 }
 
 /// Cards in columns of different heights, filled left to right by shortest column.

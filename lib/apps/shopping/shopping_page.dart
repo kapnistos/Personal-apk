@@ -5,6 +5,7 @@ import '../../core/db/database.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../ai/ai_service.dart';
 import '../claude/claude_bridge.dart';
 import 'shopping_model.dart';
 
@@ -16,10 +17,18 @@ class ShoppingPage extends StatefulWidget {
   State<ShoppingPage> createState() => _ShoppingPageState();
 }
 
-class _ShoppingPageState extends State<ShoppingPage> {
+class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver, ClaudeAnswerWatcher {
   final _input = TextEditingController();
   final _focus = FocusNode();
   bool _byShop = true;
+  bool _checking = false;
+  List<ShoppingItem> _items = const [];
+
+  @override
+  String get answerQuestion => "Use Claude's prices from your clipboard?";
+
+  @override
+  Future<void> onClaudeAnswer(String text) => _applyPlan(text, _items);
 
   @override
   void dispose() {
@@ -64,17 +73,34 @@ class _ShoppingPageState extends State<ShoppingPage> {
         .showSnackBar(const SnackBar(content: Text('Sorted by the cheapest shop for each item')));
   }
 
+  /// Checks prices in the app on your API key, or hands the list to the Claude app.
   Future<void> _askClaude(List<ShoppingItem> items) async {
     final open = items.where((i) => !i.done).map((i) => i.quantity.isEmpty ? i.name : '${i.name} (${i.quantity})');
-    if (open.isEmpty) return;
-    final city = context.settings.raw('shopping.city') ?? 'Eindhoven';
-    await ClaudeBridge.ask(context, shoppingPrompt(open.toList(), city));
+    if (open.isEmpty || _checking) return;
+    final settings = context.settings;
+    final messenger = ScaffoldMessenger.of(context);
+    final city = settings.raw('shopping.city') ?? 'Eindhoven';
+    final prompt = shoppingPrompt(open.toList(), city);
+    final ai = AiSetup(settings);
+    if (!await ai.apiReady()) {
+      if (mounted) await askClaude(prompt);
+      return;
+    }
+    setState(() => _checking = true);
+    messenger.showSnackBar(SnackBar(content: Text('Checking prices with ${ai.model.name}')));
+    try {
+      final reply = await ai.ask([AiMessage('user', prompt)], maxTokens: 1024);
+      await _applyPlan(reply.text, items);
+    } on AiException catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
   }
 
   Future<void> _pasteAnswer(List<ShoppingItem> items) async {
-    final db = context.db;
-    final settings = context.settings;
-    final messenger = ScaffoldMessenger.of(context);
     final clip = (await Clipboard.getData(Clipboard.kTextPlain))?.text ?? '';
     if (!mounted) return;
     final c = TextEditingController(text: clip);
@@ -97,8 +123,16 @@ class _ShoppingPageState extends State<ShoppingPage> {
         ],
       ),
     );
-    if (ok != true) return;
-    final plan = parseStorePlan(c.text, items.map((i) => i.name));
+    if (ok == true) await _applyPlan(c.text, items);
+  }
+
+  /// Moves each item to the shop named in [text] ("pasta → Lidl" lines).
+  Future<void> _applyPlan(String text, List<ShoppingItem> items) async {
+    if (!mounted) return;
+    final db = context.db;
+    final settings = context.settings;
+    final messenger = ScaffoldMessenger.of(context);
+    final plan = parseStorePlan(text, items.map((i) => i.name));
     for (final i in items) {
       final store = plan[i.name.trim().toLowerCase()];
       if (store == null) continue;
@@ -106,13 +140,15 @@ class _ShoppingPageState extends State<ShoppingPage> {
       await rememberStore(settings, i.name, store);
     }
     if (mounted) setState(() => _byShop = true);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          plan.isEmpty ? 'Could not read any shops in that text' : 'Moved ${plan.length} items to their shops',
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            plan.isEmpty ? 'Could not read any shops in that text' : 'Moved ${plan.length} items to their shops',
+          ),
         ),
-      ),
-    );
+      );
   }
 
   Future<void> _edit(ShoppingItem item) async {
@@ -209,6 +245,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
       stream: db.watchShopping(),
       builder: (context, snap) {
         final items = snap.data ?? const <ShoppingItem>[];
+        _items = items;
         final open = items.where((i) => !i.done).toList();
         final bought = items.where((i) => i.done).toList();
         final groups = <String, List<ShoppingItem>>{};
@@ -251,7 +288,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
                 },
                 itemBuilder: (_) => const [
                   PopupMenuItem(value: 'sort', child: Text('Sort by cheapest shop')),
-                  PopupMenuItem(value: 'claude', child: Text('Ask Claude for the best prices')),
+                  PopupMenuItem(value: 'claude', child: Text('Check the best prices')),
                   PopupMenuItem(value: 'paste', child: Text("Use Claude's answer")),
                   PopupMenuItem(value: 'copy', child: Text('Copy list')),
                   PopupMenuItem(value: 'clear', child: Text('Clear bought items')),
@@ -309,8 +346,10 @@ class _ShoppingPageState extends State<ShoppingPage> {
                     ),
                     if (open.isNotEmpty)
                       TextButton.icon(
-                        onPressed: () => _askClaude(items),
-                        icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+                        onPressed: _checking ? null : () => _askClaude(items),
+                        icon: _checking
+                            ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.auto_awesome_outlined, size: 18),
                         label: const Text('Best prices'),
                       ),
                   ],
@@ -485,7 +524,8 @@ class _ShopRulesPageState extends State<ShopRulesPage> {
           ContentWidth(
             child: Text(
               'New items go to the shop set here for their kind, unless you moved that item before. '
-              '"Best prices" asks Claude, using your Claude plan, to check against current offers.',
+              '"Best prices" checks current offers with the AI you chose: in the Claude app on your plan, '
+              'or right here on your API key.',
               style: TextStyle(color: p.muted),
             ),
           ),

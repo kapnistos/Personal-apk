@@ -330,7 +330,7 @@ void main() {
     'me': () => const MePage(),
     'ai': () => const AiPage(),
     'mail': () => const MailPage(),
-    'university': () => const SpacePage(spaceId: 3),
+    'university': () => const SpacePage(spaceId: 2),
     'news': () => const NewsPage(),
     'savings': () => const WalletPage(initialTab: 1),
     'investing': () => const WalletPage(initialTab: 2),

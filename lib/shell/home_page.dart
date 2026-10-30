@@ -300,7 +300,7 @@ class _WeatherGlanceCardState extends State<WeatherGlanceCard> {
     final dim = Colors.white.withValues(alpha: 0.8);
     final today = f?.days.firstOrNull;
     return Material(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(22),
       clipBehavior: Clip.antiAlias,
       child: Ink(
         decoration: BoxDecoration(
@@ -572,18 +572,23 @@ class HeadlinesCard extends StatefulWidget {
 
 class _HeadlinesCardState extends State<HeadlinesCard> {
   final _news = NewsService.instance;
+  bool _failed = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _news.loadCache(context.settings);
-    if (_news.stale) {
+    // Settings changes land here too; after a failed try, wait for the next visit instead of retrying each time.
+    if (_news.stale && !_failed) {
       _news
           .refresh(context.settings)
+          // An offline refresh finishes without news rather than throwing.
           .then((_) {
-            if (mounted) setState(() {});
+            if (mounted) setState(() => _failed = _news.briefing(perTopic: 1, max: 1).isEmpty);
           })
-          .catchError((_) {});
+          .catchError((_) {
+            if (mounted) setState(() => _failed = true);
+          });
     }
   }
 
@@ -602,7 +607,10 @@ class _HeadlinesCardState extends State<HeadlinesCard> {
         child: items.isEmpty
             ? Padding(
                 padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
-                child: Text('Loading the latest news…', style: TextStyle(color: p.muted)),
+                child: Text(
+                  _failed ? 'Could not load the news. Check your connection.' : 'Loading the latest news…',
+                  style: TextStyle(color: p.muted),
+                ),
               )
             : Column(children: [for (final i in items) NewsTile(item: i, compact: true)]),
       ),

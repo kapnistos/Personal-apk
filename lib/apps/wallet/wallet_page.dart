@@ -1022,16 +1022,15 @@ class _EntryEditorState extends State<_EntryEditor> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SegmentedButton<EntryKind>(
-              showSelectedIcon: false,
-              style: SegmentedButton.styleFrom(visualDensity: VisualDensity.compact),
-              segments: [
+            PillToggle<EntryKind>(
+              dense: true,
+              options: [
                 for (final k in [EntryKind.expense, EntryKind.subscription, EntryKind.income, EntryKind.tax])
-                  ButtonSegment(value: k, label: Text(k == EntryKind.subscription ? 'Sub' : k.label)),
+                  (k, k == EntryKind.subscription ? 'Sub' : k.label),
               ],
-              selected: {_kind == EntryKind.transfer ? EntryKind.expense : _kind},
-              onSelectionChanged: (s) => setState(() {
-                _kind = s.first;
+              value: _kind == EntryKind.transfer ? EntryKind.expense : _kind,
+              onChanged: (k) => setState(() {
+                _kind = k;
                 _category = categoriesByKind[_kind]!.first.name;
               }),
             ),

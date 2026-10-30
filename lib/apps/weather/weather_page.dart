@@ -173,7 +173,7 @@ class _CityForecastState extends State<_CityForecast> {
           ),
         );
       }
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2.5));
+      return const SingleChildScrollView(child: Skeleton(lines: 6, padding: EdgeInsets.fromLTRB(16, 12, 16, 12)));
     }
     final unit = context.settings.tempUnit;
     return RefreshIndicator(

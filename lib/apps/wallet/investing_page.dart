@@ -28,8 +28,12 @@ int holdingValueCents(Holding h) => (h.units * h.price * 100).round();
 class PriceService {
   static Future<(double, String?)?> _quote(String symbol) async {
     final res = await http
-        .get(Uri.parse('https://query1.finance.yahoo.com/v8/finance/chart/${Uri.encodeComponent(symbol)}?range=1d&interval=1d'),
-            headers: {'User-Agent': 'Mozilla/5.0 Hub'})
+        .get(
+          Uri.parse(
+            'https://query1.finance.yahoo.com/v8/finance/chart/${Uri.encodeComponent(symbol)}?range=1d&interval=1d',
+          ),
+          headers: {'User-Agent': 'Mozilla/5.0 Hub'},
+        )
         .timeout(const Duration(seconds: 12));
     if (res.statusCode != 200) return null;
     final meta = (jsonDecode(res.body)['chart']?['result'] as List?)?.firstOrNull?['meta'] as Map?;
@@ -90,8 +94,11 @@ class _InvestingTabState extends State<InvestingTab> {
     final n = await PriceService.refreshAll(context.db, context.settings.currency);
     if (!mounted) return;
     setState(() => _refreshing = false);
-    messenger.showSnackBar(SnackBar(
-        content: Text(n == 0 ? 'No prices updated. Check the tickers or your connection.' : 'Updated $n prices')));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(n == 0 ? 'No prices updated. Check the tickers or your connection.' : 'Updated $n prices'),
+      ),
+    );
   }
 
   @override
@@ -109,8 +116,10 @@ class _InvestingTabState extends State<InvestingTab> {
         for (final h in holdings) {
           byKind[h.kind] = (byKind[h.kind] ?? 0) + holdingValueCents(h);
         }
-        final updated = holdings.map((h) => h.priceAt).whereType<DateTime>().fold<DateTime?>(
-            null, (a, b) => a == null || b.isAfter(a) ? b : a);
+        final updated = holdings
+            .map((h) => h.priceAt)
+            .whereType<DateTime>()
+            .fold<DateTime?>(null, (a, b) => a == null || b.isAfter(a) ? b : a);
         return RefreshIndicator(
           onRefresh: _refresh,
           child: ListView(
@@ -119,38 +128,48 @@ class _InvestingTabState extends State<InvestingTab> {
               ContentWidth(
                 child: Container(
                   padding: const EdgeInsets.fromLTRB(20, 18, 12, 18),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(22),
-                    gradient: const LinearGradient(colors: [Color(0xFF233B5E), Color(0xFF3A5F8F)]),
-                  ),
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('Portfolio value',
-                            style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontWeight: FontWeight.w500)),
-                        const SizedBox(height: 4),
-                        BigAmount(money(value, currency), size: 38, color: Colors.white),
-                        const SizedBox(height: 6),
-                        Text(
-                          invested == 0
-                              ? 'Add what you own to follow it here'
-                              : '${money(gain, currency, signed: true)} (${(gain / invested * 100).toStringAsFixed(1)}%) on ${money(invested, currency)} put in',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.88)),
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(22), color: const Color(0xFF2B4A73)),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Portfolio value',
+                              style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontWeight: FontWeight.w500),
+                            ),
+                            const SizedBox(height: 4),
+                            BigAmount(money(value, currency), size: 38, color: Colors.white),
+                            const SizedBox(height: 6),
+                            Text(
+                              invested == 0
+                                  ? 'Add what you own to follow it here'
+                                  : '${money(gain, currency, signed: true)} (${(gain / invested * 100).toStringAsFixed(1)}%) on ${money(invested, currency)} put in',
+                              style: TextStyle(color: Colors.white.withValues(alpha: 0.88)),
+                            ),
+                            if (updated != null)
+                              Text(
+                                'Prices from ${relativeTime(updated)}',
+                                style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 13),
+                              ),
+                          ],
                         ),
-                        if (updated != null)
-                          Text('Prices from ${relativeTime(updated)}',
-                              style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 13)),
-                      ]),
-                    ),
-                    IconButton(
-                      tooltip: 'Update prices',
-                      onPressed: _refreshing ? null : _refresh,
-                      icon: _refreshing
-                          ? const SizedBox(
-                              width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.refresh_rounded, color: Colors.white),
-                    ),
-                  ]),
+                      ),
+                      IconButton(
+                        tooltip: 'Update prices',
+                        onPressed: _refreshing ? null : _refresh,
+                        icon: _refreshing
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.refresh_rounded, color: Colors.white),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               if (value > 0) ...[
@@ -160,28 +179,46 @@ class _InvestingTabState extends State<InvestingTab> {
                     title: 'Spread',
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: SizedBox(
-                            height: 12,
-                            child: Row(children: [
-                              for (final MapEntry(key: k, value: v) in byKind.entries)
-                                if (v > 0) Expanded(flex: v, child: Container(color: holdingKinds[k]?.$2 ?? p.muted)),
-                            ]),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: SizedBox(
+                              height: 12,
+                              child: Row(
+                                children: [
+                                  for (final MapEntry(key: k, value: v) in byKind.entries)
+                                    if (v > 0)
+                                      Expanded(
+                                        flex: v,
+                                        child: Container(color: holdingKinds[k]?.$2 ?? p.muted),
+                                      ),
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 10),
-                        Wrap(spacing: 14, runSpacing: 6, children: [
-                          for (final MapEntry(key: k, value: v) in byKind.entries)
-                            Row(mainAxisSize: MainAxisSize.min, children: [
-                              CircleAvatar(radius: 5, backgroundColor: holdingKinds[k]?.$2 ?? p.muted),
-                              const SizedBox(width: 6),
-                              Text('${holdingKinds[k]?.$1 ?? k} ${(v / value * 100).round()}%',
-                                  style: const TextStyle(fontSize: 14)),
-                            ]),
-                        ]),
-                      ]),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 14,
+                            runSpacing: 6,
+                            children: [
+                              for (final MapEntry(key: k, value: v) in byKind.entries)
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    CircleAvatar(radius: 5, backgroundColor: holdingKinds[k]?.$2 ?? p.muted),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '${holdingKinds[k]?.$1 ?? k} ${(v / value * 100).round()}%',
+                                      style: const TextStyle(fontSize: 14),
+                                    ),
+                                  ],
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -191,19 +228,22 @@ class _InvestingTabState extends State<InvestingTab> {
                 const EmptyState(
                   icon: Icons.show_chart_rounded,
                   title: 'Nothing here yet',
-                  message: 'Add an ETF, stock, fund or crypto. With a ticker like VWRL.AS or BTC-EUR, '
+                  message:
+                      'Add an ETF, stock, fund or crypto. With a ticker like VWRL.AS or BTC-EUR, '
                       'Hub can fetch the latest price.',
                 )
               else
                 ContentWidth(
                   child: Card(
                     clipBehavior: Clip.antiAlias,
-                    child: Column(children: [
-                      for (var i = 0; i < holdings.length; i++) ...[
-                        if (i > 0) const Divider(indent: 64),
-                        _HoldingTile(h: holdings[i], currency: currency),
+                    child: Column(
+                      children: [
+                        for (var i = 0; i < holdings.length; i++) ...[
+                          if (i > 0) const Divider(indent: 64),
+                          _HoldingTile(h: holdings[i], currency: currency),
+                        ],
                       ],
-                    ]),
+                    ),
                   ),
                 ),
               const SizedBox(height: 12),
@@ -245,29 +285,44 @@ class _HoldingTile extends StatelessWidget {
       ),
       title: Text(h.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(
-        [label, if (h.symbol.isNotEmpty) h.symbol, '${formatUnits(h.units)} units', if (h.account.isNotEmpty) h.account]
-            .join(' · '),
+        [
+          label,
+          if (h.symbol.isNotEmpty) h.symbol,
+          '${formatUnits(h.units)} units',
+          if (h.account.isNotEmpty) h.account,
+        ].join(' · '),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(color: p.muted),
       ),
-      trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-        Text(money(value, currency), style: const TextStyle(fontWeight: FontWeight.w600)),
-        Text('${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(1)}%',
-            style: TextStyle(fontSize: 13.5, color: gain >= 0 ? p.positive : p.danger)),
-      ]),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(money(value, currency), style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(
+            '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(1)}%',
+            style: TextStyle(fontSize: 13.5, color: gain >= 0 ? p.positive : p.danger),
+          ),
+        ],
+      ),
     );
   }
 }
 
-String formatUnits(double u) => u == u.roundToDouble() ? u.toStringAsFixed(0) : u.toStringAsFixed(4).replaceFirst(RegExp(r'0+$'), '');
+String formatUnits(double u) =>
+    u == u.roundToDouble() ? u.toStringAsFixed(0) : u.toStringAsFixed(4).replaceFirst(RegExp(r'0+$'), '');
 
 Future<void> editHolding(BuildContext context, {Holding? holding}) {
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (_) => Hub(db: context.db, settings: context.settings, child: _HoldingEditor(holding: holding)),
+    builder: (_) => Hub(
+      db: context.db,
+      settings: context.settings,
+      child: _HoldingEditor(holding: holding),
+    ),
   );
 }
 
@@ -284,8 +339,11 @@ class _HoldingEditorState extends State<_HoldingEditor> {
   late final _symbol = TextEditingController(text: widget.holding?.symbol ?? '');
   late final _units = TextEditingController(text: widget.holding == null ? '' : _units0(widget.holding!.units));
   late final _invested = TextEditingController(
-      text: widget.holding == null ? '' : (widget.holding!.investedCents / 100).toStringAsFixed(2));
-  late final _price = TextEditingController(text: widget.holding == null ? '' : widget.holding!.price.toStringAsFixed(2));
+    text: widget.holding == null ? '' : (widget.holding!.investedCents / 100).toStringAsFixed(2),
+  );
+  late final _price = TextEditingController(
+    text: widget.holding == null ? '' : widget.holding!.price.toStringAsFixed(2),
+  );
   late final _account = TextEditingController(text: widget.holding?.account ?? '');
   late String _kind = widget.holding?.kind ?? 'etf';
   String? _status;
@@ -326,17 +384,19 @@ class _HoldingEditorState extends State<_HoldingEditor> {
       setState(() => _status = 'Fill in name, units and amount put in');
       return;
     }
-    await context.db.saveHolding(HoldingsCompanion(
-      id: widget.holding == null ? const Value.absent() : Value(widget.holding!.id),
-      name: Value(_name.text.trim()),
-      symbol: Value(_symbol.text.trim().toUpperCase()),
-      kind: Value(_kind),
-      units: Value(units),
-      investedCents: Value(invested),
-      price: Value(price),
-      priceAt: Value(widget.holding?.price == price ? widget.holding?.priceAt : DateTime.now()),
-      account: Value(_account.text.trim()),
-    ));
+    await context.db.saveHolding(
+      HoldingsCompanion(
+        id: widget.holding == null ? const Value.absent() : Value(widget.holding!.id),
+        name: Value(_name.text.trim()),
+        symbol: Value(_symbol.text.trim().toUpperCase()),
+        kind: Value(_kind),
+        units: Value(units),
+        investedCents: Value(invested),
+        price: Value(price),
+        priceAt: Value(widget.holding?.price == price ? widget.holding?.priceAt : DateTime.now()),
+        account: Value(_account.text.trim()),
+      ),
+    );
     if (mounted) Navigator.pop(context);
   }
 
@@ -348,18 +408,23 @@ class _HoldingEditorState extends State<_HoldingEditor> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Bought more'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
               controller: units,
               autofocus: true,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Units bought')),
-          const SizedBox(height: 10),
-          TextField(
+              decoration: const InputDecoration(labelText: 'Units bought'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
               controller: cost,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: 'Total paid', prefixText: '${currencySymbol(currency)} ')),
-        ]),
+              decoration: InputDecoration(labelText: 'Total paid', prefixText: '${currencySymbol(currency)} '),
+            ),
+          ],
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Add')),
@@ -381,94 +446,116 @@ class _HoldingEditorState extends State<_HoldingEditor> {
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
       child: SingleChildScrollView(
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text(widget.holding == null ? 'Add holding' : 'Edit holding', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _name,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(labelText: 'Name', hintText: 'Vanguard FTSE All-World'),
-          ),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(
-              child: TextField(
-                controller: _symbol,
-                textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(labelText: 'Ticker (optional)', hintText: 'VWRL.AS'),
-              ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.holding == null ? 'Add holding' : 'Edit holding',
+              style: Theme.of(context).textTheme.titleLarge,
             ),
-            const SizedBox(width: 8),
-            TextButton(onPressed: _lookup, child: const Text('Get price')),
-          ]),
-          const SizedBox(height: 10),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            for (final MapEntry(key: k, value: (label, _)) in holdingKinds.entries)
-              ChoiceChip(
-                showCheckmark: false,
-                label: Text(label),
-                selected: _kind == k,
-                onSelected: (_) => setState(() => _kind = k),
-              ),
-          ]),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(
-              child: TextField(
-                controller: _units,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Units'),
-              ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _name,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Name', hintText: 'Vanguard FTSE All-World'),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: TextField(
-                controller: _invested,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(labelText: 'Put in', prefixText: '${currencySymbol(currency)} '),
-              ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _symbol,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(labelText: 'Ticker (optional)', hintText: 'VWRL.AS'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(onPressed: _lookup, child: const Text('Get price')),
+              ],
             ),
-          ]),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(
-              child: TextField(
-                controller: _price,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(labelText: 'Price per unit', prefixText: '${currencySymbol(currency)} '),
-              ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final MapEntry(key: k, value: (label, _)) in holdingKinds.entries)
+                  ChoiceChip(
+                    showCheckmark: false,
+                    label: Text(label),
+                    selected: _kind == k,
+                    onSelected: (_) => setState(() => _kind = k),
+                  ),
+              ],
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: TextField(
-                controller: _account,
-                decoration: const InputDecoration(labelText: 'Where', hintText: 'DEGIRO, Revolut…'),
-              ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _units,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Units'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _invested,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(labelText: 'Put in', prefixText: '${currencySymbol(currency)} '),
+                  ),
+                ),
+              ],
             ),
-          ]),
-          if (_status != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(_status!, style: TextStyle(color: p.muted)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _price,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: 'Price per unit',
+                      prefixText: '${currencySymbol(currency)} ',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _account,
+                    decoration: const InputDecoration(labelText: 'Where', hintText: 'DEGIRO, Revolut…'),
+                  ),
+                ),
+              ],
             ),
-          const SizedBox(height: 14),
-          Row(children: [
-            if (widget.holding != null) ...[
-              TextButton(
-                style: TextButton.styleFrom(foregroundColor: p.danger),
-                onPressed: () async {
-                  if (!await confirmDelete(context, 'Remove ${widget.holding!.name}?') || !context.mounted) return;
-                  await context.db.deleteHolding(widget.holding!.id);
-                  if (context.mounted) Navigator.pop(context);
-                },
-                child: const Text('Remove'),
+            if (_status != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(_status!, style: TextStyle(color: p.muted)),
               ),
-              TextButton(onPressed: _buyMore, child: const Text('Bought more')),
-            ],
-            const Spacer(),
-            FilledButton(onPressed: _save, child: const Text('Save')),
-          ]),
-        ]),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                if (widget.holding != null) ...[
+                  TextButton(
+                    style: TextButton.styleFrom(foregroundColor: p.danger),
+                    onPressed: () async {
+                      if (!await confirmDelete(context, 'Remove ${widget.holding!.name}?') || !context.mounted) return;
+                      await context.db.deleteHolding(widget.holding!.id);
+                      if (context.mounted) Navigator.pop(context);
+                    },
+                    child: const Text('Remove'),
+                  ),
+                  TextButton(onPressed: _buyMore, child: const Text('Bought more')),
+                ],
+                const Spacer(),
+                FilledButton(onPressed: _save, child: const Text('Save')),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

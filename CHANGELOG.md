@@ -4,6 +4,16 @@ Builds are numbered by the CI run. Notable changes, newest first.
 
 ## October 2026
 
+### AI that works
+- Two ways to pay: your subscription (through the Claude app, no API cost) or your own API key for Anthropic, OpenAI, DeepSeek or Llama. Keys live only in secure storage, with a test button and plain error messages.
+- AI chat and a Hub agent: say "12 euro lunch" or "note: call the landlord" and confirm the cards it proposes.
+- Shopping price check runs in the app with an API key.
+
+### Fixes and polish
+- Repeating tasks no longer duplicate; notes no longer double-save; calendar events right on clock-change days; notification taps open the right page.
+- Wallet: no double saves, recurring payments booked once, cents kept on edit, "1.234,56" style numbers parse.
+- Flatter cards, sliding pill toggles, quiet loading placeholders, no overflow on small phones or with large text.
+
 ### Spaces, customization and polish
 - Spaces: make your own sections with a name, icon and colour; each gets dates, meetings, a plan, saved items and its own calendar, and appears on Home. Choose which apps Home shows.
 - Home: widgets move out of the way as you drag, undo after removing, live previews in the gallery, new Month, Countdown and Focus widgets.

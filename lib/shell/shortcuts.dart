@@ -103,14 +103,7 @@ class ShortcutGlyph extends StatelessWidget {
       width: size,
       height: size,
       alignment: Alignment.center,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(size * 0.3),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color.lerp(c, Colors.white, 0.12)!, c],
-        ),
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(size * 0.3), color: c),
       child: Text(
         shortcut.glyph.length > 2 ? shortcut.glyph.substring(0, 2) : shortcut.glyph,
         style: TextStyle(
@@ -181,8 +174,9 @@ class _ShortcutPickerState extends State<_ShortcutPicker> {
       ),
     );
     final u = url.text.trim();
-    if (ok != true || u.isEmpty || u == 'https://') return;
-    final n = name.text.trim().isEmpty ? (Uri.tryParse(u)?.host ?? u) : name.text.trim();
+    if (!mounted || ok != true || u.isEmpty || u == 'https://') return;
+    final host = Uri.tryParse(u)?.host ?? '';
+    final n = name.text.trim().isNotEmpty ? name.text.trim() : (host.isNotEmpty ? host : u);
     const palette = [0xFF3A78C9, 0xFF1F7A5A, 0xFFC0563F, 0xFF6650AE, 0xFFCF9418, 0xFF2D8C9E];
     setState(() => _list.add(Shortcut(n, u, palette[_list.length % palette.length])));
   }

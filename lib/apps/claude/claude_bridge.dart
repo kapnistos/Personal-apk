@@ -11,11 +11,8 @@ class ClaudeBridge {
   /// Longer prompts are passed by clipboard only, since URLs have size limits.
   static const maxUrlPrompt = 3500;
 
-  static Uri newChatUri([String prompt = '']) => Uri.https(
-        'claude.ai',
-        '/new',
-        prompt.isEmpty || prompt.length > maxUrlPrompt ? null : {'q': prompt},
-      );
+  static Uri newChatUri([String prompt = '']) =>
+      Uri.https('claude.ai', '/new', prompt.isEmpty || prompt.length > maxUrlPrompt ? null : {'q': prompt});
 
   /// Opens Claude. On Windows the desktop app is tried first.
   static Future<bool> open([String prompt = '']) async {
@@ -40,12 +37,73 @@ class ClaudeBridge {
     final opened = await open(text);
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Text(!opened
-            ? 'Could not open Claude. The prompt is on your clipboard.'
-            : text.isEmpty
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            !opened
+                ? 'Could not open Claude. The prompt is on your clipboard.'
+                : text.isEmpty
                 ? 'Opening Claude'
-                : 'Prompt copied. Paste it in Claude if it is not filled in.'),
-      ));
+                : 'Prompt copied. Paste it in Claude if it is not filled in.',
+          ),
+        ),
+      );
+  }
+}
+
+/// The clipboard text, when it looks like Claude's answer rather than the prompt we copied.
+String? claudeAnswerOnClipboard(String? clip, String prompt) {
+  final t = clip?.trim() ?? '';
+  if (t.isEmpty || t == prompt.trim()) return null;
+  return t;
+}
+
+/// Hands a prompt to Claude and, when the user comes back to Hub with an answer
+/// on the clipboard, offers to use it.
+mixin ClaudeAnswerWatcher<T extends StatefulWidget> on State<T>, WidgetsBindingObserver {
+  String? _sentPrompt;
+
+  /// What to tell the user about the answer, e.g. "Use Claude's prices?".
+  String get answerQuestion => "Use Claude's answer from your clipboard?";
+
+  /// Called with the copied answer after the user taps Use.
+  Future<void> onClaudeAnswer(String text);
+
+  Future<void> askClaude(String prompt) async {
+    _sentPrompt = prompt.trim();
+    WidgetsBinding.instance.removeObserver(this);
+    WidgetsBinding.instance.addObserver(this);
+    await ClaudeBridge.ask(context, prompt);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _sentPrompt != null) checkClipboardForAnswer();
+  }
+
+  /// Looks at the clipboard once and offers the answer if there is one.
+  Future<void> checkClipboardForAnswer() async {
+    final prompt = _sentPrompt;
+    if (prompt == null) return;
+    final clip = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    final answer = claudeAnswerOnClipboard(clip, prompt);
+    if (answer == null || !mounted) return;
+    _sentPrompt = null;
+    WidgetsBinding.instance.removeObserver(this);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 12),
+          content: Text(answerQuestion),
+          action: SnackBarAction(label: 'Use', onPressed: () => onClaudeAnswer(answer)),
+        ),
+      );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 }

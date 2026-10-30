@@ -143,10 +143,7 @@ class _MailPageState extends State<MailPage> {
                           ),
                         ),
                       if (_loading && _items == null)
-                        const Padding(
-                          padding: EdgeInsets.all(48),
-                          child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
-                        ),
+                        const Skeleton(lines: 6, padding: EdgeInsets.fromLTRB(16, 8, 16, 8)),
                       if (_items != null && items.isEmpty && _errors.isEmpty)
                         const Padding(
                           padding: EdgeInsets.only(top: 80),
@@ -346,11 +343,7 @@ class _MessagePageState extends State<_MessagePage> {
             ),
             const SizedBox(height: 20),
             if (_error != null) Text(_error!, style: TextStyle(color: p.danger)),
-            if (text == null && _error == null)
-              const Padding(
-                padding: EdgeInsets.all(32),
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
-              ),
+            if (text == null && _error == null) const Skeleton(lines: 4, leading: false, padding: EdgeInsets.zero),
             if (text != null)
               SelectableText(text.isEmpty ? '(no text)' : text, style: const TextStyle(fontSize: 15.5, height: 1.55)),
           ],

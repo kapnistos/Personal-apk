@@ -54,15 +54,17 @@ class MePage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SegmentedButton<ThemeMode>(
-                        showSelectedIcon: false,
-                        segments: const [
-                          ButtonSegment(value: ThemeMode.system, label: Text('System')),
-                          ButtonSegment(value: ThemeMode.light, label: Text('Light')),
-                          ButtonSegment(value: ThemeMode.dark, label: Text('Dark')),
-                        ],
-                        selected: {s.themeMode},
-                        onSelectionChanged: (v) => s.setThemeMode(v.first),
+                      SizedBox(
+                        width: double.infinity,
+                        child: PillToggle<ThemeMode>(
+                          options: const [
+                            (ThemeMode.system, 'System'),
+                            (ThemeMode.light, 'Light'),
+                            (ThemeMode.dark, 'Dark'),
+                          ],
+                          value: s.themeMode,
+                          onChanged: s.setThemeMode,
+                        ),
                       ),
                       const SizedBox(height: 18),
                       _SubLabel('Accent colour'),
@@ -122,15 +124,11 @@ class MePage extends StatelessWidget {
                   children: [
                     ListTile(
                       title: const Text('Temperature'),
-                      trailing: SegmentedButton<TempUnit>(
-                        showSelectedIcon: false,
-                        style: SegmentedButton.styleFrom(visualDensity: VisualDensity.compact),
-                        segments: const [
-                          ButtonSegment(value: TempUnit.celsius, label: Text('°C')),
-                          ButtonSegment(value: TempUnit.fahrenheit, label: Text('°F')),
-                        ],
-                        selected: {s.tempUnit},
-                        onSelectionChanged: (v) => s.setTempUnit(v.first),
+                      trailing: PillToggle<TempUnit>(
+                        dense: true,
+                        options: const [(TempUnit.celsius, '°C'), (TempUnit.fahrenheit, '°F')],
+                        value: s.tempUnit,
+                        onChanged: s.setTempUnit,
                       ),
                     ),
                     ListTile(
@@ -166,7 +164,9 @@ class MePage extends StatelessWidget {
                     value: s.currency,
                     underline: const SizedBox.shrink(),
                     items: [
-                      for (final c in const ['EUR', 'USD', 'GBP', 'CHF']) DropdownMenuItem(value: c, child: Text(c)),
+                      // A currency set elsewhere (sync, a restore) is kept in the list so the menu can show it.
+                      for (final c in {'EUR', 'USD', 'GBP', 'CHF', s.currency})
+                        DropdownMenuItem(value: c, child: Text(c)),
                     ],
                     onChanged: (v) => s.setCurrency(v ?? 'EUR'),
                   ),
@@ -365,15 +365,10 @@ class _SyncSectionState extends State<_SyncSection> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SegmentedButton<String>(
-              showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: 'off', label: Text('Off')),
-                ButtonSegment(value: 'server', label: Text('Server')),
-                ButtonSegment(value: 'client', label: Text('Connect')),
-              ],
-              selected: {mode},
-              onSelectionChanged: (v) => _setMode(v.first),
+            PillToggle<String>(
+              options: const [('off', 'Off'), ('server', 'Server'), ('client', 'Connect')],
+              value: mode,
+              onChanged: _setMode,
             ),
             const SizedBox(height: 12),
             if (mode == 'off')

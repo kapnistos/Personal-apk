@@ -65,7 +65,7 @@ class SpacePage extends StatelessWidget {
       stream: db.watchSpaces(),
       builder: (context, snap) {
         final space = (snap.data ?? const <Space>[]).where((s) => s.id == spaceId).firstOrNull;
-        if (space == null) return const Scaffold();
+        if (space == null) return Scaffold(appBar: AppBar()); // Deleted elsewhere: still a way back.
         final color = Color(space.color);
         final words = SpaceWords.of(space.icon);
         return Scaffold(
@@ -292,26 +292,32 @@ class _Countdown extends StatelessWidget {
   Widget build(BuildContext context) {
     final urgent = days <= 7;
     return Container(
+      // One fixed size with or without the "days" line, so the badges line up; large text shrinks to fit.
       width: 52,
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      height: 52,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
         color: urgent ? color : color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            days == 0 ? 'Today' : '$days',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: days == 0 ? 13 : 17,
-              color: urgent ? Colors.white : color,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              days == 0 ? 'Today' : '$days',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: days == 0 ? 13 : 17,
+                color: urgent ? Colors.white : color,
+              ),
             ),
-          ),
-          if (days != 0)
-            Text(days == 1 ? 'day' : 'days', style: TextStyle(fontSize: 11.5, color: urgent ? Colors.white : color)),
-        ],
+            if (days != 0)
+              Text(days == 1 ? 'day' : 'days', style: TextStyle(fontSize: 11.5, color: urgent ? Colors.white : color)),
+          ],
+        ),
       ),
     );
   }

@@ -124,7 +124,7 @@ Future<void> editSpace(BuildContext context, {Space? space}) async {
     context: context,
     isScrollControlled: true,
     builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setSheet) => Padding(
+      builder: (ctx, setSheet) => SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(ctx).bottom),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -147,7 +147,12 @@ Future<void> editSpace(BuildContext context, {Space? space}) async {
               children: [
                 for (final e in mySpaceIcons.entries)
                   ChoiceChip(
-                    label: Icon(e.value, size: 20),
+                    // A chosen chip is filled with the ink colour, so its icon flips to stay visible.
+                    label: Icon(
+                      e.value,
+                      size: 20,
+                      color: icon == e.key ? Palette.of(ctx).background : Palette.of(ctx).ink,
+                    ),
                     selected: icon == e.key,
                     onSelected: (_) => setSheet(() => icon = e.key),
                   ),
@@ -201,7 +206,13 @@ Future<void> editSpace(BuildContext context, {Space? space}) async {
                     label: const Text('Delete'),
                   ),
                 const Spacer(),
-                FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+                ListenableBuilder(
+                  listenable: name,
+                  builder: (ctx, _) => FilledButton(
+                    onPressed: name.text.trim().isEmpty ? null : () => Navigator.pop(ctx, true),
+                    child: const Text('Save'),
+                  ),
+                ),
               ],
             ),
           ],
@@ -209,8 +220,8 @@ Future<void> editSpace(BuildContext context, {Space? space}) async {
       ),
     ),
   );
+  // The controller is left to the garbage collector: the sheet still draws the field while it slides away.
   final title = name.text.trim();
-  name.dispose();
   if (saved != true || title.isEmpty) return;
   if (space == null) {
     final all = await db.watchSpaces().first;

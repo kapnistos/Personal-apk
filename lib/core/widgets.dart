@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'settings.dart';
 import 'theme.dart';
@@ -189,7 +192,15 @@ class _SettingSelectorState<T> extends State<SettingSelector<T>> {
     _value = widget.select(s);
   }
 
+  @override
+  void didUpdateWidget(SettingSelector<T> old) {
+    super.didUpdateWidget(old);
+    final s = _settings;
+    if (s != null) _value = widget.select(s);
+  }
+
   void _changed() {
+    if (!mounted) return;
     final v = widget.select(_settings!);
     if (v != _value) setState(() => _value = v);
   }
@@ -246,6 +257,183 @@ class ColorDots extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Grey placeholder lines shown while content loads. They stay invisible for the first
+/// 250 ms, so a quick load never flashes, then fade in and breathe gently.
+class Skeleton extends StatefulWidget {
+  const Skeleton({super.key, this.lines = 3, this.padding = const EdgeInsets.all(16), this.leading = true});
+  final int lines;
+  final EdgeInsets padding;
+
+  /// Draws a circle before each line, like a list of rows with avatars.
+  final bool leading;
+
+  @override
+  State<Skeleton> createState() => _SkeletonState();
+}
+
+class _SkeletonState extends State<Skeleton> with SingleTickerProviderStateMixin {
+  late final _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100));
+  bool _shown = false;
+  Timer? _wait;
+
+  @override
+  void initState() {
+    super.initState();
+    _wait = Timer(const Duration(milliseconds: 250), () {
+      setState(() => _shown = true);
+      _pulse.repeat(reverse: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _wait?.cancel();
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    Widget bar(double width, double height) => Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(color: p.raised, borderRadius: BorderRadius.circular(height / 2)),
+    );
+    return Semantics(
+      label: 'Loading',
+      child: AnimatedOpacity(
+        opacity: _shown ? 1 : 0,
+        duration: const Duration(milliseconds: 200),
+        child: FadeTransition(
+          opacity: Tween(begin: 1.0, end: 0.55).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut)),
+          child: Padding(
+            padding: widget.padding,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < widget.lines; i++)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Row(
+                      children: [
+                        if (widget.leading) ...[
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(color: p.raised, shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: 14),
+                        ],
+                        Expanded(
+                          child: LayoutBuilder(
+                            builder: (context, c) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                bar(c.maxWidth * (i.isEven ? 0.7 : 0.55), 12),
+                                const SizedBox(height: 8),
+                                bar(c.maxWidth * (i.isEven ? 0.4 : 0.5), 10),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A pill-shaped switch between a few options; the chosen one sits on a solid pill that slides across.
+class PillToggle<T> extends StatelessWidget {
+  const PillToggle({
+    super.key,
+    required this.options,
+    required this.value,
+    required this.onChanged,
+    this.dense = false,
+  });
+  final List<(T, String)> options;
+  final T value;
+  final ValueChanged<T> onChanged;
+  final bool dense;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final n = options.length;
+    final index = options.indexWhere((o) => o.$1 == value);
+    const duration = Duration(milliseconds: 200);
+    return IntrinsicWidth(
+      child: Container(
+        padding: const EdgeInsets.all(3),
+        decoration: ShapeDecoration(color: p.raised, shape: const StadiumBorder()),
+        child: Stack(
+          children: [
+            if (index >= 0)
+              Positioned.fill(
+                child: AnimatedAlign(
+                  duration: duration,
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment(n == 1 ? 0 : -1 + 2 * index / (n - 1), 0),
+                  child: FractionallySizedBox(
+                    widthFactor: 1 / n,
+                    heightFactor: 1,
+                    child: DecoratedBox(
+                      decoration: ShapeDecoration(color: p.ink, shape: const StadiumBorder()),
+                    ),
+                  ),
+                ),
+              ),
+            Row(
+              children: [
+                for (final (i, (v, label)) in options.indexed)
+                  Expanded(
+                    child: Semantics(
+                      button: true,
+                      selected: i == index,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          if (v == value) return;
+                          HapticFeedback.selectionClick();
+                          onChanged(v);
+                        },
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(minHeight: dense ? 34 : 40, minWidth: dense ? 52 : 64),
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: dense ? 12 : 16, vertical: 6),
+                            child: Center(
+                              child: AnimatedDefaultTextStyle(
+                                duration: duration,
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: dense ? 14 : 14.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: i == index ? p.background : p.ink,
+                                ),
+                                child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

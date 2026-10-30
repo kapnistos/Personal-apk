@@ -44,7 +44,9 @@ class _ClaudePageState extends State<ClaudePage> {
     if (todos.isNotEmpty) {
       b.writeln('\nTasks:');
       for (final t in todos) {
-        b.writeln('- ${t.title}${t.due != null ? ' (due ${friendlyDay(t.due!)})' : ''}${t.important ? ' [important]' : ''}');
+        b.writeln(
+          '- ${t.title}${t.due != null ? ' (due ${friendlyDay(t.due!)})' : ''}${t.important ? ' [important]' : ''}',
+        );
       }
     }
     b.writeln('\nSuggest an order and realistic time blocks.');
@@ -89,33 +91,34 @@ class _ClaudePageState extends State<ClaudePage> {
                     minLines: 3,
                     maxLines: 8,
                     textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
-                      hintText: 'What do you need?',
-                      fillColor: p.surface,
-                    ),
+                    decoration: InputDecoration(hintText: 'What do you need?', fillColor: p.surface),
                   ),
                   const SizedBox(height: 12),
-                  Row(children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(backgroundColor: TileColors.claude, foregroundColor: Colors.white),
-                        onPressed: () => ClaudeBridge.ask(context, _controller.text),
-                        icon: const Icon(Icons.north_east_rounded, size: 18),
-                        label: const Text('Ask in Claude'),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: TileColors.claude,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () => ClaudeBridge.ask(context, _controller.text),
+                          icon: const Icon(Icons.north_east_rounded, size: 18),
+                          label: const Text('Ask in Claude'),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    OutlinedButton(
-                      onPressed: () => ClaudeBridge.ask(context, ''),
-                      child: const Text('Open app'),
-                    ),
-                  ]),
+                      const SizedBox(width: 10),
+                      OutlinedButton(onPressed: () => ClaudeBridge.ask(context, ''), child: const Text('Open app')),
+                    ],
+                  ),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 20),
-          ContentWidth(child: const Padding(padding: EdgeInsets.only(left: 4, bottom: 8), child: SectionLabel('Starters'))),
+          ContentWidth(
+            child: const Padding(padding: EdgeInsets.only(left: 4, bottom: 8), child: SectionLabel('Starters')),
+          ),
           ContentWidth(
             child: Wrap(
               spacing: 8,
@@ -142,7 +145,7 @@ class _ClaudePageState extends State<ClaudePage> {
           const SizedBox(height: 24),
           ContentWidth(
             child: Text(
-              'Hub never uses the paid Claude API. Prompts go to the official Claude app or claude.ai, '
+              'This page never uses the paid API. Prompts go to the official Claude app or claude.ai, '
               'where your Pro or Max usage limits apply. Very long prompts are copied to the clipboard for you to paste.',
               style: TextStyle(color: p.muted, fontSize: 13.5, height: 1.45),
             ),

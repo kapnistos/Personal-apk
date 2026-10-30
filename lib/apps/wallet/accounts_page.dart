@@ -154,71 +154,63 @@ class AccountCard extends StatelessWidget {
     final soft = Colors.white.withValues(alpha: 0.78);
     final next = state.recurring.where((s) => s.kind.sign < 0).firstOrNull;
     return Material(
-      borderRadius: BorderRadius.circular(20),
+      color: Color.lerp(color, Colors.black, 0.12),
+      borderRadius: BorderRadius.circular(22),
       clipBehavior: Clip.antiAlias,
-      child: Ink(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [color, Color.lerp(color, Colors.black, 0.35)!],
-          ),
-        ),
-        child: InkWell(
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AccountPage(accountId: a.id))),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        a.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: fg, fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
+      child: InkWell(
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AccountPage(accountId: a.id))),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      a.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: fg, fontSize: 16, fontWeight: FontWeight.w600),
                     ),
-                    if (a.number.isNotEmpty)
-                      Text('•••• ${a.number}', style: TextStyle(color: soft, fontSize: 13.5, letterSpacing: 0.5)),
-                  ],
-                ),
-                const Spacer(),
-                if (state.hasBalance) ...[
-                  Text('Balance', style: TextStyle(color: soft, fontSize: 13)),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: BigAmount(money(state.balance, currency), size: 32, color: fg),
                   ),
-                ] else
-                  OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: fg,
-                      side: BorderSide(color: Colors.white.withValues(alpha: 0.6)),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    onPressed: () => setAccountBalance(context, a),
-                    child: const Text('Set balance'),
-                  ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(child: _Mini('In', money(state.monthIn, currency), soft)),
-                    Expanded(child: _Mini('Out', money(state.monthOut, currency), soft)),
-                    Expanded(
-                      child: _Mini(
-                        next == null ? 'Bills' : 'Next ${DateFormat('d MMM').format(next.nextDate)}',
-                        next == null ? 'none' : '${next.name} ${money(next.amountCents, currency)}',
-                        soft,
-                      ),
-                    ),
-                  ],
+                  if (a.number.isNotEmpty)
+                    Text('•••• ${a.number}', style: TextStyle(color: soft, fontSize: 13.5, letterSpacing: 0.5)),
+                ],
+              ),
+              const Spacer(),
+              if (state.hasBalance) ...[
+                Text('Balance', style: TextStyle(color: soft, fontSize: 13)),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: BigAmount(money(state.balance, currency), size: 32, color: fg),
                 ),
-              ],
-            ),
+              ] else
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: fg,
+                    side: BorderSide(color: Colors.white.withValues(alpha: 0.6)),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: () => setAccountBalance(context, a),
+                  child: const Text('Set balance'),
+                ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(child: _Mini('In', money(state.monthIn, currency), soft)),
+                  Expanded(child: _Mini('Out', money(state.monthOut, currency), soft)),
+                  Expanded(
+                    child: _Mini(
+                      next == null ? 'Bills' : '${next.name}, ${DateFormat('d MMM').format(next.nextDate)}',
+                      next == null ? 'None due' : money(next.amountCents, currency),
+                      soft,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),

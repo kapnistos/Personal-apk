@@ -36,7 +36,7 @@ your phone and PC to share data, one of your own computers acts as the server (s
 | **News** | Headlines from public RSS feeds across General, Netherlands, Greece, Politics, AI, Tech, Investing, Economy, Sports and Science. Add any feed. |
 | **Mail** | Gmail, Outlook and Proton Mail (through Proton Mail Bridge) over IMAP/SMTP. |
 | **Claude** | Opens the Claude app with a prompt ready. Uses your own Claude plan. |
-| **AI** | Its own tab. Today: the shopping price check and Claude. Coming soon: a DeepSeek API integration, a choice of models (Anthropic, OpenAI, DeepSeek, Llama) with a recommendation for each, your own API key, a Hub agent that adds expenses, notes and tasks from a sentence, and personal agents. |
+| **AI** | Its own tab. Use your own subscription (hands the question to the Claude app, no API cost) or your own API key for Anthropic, OpenAI, DeepSeek or Llama (Groq, OpenRouter or a local Ollama). A chat, a Hub agent that turns a sentence into expenses, notes, tasks or events after you confirm, and an AI price check for the shopping list. Keys stay in the device's secure storage. Personal agents and a DeepSeek-first setup are coming next. |
 
 The full tour, screen by screen, is in **[docs/FEATURES.md](docs/FEATURES.md)**.
 

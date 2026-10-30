@@ -305,11 +305,25 @@ class Dashboard extends StatefulWidget {
 
 class DashboardState extends State<Dashboard> {
   late List<DashItem> _items = loadDashboard(context.settings);
+  late String? _layout = context.settings.raw(_layoutKey);
   String? _dragging;
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // A layout changed somewhere else (sync, a restore) shows up without a restart.
+    final raw = context.settings.raw(_layoutKey);
+    if (raw != _layout && _dragging == null) {
+      _layout = raw;
+      _items = loadDashboard(context.settings);
+    }
+  }
+
   void _save() {
+    if (!mounted) return;
     setState(() {});
-    saveDashboard(context.settings, _items);
+    _layout = jsonEncode([for (final i in _items) i.toJson()]);
+    context.settings.setRaw(_layoutKey, _layout!);
   }
 
   /// Moves the dragged widget to where the finger is, right away, so the rest reflow around it.
@@ -416,11 +430,10 @@ class DashboardState extends State<Dashboard> {
                   ),
                   const SizedBox(height: 18),
                   const _Label('Size'),
-                  SegmentedButton<String>(
-                    showSelectedIcon: false,
-                    segments: [for (final s in kind.sizes) ButtonSegment(value: s, label: Text(dashSizeLabels[s]!))],
-                    selected: {kind.sizes.contains(item.size) ? item.size : kind.size},
-                    onSelectionChanged: (v) => change(() => item.size = v.first),
+                  PillToggle<String>(
+                    options: [for (final s in kind.sizes) (s, dashSizeLabels[s]!)],
+                    value: kind.sizes.contains(item.size) ? item.size : kind.size,
+                    onChanged: (v) => change(() => item.size = v),
                   ),
                   const SizedBox(height: 16),
                   const _Label('Shape'),
@@ -435,7 +448,11 @@ class DashboardState extends State<Dashboard> {
                             width: 18,
                             height: 18,
                             decoration: BoxDecoration(
-                              border: Border.all(color: Palette.of(context).ink, width: 1.6),
+                              border: Border.all(
+                                // The chosen chip is filled with ink, so its outline flips to stay visible.
+                                color: item.shape == e.key ? Palette.of(context).background : Palette.of(context).ink,
+                                width: 1.6,
+                              ),
                               borderRadius: BorderRadius.circular(e.value / 3),
                             ),
                           ),
@@ -1274,7 +1291,9 @@ class _ClockState extends State<_Clock> {
   @override
   void initState() {
     super.initState();
-    _t = Timer.periodic(const Duration(seconds: 15), (_) => setState(() => _now = DateTime.now()));
+    _t = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
   }
 
   @override
@@ -1286,7 +1305,9 @@ class _ClockState extends State<_Clock> {
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    final week = ((daysBetween(DateTime(_now.year), _now) - _now.weekday + 10) / 7).floor();
+    // ISO week: the week that holds this week's Thursday.
+    final thursday = addDays(dateOnly(_now), DateTime.thursday - _now.weekday);
+    final week = daysBetween(DateTime(thursday.year), thursday) ~/ 7 + 1;
     return Card(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
@@ -1312,7 +1333,12 @@ class _ClockState extends State<_Clock> {
               ),
             ),
             const SizedBox(height: 4),
-            Text('${DateFormat('d MMMM').format(_now)} · week $week', style: TextStyle(color: p.muted, fontSize: 13.5)),
+            Text(
+              '${DateFormat(widget.small ? 'd MMM' : 'd MMMM').format(_now)} · week $week',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: p.muted, fontSize: 13.5),
+            ),
           ],
         ),
       ),
@@ -1843,17 +1869,22 @@ class _NewsSmall extends StatefulWidget {
 }
 
 class _NewsSmallState extends State<_NewsSmall> {
+  bool _failed = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final news = NewsService.instance..loadCache(context.settings);
-    if (news.stale) {
+    if (news.stale && !_failed) {
       news
           .refresh(context.settings)
+          // An offline refresh finishes without news rather than throwing.
           .then((_) {
-            if (mounted) setState(() {});
+            if (mounted) setState(() => _failed = news.briefing(perTopic: 1, max: 1).isEmpty);
           })
-          .catchError((_) {});
+          .catchError((_) {
+            if (mounted) setState(() => _failed = true);
+          });
     }
   }
 
@@ -1887,7 +1918,7 @@ class _NewsSmallState extends State<_NewsSmall> {
               const SizedBox(height: 8),
               Expanded(
                 child: Text(
-                  top?.title ?? 'Loading the news…',
+                  top?.title ?? (_failed ? 'Could not load the news' : 'Loading the news…'),
                   maxLines: 4,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w600, height: 1.3),

@@ -63,7 +63,9 @@ class SavingsTab extends StatelessWidget {
               const SizedBox(height: 12),
               ContentWidth(child: RoundUpTile(goals: goals)),
               const SizedBox(height: 12),
-              ContentWidth(child: PaydayTile(goals: goals, moves: moves)),
+              ContentWidth(
+                child: PaydayTile(goals: goals, moves: moves),
+              ),
               const SizedBox(height: 12),
               if (goals.isEmpty)
                 const EmptyState(
@@ -80,7 +82,8 @@ class SavingsTab extends StatelessWidget {
                 ),
               if (archived.isNotEmpty) ...[
                 const ContentWidth(
-                    child: Padding(padding: EdgeInsets.fromLTRB(4, 10, 4, 8), child: SectionLabel('Reached or put away'))),
+                  child: Padding(padding: EdgeInsets.fromLTRB(4, 10, 4, 8), child: SectionLabel('Reached or put away')),
+                ),
                 for (final g in archived)
                   ContentWidth(
                     child: Card(
@@ -95,21 +98,29 @@ class SavingsTab extends StatelessWidget {
               ],
               if (moves.isNotEmpty) ...[
                 const ContentWidth(
-                    child: Padding(padding: EdgeInsets.fromLTRB(4, 14, 4, 8), child: SectionLabel('Latest moves'))),
+                  child: Padding(padding: EdgeInsets.fromLTRB(4, 14, 4, 8), child: SectionLabel('Latest moves')),
+                ),
                 ContentWidth(
                   child: Card(
-                    child: Column(children: [
-                      for (final m in moves.take(8))
-                        ListTile(
-                          dense: true,
-                          leading: Icon(m.amountCents >= 0 ? Icons.south_west_rounded : Icons.north_east_rounded,
-                              size: 18, color: m.amountCents >= 0 ? p.positive : p.danger),
-                          title: Text(goals.where((g) => g.id == m.goalId).firstOrNull?.name ?? 'Goal'),
-                          subtitle: Text([friendlyDay(m.date), if (m.note.isNotEmpty) m.note].join(' · ')),
-                          trailing: Text(money(m.amountCents, currency, signed: true),
-                              style: const TextStyle(fontWeight: FontWeight.w600)),
-                        ),
-                    ]),
+                    child: Column(
+                      children: [
+                        for (final m in moves.take(8))
+                          ListTile(
+                            dense: true,
+                            leading: Icon(
+                              m.amountCents >= 0 ? Icons.south_west_rounded : Icons.north_east_rounded,
+                              size: 18,
+                              color: m.amountCents >= 0 ? p.positive : p.danger,
+                            ),
+                            title: Text(goals.where((g) => g.id == m.goalId).firstOrNull?.name ?? 'Goal'),
+                            subtitle: Text([friendlyDay(m.date), if (m.note.isNotEmpty) m.note].join(' · ')),
+                            trailing: Text(
+                              money(m.amountCents, currency, signed: true),
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -133,17 +144,20 @@ class _TotalCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: LinearGradient(colors: [color, Color.lerp(color, Colors.white, 0.18)!]),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(22), color: color),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 4),
+          BigAmount(value, size: 38, color: Colors.white),
+          const SizedBox(height: 6),
+          Text(footer, style: TextStyle(color: Colors.white.withValues(alpha: 0.85))),
+        ],
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontWeight: FontWeight.w500)),
-        const SizedBox(height: 4),
-        BigAmount(value, size: 38, color: Colors.white),
-        const SizedBox(height: 6),
-        Text(footer, style: TextStyle(color: Colors.white.withValues(alpha: 0.85))),
-      ]),
     );
   }
 }
@@ -163,7 +177,8 @@ class GoalCard extends StatelessWidget {
     String? pace;
     if (goal.deadline != null && left > 0) {
       final months = monthsLeft(goal.deadline!);
-      pace = '${money((left / months).ceil(), currency)} a month to reach it by ${DateFormat('MMM y').format(goal.deadline!)}';
+      pace =
+          '${money((left / months).ceil(), currency)} a month to reach it by ${DateFormat('MMM y').format(goal.deadline!)}';
     }
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -171,44 +186,56 @@ class GoalCard extends StatelessWidget {
         onTap: () => showGoal(context, goal),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Expanded(
-                child: Text(goal.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(goal.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  ),
+                  Text(
+                    '${(ratio * 100).round()}%',
+                    style: TextStyle(color: color, fontWeight: FontWeight.w700),
+                  ),
+                ],
               ),
-              Text('${(ratio * 100).round()}%', style: TextStyle(color: color, fontWeight: FontWeight.w700)),
-            ]),
-            const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: ratio,
-                minHeight: 10,
-                color: color,
-                backgroundColor: color.withValues(alpha: 0.15),
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: ratio,
+                  minHeight: 10,
+                  color: color,
+                  backgroundColor: color.withValues(alpha: 0.15),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text('${money(saved, currency)} of ${money(goal.targetCents, currency)}',
-                style: const TextStyle(fontWeight: FontWeight.w500)),
-            if (left <= 0)
-              Text('Goal reached', style: TextStyle(color: p.positive, fontSize: 14))
-            else if (pace != null)
-              Text(pace, style: TextStyle(color: p.muted, fontSize: 14)),
-            const SizedBox(height: 6),
-            Row(children: [
-              FilledButton.tonalIcon(
-                onPressed: () => moveMoney(context, goal, deposit: true),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Add money'),
+              const SizedBox(height: 8),
+              Text(
+                '${money(saved, currency)} of ${money(goal.targetCents, currency)}',
+                style: const TextStyle(fontWeight: FontWeight.w500),
               ),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: saved > 0 ? () => moveMoney(context, goal, deposit: false) : null,
-                child: const Text('Take out'),
+              if (left <= 0)
+                Text('Goal reached', style: TextStyle(color: p.positive, fontSize: 14))
+              else if (pace != null)
+                Text(pace, style: TextStyle(color: p.muted, fontSize: 14)),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: () => moveMoney(context, goal, deposit: true),
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text('Add money'),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: saved > 0 ? () => moveMoney(context, goal, deposit: false) : null,
+                    child: const Text('Take out'),
+                  ),
+                ],
               ),
-            ]),
-          ]),
+            ],
+          ),
         ),
       ),
     );
@@ -224,16 +251,22 @@ Future<void> moveMoney(BuildContext context, SavingsGoal goal, {required bool de
     context: context,
     builder: (context) => AlertDialog(
       title: Text(deposit ? 'Add to ${goal.name}' : 'Take from ${goal.name}'),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(
-          controller: amount,
-          autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: 'Amount', prefixText: '${currencySymbol(currency)} '),
-        ),
-        const SizedBox(height: 10),
-        TextField(controller: note, decoration: const InputDecoration(labelText: 'Note (optional)')),
-      ]),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: amount,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(labelText: 'Amount', prefixText: '${currencySymbol(currency)} '),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: note,
+            decoration: const InputDecoration(labelText: 'Note (optional)'),
+          ),
+        ],
+      ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
         FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(deposit ? 'Add' : 'Take out')),
@@ -267,17 +300,19 @@ void showGoal(BuildContext context, SavingsGoal goal) {
               shrinkWrap: true,
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
               children: [
-                Row(children: [
-                  Expanded(child: Text(goal.name, style: Theme.of(sheet).textTheme.titleLarge)),
-                  IconButton(
-                    tooltip: 'Edit goal',
-                    icon: const Icon(Icons.edit_outlined),
-                    onPressed: () {
-                      Navigator.pop(sheet);
-                      editGoal(context, goal: goal);
-                    },
-                  ),
-                ]),
+                Row(
+                  children: [
+                    Expanded(child: Text(goal.name, style: Theme.of(sheet).textTheme.titleLarge)),
+                    IconButton(
+                      tooltip: 'Edit goal',
+                      icon: const Icon(Icons.edit_outlined),
+                      onPressed: () {
+                        Navigator.pop(sheet);
+                        editGoal(context, goal: goal);
+                      },
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 8),
                 if (moves.isEmpty) Text('No money moved yet.', style: TextStyle(color: p.muted)),
                 for (final m in moves)
@@ -305,7 +340,11 @@ Future<void> editGoal(BuildContext context, {SavingsGoal? goal}) {
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (_) => Hub(db: context.db, settings: context.settings, child: _GoalEditor(goal: goal)),
+    builder: (_) => Hub(
+      db: context.db,
+      settings: context.settings,
+      child: _GoalEditor(goal: goal),
+    ),
   );
 }
 
@@ -320,7 +359,8 @@ class _GoalEditor extends StatefulWidget {
 class _GoalEditorState extends State<_GoalEditor> {
   late final _name = TextEditingController(text: widget.goal?.name ?? '');
   late final _target = TextEditingController(
-      text: widget.goal == null ? '' : (widget.goal!.targetCents / 100).toStringAsFixed(2).replaceAll('.00', ''));
+    text: widget.goal == null ? '' : (widget.goal!.targetCents / 100).toStringAsFixed(2).replaceAll('.00', ''),
+  );
   late DateTime? _deadline = widget.goal?.deadline;
   late int _color = widget.goal?.color ?? goalColors.first;
   late bool _archived = widget.goal?.archived ?? false;
@@ -335,14 +375,16 @@ class _GoalEditorState extends State<_GoalEditor> {
   Future<void> _save() async {
     final cents = parseMoney(_target.text);
     if (_name.text.trim().isEmpty || cents == null || cents <= 0) return;
-    await context.db.saveGoal(SavingsGoalsCompanion(
-      id: widget.goal == null ? const Value.absent() : Value(widget.goal!.id),
-      name: Value(_name.text.trim()),
-      targetCents: Value(cents),
-      deadline: Value(_deadline),
-      color: Value(_color),
-      archived: Value(_archived),
-    ));
+    await context.db.saveGoal(
+      SavingsGoalsCompanion(
+        id: widget.goal == null ? const Value.absent() : Value(widget.goal!.id),
+        name: Value(_name.text.trim()),
+        targetCents: Value(cents),
+        deadline: Value(_deadline),
+        color: Value(_color),
+        archived: Value(_archived),
+      ),
+    );
     if (mounted) Navigator.pop(context);
   }
 
@@ -352,73 +394,82 @@ class _GoalEditorState extends State<_GoalEditor> {
     final currency = context.settings.currency;
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(widget.goal == null ? 'New savings goal' : 'Edit goal', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 14),
-        TextField(
-          controller: _name,
-          autofocus: widget.goal == null,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: const InputDecoration(labelText: 'Name', hintText: 'Emergency fund'),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _target,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: 'Target', prefixText: '${currencySymbol(currency)} '),
-        ),
-        const SizedBox(height: 10),
-        InputChip(
-          avatar: Icon(Icons.flag_outlined, size: 18, color: p.muted),
-          label: Text(_deadline == null ? 'No deadline' : 'By ${DateFormat('d MMM y').format(_deadline!)}'),
-          onPressed: () async {
-            final now = DateTime.now();
-            final d = await showDatePicker(
-              context: context,
-              initialDate: _deadline ?? DateTime(now.year + 1, now.month, 1),
-              firstDate: now,
-              lastDate: DateTime(now.year + 30),
-            );
-            if (d != null) setState(() => _deadline = d);
-          },
-          onDeleted: _deadline == null ? null : () => setState(() => _deadline = null),
-        ),
-        const SizedBox(height: 12),
-        Wrap(spacing: 10, children: [
-          for (final c in goalColors)
-            GestureDetector(
-              onTap: () => setState(() => _color = c),
-              child: CircleAvatar(
-                radius: 14,
-                backgroundColor: Color(c),
-                child: _color == c ? const Icon(Icons.check_rounded, size: 16, color: Colors.white) : null,
-              ),
-            ),
-        ]),
-        if (widget.goal != null)
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Reached or put away'),
-            value: _archived,
-            onChanged: (v) => setState(() => _archived = v),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(widget.goal == null ? 'New savings goal' : 'Edit goal', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _name,
+            autofocus: widget.goal == null,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(labelText: 'Name', hintText: 'Emergency fund'),
           ),
-        const SizedBox(height: 12),
-        Row(children: [
+          const SizedBox(height: 10),
+          TextField(
+            controller: _target,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(labelText: 'Target', prefixText: '${currencySymbol(currency)} '),
+          ),
+          const SizedBox(height: 10),
+          InputChip(
+            avatar: Icon(Icons.flag_outlined, size: 18, color: p.muted),
+            label: Text(_deadline == null ? 'No deadline' : 'By ${DateFormat('d MMM y').format(_deadline!)}'),
+            onPressed: () async {
+              final now = DateTime.now();
+              final d = await showDatePicker(
+                context: context,
+                initialDate: _deadline ?? DateTime(now.year + 1, now.month, 1),
+                firstDate: now,
+                lastDate: DateTime(now.year + 30),
+              );
+              if (d != null) setState(() => _deadline = d);
+            },
+            onDeleted: _deadline == null ? null : () => setState(() => _deadline = null),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            children: [
+              for (final c in goalColors)
+                GestureDetector(
+                  onTap: () => setState(() => _color = c),
+                  child: CircleAvatar(
+                    radius: 14,
+                    backgroundColor: Color(c),
+                    child: _color == c ? const Icon(Icons.check_rounded, size: 16, color: Colors.white) : null,
+                  ),
+                ),
+            ],
+          ),
           if (widget.goal != null)
-            TextButton(
-              style: TextButton.styleFrom(foregroundColor: p.danger),
-              onPressed: () async {
-                final yes = await confirmDelete(context, 'Delete "${widget.goal!.name}" and its history?');
-                if (!yes || !context.mounted) return;
-                await context.db.deleteGoal(widget.goal!.id);
-                if (context.mounted) Navigator.pop(context);
-              },
-              child: const Text('Delete'),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Reached or put away'),
+              value: _archived,
+              onChanged: (v) => setState(() => _archived = v),
             ),
-          const Spacer(),
-          FilledButton(onPressed: _save, child: const Text('Save')),
-        ]),
-      ]),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (widget.goal != null)
+                TextButton(
+                  style: TextButton.styleFrom(foregroundColor: p.danger),
+                  onPressed: () async {
+                    final yes = await confirmDelete(context, 'Delete "${widget.goal!.name}" and its history?');
+                    if (!yes || !context.mounted) return;
+                    await context.db.deleteGoal(widget.goal!.id);
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                  child: const Text('Delete'),
+                ),
+              const Spacer(),
+              FilledButton(onPressed: _save, child: const Text('Save')),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

@@ -314,17 +314,16 @@ class _SubscriptionEditorState extends State<_SubscriptionEditor> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SegmentedButton<EntryKind>(
-              showSelectedIcon: false,
-              style: SegmentedButton.styleFrom(visualDensity: VisualDensity.compact),
-              segments: const [
-                ButtonSegment(value: EntryKind.subscription, label: Text('Payment')),
-                ButtonSegment(value: EntryKind.tax, label: Text('Tax')),
-                ButtonSegment(value: EntryKind.income, label: Text('Income')),
+            PillToggle<EntryKind>(
+              dense: true,
+              options: const [
+                (EntryKind.subscription, 'Payment'),
+                (EntryKind.tax, 'Tax'),
+                (EntryKind.income, 'Income'),
               ],
-              selected: {_kind},
-              onSelectionChanged: (s) => setState(() {
-                _kind = s.first;
+              value: _kind,
+              onChanged: (k) => setState(() {
+                _kind = k;
                 _category = categoriesByKind[_kind]!.first.name;
               }),
             ),
@@ -464,7 +463,8 @@ class _BillStrip extends StatelessWidget {
         ),
       ),
       child: SizedBox(
-        height: 118,
+        // Grows with the text size so the day tiles never overflow.
+        height: 32 + MediaQuery.textScalerOf(context).scale(86),
         child: ListView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.fromLTRB(12, 2, 12, 14),

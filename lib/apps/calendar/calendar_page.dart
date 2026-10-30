@@ -111,9 +111,12 @@ class _CalendarPageState extends State<CalendarPage> {
   void _setView(CalView v) => _goTo(_selected, view: v);
 
   String _title(CalView v) {
+    // The year only when it is not this one, so the title fits next to the buttons on a phone.
+    String month(DateTime d, {bool short = false}) =>
+        DateFormat('${short ? 'MMM' : 'MMMM'}${d.year == DateTime.now().year ? '' : ' y'}').format(d);
     switch (v) {
       case CalView.month:
-        return DateFormat('MMMM y').format(_anchor);
+        return month(_anchor);
       case CalView.day:
         return DateFormat('EEE d MMMM').format(_anchor);
       case CalView.week:
@@ -122,9 +125,7 @@ class _CalendarPageState extends State<CalendarPage> {
         final (a, b) = _range(v);
         final last = addDays(b, -1);
         if (v == CalView.agenda) return 'From ${DateFormat('d MMM').format(a)}';
-        return a.month == last.month
-            ? DateFormat('MMMM y').format(a)
-            : '${DateFormat('MMM').format(a)} – ${DateFormat('MMM y').format(last)}';
+        return a.month == last.month ? month(a) : '${DateFormat('MMM').format(a)} – ${month(last, short: true)}';
     }
   }
 
@@ -150,15 +151,13 @@ class _CalendarPageState extends State<CalendarPage> {
               if (wide)
                 Padding(
                   padding: const EdgeInsets.only(left: 8, right: 16),
-                  child: SegmentedButton<CalView>(
-                    showSelectedIcon: false,
-                    style: SegmentedButton.styleFrom(visualDensity: VisualDensity.compact),
-                    segments: [
-                      for (final v in [CalView.day, CalView.week, CalView.month, CalView.agenda])
-                        ButtonSegment(value: v, label: Text(v.label)),
+                  child: PillToggle<CalView>(
+                    dense: true,
+                    options: [
+                      for (final v in [CalView.day, CalView.week, CalView.month, CalView.agenda]) (v, v.label),
                     ],
-                    selected: {view},
-                    onSelectionChanged: (s) => _setView(s.first),
+                    value: view,
+                    onChanged: _setView,
                   ),
                 )
               else ...[
