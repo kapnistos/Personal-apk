@@ -5,6 +5,8 @@ import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'ai_service.dart';
+import 'ai_usage.dart';
+import 'ai_usage_sheet.dart';
 import 'ai_widgets.dart';
 import 'chat_memory.dart';
 import 'claude_plan_box.dart';
@@ -94,11 +96,15 @@ class AiSettingsSheet extends StatelessWidget {
                   ],
                   const AiLabel('Chat'),
                   AiCheckRow(
-                    title: 'Use my day',
-                    subtitle: 'Send today\'s tasks, events, spending and latest notes with each question.',
+                    title: 'Let Chat see my Hub',
+                    subtitle:
+                        'Chat can look at your calendar, wallet, tasks and notes when a question needs them. '
+                        'The Hub agent always can.',
                     selected: ChatMemory(settings).shareContext,
                     onTap: () => ChatMemory(settings).setShareContext(!ChatMemory(settings).shareContext),
                   ),
+                  const AiLabel('Usage'),
+                  _UsageRow(settings: settings),
                   const SizedBox(height: 20),
                   Text(
                     'Coming soon: your own agents, such as Instinct, working on your Hub.',
@@ -110,6 +116,47 @@ class AiSettingsSheet extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Today's and this month's tokens and cost in one line; tap for the full usage sheet.
+class _UsageRow extends StatelessWidget {
+  const _UsageRow({required this.settings});
+  final AppSettings settings;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final usage = AiUsage(settings);
+    final now = DateTime.now();
+    String line(UsageTotal t) => '${formatTokens(t.tokens)} tokens${t.priced ? ' · ${formatUsd(t.cost)}' : ''}';
+    final today = usage.total(from: DateTime(now.year, now.month, now.day));
+    final month = usage.total(from: DateTime(now.year, now.month));
+    return Semantics(
+      button: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => showAiUsage(context),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Today ${line(today)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text('This month ${line(month)}', style: TextStyle(color: p.muted, fontSize: 13.5, height: 1.35)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: p.muted),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

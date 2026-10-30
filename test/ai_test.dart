@@ -119,6 +119,14 @@ final openRouterList = {
   ],
 };
 
+/// Lets database work started from the UI finish: real time for the queries, then a frame.
+Future<void> settle(WidgetTester tester) async {
+  for (var i = 0; i < 12; i++) {
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+}
+
 void main() {
   // Retries on 429 and 5xx happen at once in tests.
   setUpAll(() => AiClient.retryDelays = const [Duration.zero, Duration.zero]);
@@ -805,7 +813,7 @@ Sure!
             // Home's quick-ask field sits under the chat; type into the chat's own.
             await tester.enterText(find.byType(TextField).last, '12 euro lunch and remind me to call the landlord');
             await tester.tap(find.byTooltip('Send'));
-            await tester.pump(const Duration(milliseconds: 300));
+            await settle(tester);
             expect(calls, 1);
             expect(find.text('Got it.'), findsOneWidget);
             expect(find.text(openrouter ? '20 in, 7 out tokens' : '12 in, 5 out tokens'), findsOneWidget);
@@ -879,7 +887,7 @@ Sure!
           // Switch to the agent; the tab remembers it.
           await tester.tap(find.text('Hub agent'));
           await tester.pump(const Duration(milliseconds: 300));
-          expect(find.text('Tell it what to add'), findsOneWidget);
+          expect(find.text('Ask your Hub'), findsOneWidget);
           final rows = await tester.runAsync(db.readSettings);
           expect(rows![AiChatPage.modeKey], 'agent');
           await tester.pump(const Duration(seconds: 5));
@@ -908,7 +916,7 @@ Sure!
             MaterialPageRoute(builder: (_) => const AiChatPage(agent: true, initialText: 'buy milk')),
           );
           await tester.pump(const Duration(milliseconds: 400));
-          await tester.pump(const Duration(milliseconds: 400));
+          await settle(tester);
           expect(asked, ['buy milk']);
           expect(find.text('Added to your list.'), findsOneWidget);
           expect(find.descendant(of: find.byType(AiChatPage), matching: find.text('Add')), findsOneWidget);
