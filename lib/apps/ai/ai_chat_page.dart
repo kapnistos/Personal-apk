@@ -1205,7 +1205,9 @@ class _ActionCard extends StatelessWidget {
             child: AppGlyph(icon: icon(action.type), color: tint, size: 40),
           );
           // On a phone the buttons sit under the text, so the text keeps the width.
-          if (box.maxWidth < 440) {
+          // A short line, or a card already answered, keeps everything on one row.
+          final short = detail == null && action.summaryIn(currency).length <= (box.maxWidth < 360 ? 12 : 20);
+          if (box.maxWidth < 440 && !short && state == null) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
