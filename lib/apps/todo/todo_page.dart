@@ -10,6 +10,7 @@ import '../../core/reminders.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../ai/ask_agent.dart';
 import '../spaces/space_model.dart';
 
 enum TodoFilter { open, today, important, done }
@@ -52,6 +53,7 @@ class _TodoPageState extends State<TodoPage> {
       appBar: HubBar(
         title: const Text('To-do'),
         actions: [
+          const AskAgentButton(label: 'Prioritise', prompt: AgentPrompts.prioritise),
           PopupMenuButton<TodoSort>(
             tooltip: 'Sort',
             icon: const Icon(Icons.sort_rounded),

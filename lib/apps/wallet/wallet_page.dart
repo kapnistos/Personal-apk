@@ -11,6 +11,7 @@ import '../../core/format.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../ai/ask_agent.dart';
 import 'accounts_page.dart';
 import 'bank_import.dart';
 import 'insights.dart';
@@ -91,8 +92,10 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
               if (v == 'year') Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YearPage()));
               if (v == 'export') exportEntries(context);
               if (v == 'budget') editSpendTarget(context);
+              if (v == 'ai') openAgentWith(context, AgentPrompts.explainMonth);
             },
             itemBuilder: (_) => const [
+              PopupMenuItem(value: 'ai', child: Text('Explain my month')),
               PopupMenuItem(value: 'recurring', child: Text('Recurring payments')),
               PopupMenuItem(value: 'budget', child: Text('Monthly budget')),
               PopupMenuItem(value: 'year', child: Text('Year overview and taxes')),

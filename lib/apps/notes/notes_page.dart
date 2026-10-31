@@ -9,6 +9,7 @@ import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../ai/ask_agent.dart';
 import '../claude/claude_bridge.dart';
 
 /// Soft card colours for notes, light and dark. Index 0 is the normal card.
@@ -120,6 +121,7 @@ class _NotesPageState extends State<NotesPage> {
       appBar: HubBar(
         title: const Text('Notes'),
         actions: [
+          const AskAgentButton(label: 'Summarise', prompt: AgentPrompts.summariseNotes),
           IconButton(
             tooltip: listView ? 'Show as grid' : 'Show as list',
             icon: Icon(listView ? Icons.grid_view_rounded : Icons.view_agenda_outlined),
