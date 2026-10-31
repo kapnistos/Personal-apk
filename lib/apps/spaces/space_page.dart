@@ -618,7 +618,14 @@ class _Saved extends StatelessWidget {
 
 Future<void> pickSpaceFile(BuildContext context, Space space) async {
   final db = context.db;
-  final res = await FilePicker.pickFiles();
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  final List<PlatformFile> res;
+  try {
+    res = await FilePicker.pickFiles();
+  } catch (_) {
+    messenger?.showSnackBar(const SnackBar(content: Text('Could not open the file picker')));
+    return;
+  }
   final f = res.firstOrNull;
   if (f == null || f.path == null) return;
   await db.saveSpaceItem(

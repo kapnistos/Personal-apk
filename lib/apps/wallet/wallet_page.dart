@@ -1437,7 +1437,13 @@ class _EntryEditorState extends State<_EntryEditor> {
 Future<void> importBankFile(BuildContext context) async {
   final db = context.db;
   final messenger = ScaffoldMessenger.of(context);
-  final picked = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['csv', 'txt', 'tab']);
+  final List<PlatformFile> picked;
+  try {
+    picked = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['csv', 'txt', 'tab']);
+  } catch (_) {
+    messenger.showSnackBar(const SnackBar(content: Text('Could not open the file picker')));
+    return;
+  }
   final file = picked.firstOrNull;
   if (file == null) return;
 

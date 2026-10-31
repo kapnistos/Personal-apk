@@ -70,12 +70,65 @@ class _EventEditorState extends State<_EventEditor> {
   late int? _remind = widget.event == null ? (widget.remindMinutes ?? 15) : widget.event!.remindMinutes;
   int? _calendarId;
 
+  /// What the editor opened with, to tell whether closing it would lose anything.
+  late final String _initial;
+  bool _saved = false;
+
+  String _snapshot() => [
+    _title.text.trim(),
+    _location.text.trim(),
+    _notes.text.trim(),
+    _start,
+    _end,
+    _allDay,
+    _repeat,
+    _remind,
+    _calendarId,
+  ].join('|');
+
+  bool get _dirty => !_saved && _snapshot() != _initial;
+
   @override
   void initState() {
     super.initState();
     _calendarId = widget.event?.calendarId ?? widget.calendarId;
     // All-day events store an exclusive end; the editor shows the last day.
     if (widget.event?.allDay == true) _end = addDays(_end, -1);
+    _initial = _snapshot();
+    // Typing changes whether back has to ask first.
+    for (final c in [_title, _location, _notes]) {
+      c.addListener(_typed);
+    }
+  }
+
+  bool _wasDirty = false;
+
+  void _typed() {
+    if (_dirty != _wasDirty) setState(() => _wasDirty = _dirty);
+  }
+
+  /// Asks before throwing away changes; true when it is fine to close.
+  Future<bool> _confirmDiscard() async {
+    if (!_dirty) return true;
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text('What you changed in this event is not saved yet.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Keep editing')),
+          TextButton(onPressed: () => Navigator.pop(d, true), child: const Text('Discard')),
+        ],
+      ),
+    );
+    return discard == true;
+  }
+
+  Future<void> _close() async {
+    if (await _confirmDiscard() && mounted) {
+      _saved = true;
+      Navigator.of(context).pop();
+    }
   }
 
   @override
@@ -103,7 +156,13 @@ class _EventEditorState extends State<_EventEditor> {
         _end = DateTime(d.year, d.month, d.day + days, _end.hour, _end.minute);
       } else {
         _end = DateTime(d.year, d.month, d.day, _end.hour, _end.minute);
-        if (_end.isBefore(_start)) _start = _end.subtract(const Duration(hours: 1));
+        if (_end.isBefore(_start)) {
+          // An all-day event then starts on the chosen day too, not at 23:00 the evening before.
+          _start = _allDay
+              ? DateTime(d.year, d.month, d.day, _start.hour, _start.minute)
+              : _end.subtract(const Duration(hours: 1));
+          if (_end.isBefore(_start)) _end = _start;
+        }
       }
     });
   }
@@ -151,6 +210,7 @@ class _EventEditorState extends State<_EventEditor> {
         remindMinutes: Value(_remind),
       ),
     );
+    _saved = true;
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -162,152 +222,160 @@ class _EventEditorState extends State<_EventEditor> {
       builder: (context, snap) {
         final cals = (snap.data ?? const <Calendar>[]).where((c) => c.icsUrl == null).toList();
         final cal = cals.where((c) => c.id == _calendarId).firstOrNull ?? cals.firstOrNull;
-        return Scaffold(
-          appBar: HubBar(
-            leading: IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(context)),
-            title: Text(widget.event == null ? 'New event' : 'Edit event'),
-            actions: [
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: FilledButton(onPressed: cals.isEmpty ? null : () => _save(cals), child: const Text('Save')),
-              ),
-            ],
-          ),
-          body: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 640),
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-                children: [
-                  TextField(
-                    controller: _title,
-                    autofocus: widget.event == null,
-                    textCapitalization: TextCapitalization.sentences,
-                    style: Theme.of(context).textTheme.titleLarge,
-                    decoration: const InputDecoration(hintText: 'Add title'),
-                  ),
-                  const SizedBox(height: 16),
-                  _Row(
-                    icon: Icons.schedule_rounded,
-                    child: Column(
-                      children: [
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('All day'),
-                          value: _allDay,
-                          onChanged: (v) => setState(() => _allDay = v),
-                        ),
-                        _DateTimeLine(
-                          date: _start,
-                          showTime: !_allDay,
-                          onDate: () => _pickDate(true),
-                          onTime: () => _pickTime(true),
-                        ),
-                        _DateTimeLine(
-                          date: _end,
-                          showTime: !_allDay,
-                          onDate: () => _pickDate(false),
-                          onTime: () => _pickTime(false),
-                        ),
-                      ],
+        return PopScope(
+          // Back and the close button ask first when something was changed, so an edit is never lost by accident.
+          canPop: !_dirty,
+          onPopInvokedWithResult: (popped, _) {
+            if (!popped) _close();
+          },
+          child: Scaffold(
+            appBar: HubBar(
+              leading: IconButton(tooltip: 'Close', icon: const Icon(Icons.close_rounded), onPressed: _close),
+              title: Text(widget.event == null ? 'New event' : 'Edit event'),
+              actions: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: FilledButton(onPressed: cals.isEmpty ? null : () => _save(cals), child: const Text('Save')),
+                ),
+              ],
+            ),
+            body: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+                  children: [
+                    TextField(
+                      controller: _title,
+                      autofocus: widget.event == null,
+                      textCapitalization: TextCapitalization.sentences,
+                      style: Theme.of(context).textTheme.titleLarge,
+                      decoration: const InputDecoration(hintText: 'Add title'),
                     ),
-                  ),
-                  _Row(
-                    icon: Icons.repeat_rounded,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _repeat,
-                      isExpanded: true,
-                      decoration: const InputDecoration(),
-                      items: [
-                        for (final e in repeatLabels.entries)
-                          DropdownMenuItem(
-                            value: e.key,
-                            child: Text(e.value, maxLines: 1, overflow: TextOverflow.ellipsis),
-                          ),
-                      ],
-                      onChanged: (v) => setState(() => _repeat = v ?? 'none'),
-                    ),
-                  ),
-                  _Row(
-                    icon: Icons.notifications_none_rounded,
-                    child: DropdownButtonFormField<int?>(
-                      initialValue: reminderOptions.containsKey(_remind) ? _remind : 15,
-                      isExpanded: true,
-                      decoration: const InputDecoration(),
-                      items: [
-                        for (final e in reminderOptions.entries)
-                          DropdownMenuItem(
-                            value: e.key,
-                            child: Text(e.value, maxLines: 1, overflow: TextOverflow.ellipsis),
-                          ),
-                      ],
-                      onChanged: (v) => setState(() => _remind = v),
-                    ),
-                  ),
-                  if (cal != null)
+                    const SizedBox(height: 16),
                     _Row(
-                      icon: Icons.circle,
-                      iconColor: Color(cal.color),
-                      child: DropdownButtonFormField<int>(
-                        initialValue: cal.id,
+                      icon: Icons.schedule_rounded,
+                      child: Column(
+                        children: [
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('All day'),
+                            value: _allDay,
+                            onChanged: (v) => setState(() => _allDay = v),
+                          ),
+                          _DateTimeLine(
+                            date: _start,
+                            showTime: !_allDay,
+                            onDate: () => _pickDate(true),
+                            onTime: () => _pickTime(true),
+                          ),
+                          _DateTimeLine(
+                            date: _end,
+                            showTime: !_allDay,
+                            onDate: () => _pickDate(false),
+                            onTime: () => _pickTime(false),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _Row(
+                      icon: Icons.repeat_rounded,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _repeat,
                         isExpanded: true,
                         decoration: const InputDecoration(),
                         items: [
-                          for (final c in cals)
+                          for (final e in repeatLabels.entries)
                             DropdownMenuItem(
-                              value: c.id,
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 12,
-                                    height: 12,
-                                    decoration: BoxDecoration(
-                                      color: Color(c.color),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Flexible(child: Text(c.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                                ],
-                              ),
+                              value: e.key,
+                              child: Text(e.value, maxLines: 1, overflow: TextOverflow.ellipsis),
                             ),
                         ],
-                        onChanged: (v) => setState(() => _calendarId = v),
+                        onChanged: (v) => setState(() => _repeat = v ?? 'none'),
                       ),
                     ),
-                  _Row(
-                    icon: Icons.place_outlined,
-                    child: TextField(
-                      controller: _location,
-                      decoration: const InputDecoration(hintText: 'Add location'),
-                    ),
-                  ),
-                  _Row(
-                    icon: Icons.notes_rounded,
-                    child: TextField(
-                      controller: _notes,
-                      minLines: 3,
-                      maxLines: 8,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(hintText: 'Add description'),
-                    ),
-                  ),
-                  if (widget.event != null) ...[
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        style: TextButton.styleFrom(foregroundColor: p.danger),
-                        onPressed: () async {
-                          await deleteEventWithUndo(context, widget.event!);
-                          if (context.mounted) Navigator.of(context).pop();
-                        },
-                        icon: const Icon(Icons.delete_outline_rounded),
-                        label: const Text('Delete event'),
+                    _Row(
+                      icon: Icons.notifications_none_rounded,
+                      child: DropdownButtonFormField<int?>(
+                        initialValue: reminderOptions.containsKey(_remind) ? _remind : 15,
+                        isExpanded: true,
+                        decoration: const InputDecoration(),
+                        items: [
+                          for (final e in reminderOptions.entries)
+                            DropdownMenuItem(
+                              value: e.key,
+                              child: Text(e.value, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            ),
+                        ],
+                        onChanged: (v) => setState(() => _remind = v),
                       ),
                     ),
+                    if (cal != null)
+                      _Row(
+                        icon: Icons.circle,
+                        iconColor: Color(cal.color),
+                        child: DropdownButtonFormField<int>(
+                          initialValue: cal.id,
+                          isExpanded: true,
+                          decoration: const InputDecoration(),
+                          items: [
+                            for (final c in cals)
+                              DropdownMenuItem(
+                                value: c.id,
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 12,
+                                      height: 12,
+                                      decoration: BoxDecoration(
+                                        color: Color(c.color),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Flexible(child: Text(c.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                  ],
+                                ),
+                              ),
+                          ],
+                          onChanged: (v) => setState(() => _calendarId = v),
+                        ),
+                      ),
+                    _Row(
+                      icon: Icons.place_outlined,
+                      child: TextField(
+                        controller: _location,
+                        decoration: const InputDecoration(hintText: 'Add location'),
+                      ),
+                    ),
+                    _Row(
+                      icon: Icons.notes_rounded,
+                      child: TextField(
+                        controller: _notes,
+                        minLines: 3,
+                        maxLines: 8,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(hintText: 'Add description'),
+                      ),
+                    ),
+                    if (widget.event != null) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          style: TextButton.styleFrom(foregroundColor: p.danger),
+                          onPressed: () async {
+                            await deleteEventWithUndo(context, widget.event!);
+                            _saved = true;
+                            if (context.mounted) Navigator.of(context).pop();
+                          },
+                          icon: const Icon(Icons.delete_outline_rounded),
+                          label: const Text('Delete event'),
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -409,7 +477,8 @@ Future<void> showEventDetails(BuildContext context, Occurrence o) {
           ],
         ),
       );
-      return Padding(
+      // Long notes scroll inside the sheet instead of running off the bottom.
+      return SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,

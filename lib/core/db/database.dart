@@ -601,9 +601,11 @@ class AppDatabase extends _$AppDatabase {
     bool important = false,
     String repeat = 'none',
     int? spaceId,
+    String details = '',
   }) => into(todos).insert(
     TodosCompanion.insert(
       title: title,
+      details: Value(details),
       due: Value(due),
       remindAt: Value(remindAt),
       important: Value(important),

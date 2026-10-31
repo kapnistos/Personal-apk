@@ -170,7 +170,8 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => StatefulBuilder(
-        builder: (context, setSheet) => Padding(
+        // Scrolls, so the shops and Save stay reachable above the keyboard on a small phone.
+        builder: (context, setSheet) => SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -233,7 +234,9 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
       await db.deleteShoppingItem(item.id);
       if (mounted) showUndo(context, '${item.name} removed', () => db.restoreShoppingItem(item));
     }
-    if (result == 'save' && name.text.trim().isNotEmpty) {
+    // Swiping the sheet away keeps the changes too, the same as Save.
+    final changed = name.text.trim() != item.name || qty.text.trim() != item.quantity || store != item.store;
+    if ((result == 'save' || (result == null && changed)) && name.text.trim().isNotEmpty) {
       await db.updateShoppingItem(
         item.id,
         name: name.text.trim(),
