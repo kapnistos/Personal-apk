@@ -65,7 +65,8 @@ String hubWhen(DateTime now, {String currency = 'EUR', String name = ''}) {
 }
 
 /// What the Hub agent is told when it can call tools to read the app and propose changes.
-String agentToolPrompt(DateTime now, {String currency = 'EUR', String name = ''}) => '''
+String agentToolPrompt(DateTime now, {String currency = 'EUR', String name = ''}) =>
+    '''
 You are the Hub agent inside the user's personal app, Hub.
 ${hubWhen(now, currency: currency, name: name)}
 
@@ -276,8 +277,8 @@ class AgentAction {
       'edit_task' || 'delete_task' => _s('target').isNotEmpty ? _s('target') : (title.isNotEmpty ? title : 'Task $id'),
       'complete' => title.isEmpty ? (_s('target').isEmpty ? 'Task $taskId' : _s('target')) : title,
       'event' => '$title, ${_allDay ? HubDates.short(_start()) : HubDates.withTime(_start())}',
-      'edit_event' || 'delete_event' =>
-        _s('target').isNotEmpty ? _s('target') : (title.isNotEmpty ? title : 'Event $id'),
+      'edit_event' ||
+      'delete_event' => _s('target').isNotEmpty ? _s('target') : (title.isNotEmpty ? title : 'Event $id'),
       'shopping' => _s('quantity').isEmpty ? name : '$name (${_s('quantity')})',
       'recurring' =>
         '$name, ${m()} ${period == 1 ? 'a month' : 'every $period months'}'
@@ -291,8 +292,7 @@ class AgentAction {
         final h = _hours;
         return '${HubDates.short(d)}: $label${h == null ? '' : ', ${formatHours(h)} h'}';
       }(),
-      'space_date' =>
-        '$title, ${_has('time') ? HubDates.withTime(_spaceStart) : HubDates.short(date('date')!)}',
+      'space_date' => '$title, ${_has('time') ? HubDates.withTime(_spaceStart) : HubDates.short(date('date')!)}',
       'habit' => '${name.isNotEmpty ? name : _s('target')}, ${_habitDayWords()}',
       _ => type,
     };
@@ -720,16 +720,18 @@ class AgentAction {
         }
         if (!end.isAfter(start)) end = allDay ? addDays(start, 1) : start.add(const Duration(hours: 1));
         final cal = _has('calendar') ? await calendarNamed(db, _s('calendar')) : null;
-        await db.update(db.events).replace(
-          old.copyWith(
-            title: _has('title') ? title : old.title,
-            location: _has('location') ? _s('location') : old.location,
-            start: start,
-            end: end,
-            allDay: allDay,
-            calendarId: cal?.id ?? old.calendarId,
-          ),
-        );
+        await db
+            .update(db.events)
+            .replace(
+              old.copyWith(
+                title: _has('title') ? title : old.title,
+                location: _has('location') ? _s('location') : old.location,
+                start: start,
+                end: end,
+                allDay: allDay,
+                calendarId: cal?.id ?? old.calendarId,
+              ),
+            );
         return () => db.update(db.events).replace(old);
       case 'delete_event':
         final old = await _findEvent(db);
@@ -759,17 +761,19 @@ class AgentAction {
         final old = await _findRecurring(db);
         if (old == null) throw StateError('No such recurring payment');
         final kind = old.kind == EntryKind.income ? EntryKind.income : EntryKind.subscription;
-        await db.update(db.subscriptions).replace(
-          old.copyWith(
-            name: _has('name') ? name : old.name,
-            amountCents: amount != null && cents > 0 ? cents : old.amountCents,
-            periodMonths: _has('period') ? period : old.periodMonths,
-            nextDate: date('next') != null ? dateOnly(date('next')!) : old.nextDate,
-            category: _has('category') ? category(kind) : old.category,
-            account: _has('account') ? _s('account') : old.account,
-            active: _bool('active') ?? old.active,
-          ),
-        );
+        await db
+            .update(db.subscriptions)
+            .replace(
+              old.copyWith(
+                name: _has('name') ? name : old.name,
+                amountCents: amount != null && cents > 0 ? cents : old.amountCents,
+                periodMonths: _has('period') ? period : old.periodMonths,
+                nextDate: date('next') != null ? dateOnly(date('next')!) : old.nextDate,
+                category: _has('category') ? category(kind) : old.category,
+                account: _has('account') ? _s('account') : old.account,
+                active: _bool('active') ?? old.active,
+              ),
+            );
         return () => db.update(db.subscriptions).replace(old);
       case 'saving':
         final g = await _findGoal(db);
@@ -779,7 +783,8 @@ class AgentAction {
         return () => db.deleteMove(rowId);
       case 'budget_target':
         final old = settings?.raw(spendTargetKey) ?? (await db.readSettings())[spendTargetKey] ?? '';
-        Future<void> write(String v) => settings != null ? settings.setRaw(spendTargetKey, v) : db.writeSetting(spendTargetKey, v);
+        Future<void> write(String v) =>
+            settings != null ? settings.setRaw(spendTargetKey, v) : db.writeSetting(spendTargetKey, v);
         await write(cents <= 0 ? '' : '$cents');
         return () => write(old);
       case 'work_day':

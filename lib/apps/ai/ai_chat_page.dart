@@ -483,9 +483,7 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
-        content: Text(
-          failed == 0 ? 'All ${done.length} done' : '${done.length} done, $failed could not be added',
-        ),
+        content: Text(failed == 0 ? 'All ${done.length} done' : '${done.length} done, $failed could not be added'),
         action: done.isEmpty ? null : SnackBarAction(label: 'Undo', onPressed: () => _undo(t, done)),
       ),
     );
@@ -1035,7 +1033,9 @@ class _Bubble extends StatelessWidget {
                 child: Align(
                   alignment: Alignment.centerRight,
                   child: AiPill(
-                    label: allable.length == turn.pending.length ? 'Add all ${allable.length}' : 'Add the other ${allable.length}',
+                    label: allable.length == turn.pending.length
+                        ? 'Add all ${allable.length}'
+                        : 'Add the other ${allable.length}',
                     icon: Icons.done_all_rounded,
                     filled: true,
                     onTap: onAll,
