@@ -129,7 +129,11 @@ are on track, ahead or behind plan.
 - Type everything in one line: `pasta, deodorant, 2x toilet paper, milk 2l`.
 - Each item is sorted into a kind (pantry, personal care, paper and cleaning…) and placed under the shop where that kind is usually cheapest. The defaults are Dutch shops (Albert Heijn, Lidl, Aldi, Kruidvat, Action…) and you can change them under **Cheapest shops**.
 - Move an item to another shop once and Hub remembers it for next time.
-- **Best prices** asks Claude (in the Claude app, on your plan) which shop is cheapest for each item right now. Copy the reply and choose **Use Claude's answer**: Hub reads it and moves the items.
+- **Best prices** looks up this week's real supermarket offers through [PrijsProfeet](https://www.prijsprofeet.nl)
+  (Albert Heijn, Jumbo, Lidl, Aldi, Plus, Dirk, Hoogvliet, Vomar and more). Each item on offer moves to the chain
+  where it is cheapest, with the price, the old price and until when. Common English words are searched in Dutch.
+  Items no chain has on offer are checked by your AI (API key or Claude Code), or stay at their usual shop.
+  PrijsProfeet only knows offers, not regular shelf prices.
 - View by shop or by aisle, tick items into the basket, clear the basket.
 
 <br clear="right">

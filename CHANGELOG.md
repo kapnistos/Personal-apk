@@ -4,6 +4,12 @@ Builds are numbered by the CI run. Notable changes, newest first.
 
 ## October 2026
 
+### Real supermarket offers
+- Shopping's **Best prices** now looks up this week's real offers at 16 Dutch chains through PrijsProfeet, moves
+  each item to the chain where it is on offer cheapest, and shows the price, the old price and until when. What
+  no chain has on offer is still checked by your AI.
+- The release page now always points at the newest build.
+
 ### Home layout fixes
 - The ask bar and the tab bar are one frosted panel, so apps no longer peek through between them.
 - A small widget alone on its row takes its wide form instead of leaving half the row empty.

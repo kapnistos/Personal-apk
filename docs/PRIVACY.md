@@ -9,6 +9,7 @@ Hub keeps your data on your devices. There is no Hub account, no analytics and n
 | Weather opens or refreshes | Open-Meteo, Buienradar | The coordinates of the selected place |
 | Weather with your Google key | Google Weather API | Coordinates and your key |
 | "Use my location" | BigDataCloud | Your coordinates, to get the place name |
+| Shopping "Best prices" | PrijsProfeet (prijsprofeet.nl) | The names of the items on your list, one search each, no account or key |
 | Searching for a place | Open-Meteo geocoding | The search text |
 | Investing prices refresh | Yahoo Finance | Ticker symbols you entered |
 | News refreshes | Each enabled feed's website | A normal web request |

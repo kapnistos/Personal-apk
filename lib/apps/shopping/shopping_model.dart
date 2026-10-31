@@ -19,6 +19,16 @@ const knownStores = {
   'Action': 0xFF0067B1,
   'HEMA': 0xFFC8102E,
   'Hollandse markt': 0xFF8A5A44,
+  'Hoogvliet': 0xFF1B9E3E,
+  'Vomar': 0xFFE30613,
+  'DekaMarkt': 0xFFE2001A,
+  'Ekoplaza': 0xFF6BA539,
+  'Spar': 0xFF00843D,
+  'Coop': 0xFFF39200,
+  'Poiesz': 0xFF005AA0,
+  'Nettorama': 0xFFFFCC00,
+  'MCD': 0xFF0067B1,
+  "Boon's Markt": 0xFFE30613,
 };
 
 Color storeColor(String store) => Color(knownStores[store] ?? 0xFF5F6B7A);

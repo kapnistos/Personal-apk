@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/db/database.dart';
+import '../../core/format.dart';
 import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
@@ -9,6 +10,10 @@ import '../../core/widgets.dart';
 import '../ai/ai_service.dart';
 import '../ai/claude_code.dart' show ClaudePlanUnavailable;
 import '../claude/claude_bridge.dart';
+
+import 'package:url_launcher/url_launcher.dart';
+
+import 'offers.dart';
 import 'shopping_model.dart';
 
 /// One list for everything, grouped by the shop where each item is cheapest.
@@ -75,8 +80,70 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
         .showSnackBar(const SnackBar(content: Text('Sorted by the cheapest shop for each item')));
   }
 
+  /// Real offers first: this week's folder deals from PrijsProfeet move each item to the chain where it is on offer
+  /// cheapest. Whatever no chain has on offer goes to the AI's guess, or stays at its usual shop.
+  Future<void> _bestPrices(List<ShoppingItem> items) async {
+    final open = items.where((i) => !i.done).toList();
+    if (open.isEmpty || _checking) return;
+    final db = context.db;
+    final settings = context.settings;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _checking = true);
+    messenger.showSnackBar(const SnackBar(content: Text("Looking for this week's offers")));
+    final api = PrijsProfeet();
+    Map<String, Offer?> found;
+    try {
+      found = await fetchOffers(api, open.map((i) => i.name).toList());
+    } catch (e) {
+      // No connection to the offers, or they are down: the AI check still works.
+      api.close();
+      if (mounted) setState(() => _checking = false);
+      await _askClaude(items);
+      return;
+    }
+    api.close();
+    final offers = savedOffers(settings);
+    final rest = <ShoppingItem>[];
+    for (final i in open) {
+      final key = i.name.trim().toLowerCase();
+      final o = found[key];
+      if (o == null) {
+        offers.remove(key);
+        rest.add(i);
+        continue;
+      }
+      offers[key] = o;
+      await db.updateShoppingItem(i.id, store: o.store);
+      await rememberStore(settings, i.name, o.store);
+    }
+    await saveOffers(settings, offers);
+    if (!mounted) return;
+    setState(() {
+      _checking = false;
+      _byShop = true;
+    });
+    final onOffer = open.length - rest.length;
+    final ai = AiSetup(settings);
+    if (rest.isNotEmpty && await ai.apiReady()) {
+      await _askClaude(rest, offersFound: onOffer);
+      return;
+    }
+    messenger
+      ..removeCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            onOffer == 0
+                ? 'Nothing on your list is on offer this week'
+                : '$onOffer on offer this week${rest.isEmpty ? '' : '; the rest stay at their usual shop'}',
+          ),
+          action: rest.isEmpty ? null : SnackBarAction(label: 'Ask Claude', onPressed: () => _askClaude(rest)),
+        ),
+      );
+  }
+
   /// Checks prices in the app on your API key, or hands the list to the Claude app.
-  Future<void> _askClaude(List<ShoppingItem> items) async {
+  Future<void> _askClaude(List<ShoppingItem> items, {int offersFound = 0}) async {
     final open = items.where((i) => !i.done).map((i) => i.quantity.isEmpty ? i.name : '${i.name} (${i.quantity})');
     if (open.isEmpty || _checking) return;
     final settings = context.settings;
@@ -89,7 +156,13 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
       return;
     }
     setState(() => _checking = true);
-    messenger.showSnackBar(SnackBar(content: Text('Checking prices with ${ai.modelName}')));
+    messenger
+      ..removeCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('${offersFound > 0 ? '$offersFound on offer. ' : ''}Checking the rest with ${ai.modelName}'),
+        ),
+      );
     try {
       final reply = await ai.ask([AiMessage('user', prompt)], maxTokens: 1024);
       await _applyPlan(reply.text, items);
@@ -284,7 +357,7 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
               PopupMenuButton<String>(
                 onSelected: (v) async {
                   if (v == 'sort') await _sortAll(items);
-                  if (v == 'claude') await _askClaude(items);
+                  if (v == 'claude') await _bestPrices(items);
                   if (v == 'paste') await _pasteAnswer(items);
                   if (v == 'clear') await db.clearBoughtShopping();
                   if (v == 'copy') {
@@ -353,7 +426,7 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
                     ),
                     if (open.isNotEmpty)
                       TextButton.icon(
-                        onPressed: _checking ? null : () => _askClaude(items),
+                        onPressed: _checking ? null : () => _bestPrices(items),
                         icon: _checking
                             ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
                             : const Icon(Icons.auto_awesome_outlined, size: 18),
@@ -410,6 +483,20 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
                     ),
                   ),
                 ),
+              if (open.any((i) {
+                final o = savedOffers(context.settings)[i.name.trim().toLowerCase()];
+                return o != null && o.store == i.store && !_ended(o);
+              }))
+                // Their free tier asks for a visible credit wherever their offers show.
+                ContentWidth(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: () => launchUrl(Uri.parse(PrijsProfeet.site), mode: LaunchMode.externalApplication),
+                      child: Text(PrijsProfeet.credit, style: TextStyle(color: p.muted, fontSize: 13)),
+                    ),
+                  ),
+                ),
               if (bought.isNotEmpty)
                 ContentWidth(
                   child: Padding(
@@ -430,6 +517,8 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
   }
 }
 
+bool _ended(Offer o) => o.until != null && dateOnly(o.until!).isBefore(dateOnly(DateTime.now()));
+
 class _ItemTile extends StatelessWidget {
   const _ItemTile({required this.item, required this.byShop, required this.onEdit});
   final ShoppingItem item;
@@ -440,6 +529,9 @@ class _ItemTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     final db = context.db;
+    // This week's offer, while it runs and while the item is still at that shop.
+    final saved = item.done ? null : savedOffers(context.settings)[item.name.trim().toLowerCase()];
+    final offer = saved != null && saved.store == item.store && !_ended(saved) ? saved : null;
     return Dismissible(
       key: ValueKey('shop-${item.id}'),
       direction: DismissDirection.endToStart,
@@ -474,6 +566,7 @@ class _ItemTile extends StatelessWidget {
           ),
           subtitle: Text(
             [
+              if (offer != null) offer.describe(context.settings.currency),
               if (item.quantity.isNotEmpty) item.quantity,
               if (byShop && item.category.isNotEmpty && item.category != otherCategory) item.category,
               if (!byShop && item.store.isNotEmpty) item.store,
