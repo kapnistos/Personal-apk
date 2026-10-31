@@ -512,16 +512,26 @@ class AiSetup {
   /// Sends [messages] to the chosen model. This is the one place every AI request goes through.
   /// With [tools] and [runTool] (API keys only, see [canUseTools]) the model may look things up first.
   /// The reply says which model answered and, on OpenRouter, roughly what it cost.
+  ///
+  /// [systemTail] is the part of the system prompt that changes between calls (the time, today's data). It
+  /// goes after [system] so the fixed start stays identical and the provider can cache it.
   Future<AiReply> ask(
     List<AiMessage> messages, {
     String? system,
+    String? systemTail,
     int maxTokens = 2048,
     List<AiTool> tools = const [],
     AiToolRunner? runTool,
   }) async {
     final m = model;
     if (usePlan) {
-      final r = await ClaudePlan.ask(settings, messages, system: system, model: planAlias, client: httpClient);
+      final r = await ClaudePlan.ask(
+        settings,
+        messages,
+        system: AiClient.joinSystem(system, systemTail),
+        model: planAlias,
+        client: httpClient,
+      );
       return r.copyWith(model: modelId);
     }
     final id = modelIdFor(m);
@@ -531,6 +541,7 @@ class AiSetup {
       model: id,
       messages: messages,
       system: system,
+      systemTail: systemTail,
       baseUrl: m.provider == AiProvider.llama ? llamaUrl : null,
       maxTokens: maxTokens,
       tools: tools,
@@ -674,6 +685,36 @@ class AiClient {
     }
   }
 
+  /// Anthropic prompt caching: a cached prefix is read at a tenth of the input price.
+  static const _ephemeral = {'type': 'ephemeral'};
+
+  /// [system] and [tail] as one prompt, for providers that take a single string.
+  static String? joinSystem(String? system, String? tail) {
+    final t = tail == null || tail.isEmpty ? null : tail;
+    if (system == null || system.isEmpty) return t;
+    return t == null ? system : '$system\n\n$t';
+  }
+
+  /// [msgs] with a cache mark on the last block of the last message, leaving [msgs] itself untouched.
+  static List<Map<String, Object?>> _cacheLast(List<Map<String, Object?>> msgs) {
+    if (msgs.isEmpty) return msgs;
+    final last = msgs.last;
+    final c = last['content'];
+    final List<Object?> blocks;
+    if (c is String) {
+      if (c.isEmpty) return msgs;
+      blocks = [
+        {'type': 'text', 'text': c},
+      ];
+    } else if (c is List && c.isNotEmpty && c.last is Map) {
+      blocks = [...c];
+    } else {
+      return msgs;
+    }
+    blocks[blocks.length - 1] = {...Map<String, Object?>.from(blocks.last! as Map), 'cache_control': _ephemeral};
+    return [...msgs.take(msgs.length - 1), {...last, 'content': blocks}];
+  }
+
   /// Most tool rounds in one answer; the last round asks for words only.
   static const maxToolRounds = 8;
 
@@ -686,6 +727,7 @@ class AiClient {
     required String model,
     required List<AiMessage> messages,
     String? system,
+    String? systemTail,
     String? baseUrl,
     int maxTokens = 2048,
     List<AiTool> tools = const [],
@@ -703,8 +745,9 @@ class AiClient {
       if (!anthropic && apiKey.isNotEmpty) 'authorization': 'Bearer $apiKey',
       if (openrouter) ...openRouterHeaders,
     };
+    final joined = joinSystem(system, systemTail);
     final msgs = <Map<String, Object?>>[
-      if (!anthropic && system != null && system.isNotEmpty) {'role': 'system', 'content': system},
+      if (!anthropic && joined != null && joined.isNotEmpty) {'role': 'system', 'content': joined},
       for (final m in messages) {'role': m.role, 'content': m.content},
     ];
     final Uri url;
@@ -723,9 +766,21 @@ class AiClient {
           ? {
               'model': model,
               'max_tokens': maxTokens,
-              if (system != null && system.isNotEmpty) 'system': system,
-              'messages': msgs,
-              if (withTools) 'tools': [for (final t in tools) t.anthropic],
+              if (withTools && system != null && system.isNotEmpty)
+                // Tools, then this fixed block, then the changing tail: each cached up to its mark.
+                'system': [
+                  {'type': 'text', 'text': system, 'cache_control': _ephemeral},
+                  if (systemTail != null && systemTail.isNotEmpty) {'type': 'text', 'text': systemTail},
+                ]
+              else if (joined != null && joined.isNotEmpty)
+                'system': joined,
+              // A tool answer resends everything before it, so the end of the conversation is marked too.
+              'messages': withTools ? _cacheLast(msgs) : msgs,
+              if (withTools)
+                'tools': [
+                  for (var i = 0; i < tools.length; i++)
+                    i == tools.length - 1 ? {...tools[i].anthropic, 'cache_control': _ephemeral} : tools[i].anthropic,
+                ],
               if (withTools && last) 'tool_choice': {'type': 'none'},
             }
           : {

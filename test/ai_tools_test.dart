@@ -341,6 +341,68 @@ void main() {
       expect(reply.cost, isNull, reason: 'direct keys show tokens only');
     });
 
+    test('Anthropic: tools, fixed system text and the end of the conversation are marked for caching', () async {
+      final bodies = <Map>[];
+      final ai = AiSetup(
+        settings,
+        keys: MemoryAiKeyStore()..values['ai-key-anthropic'] = 'k',
+        httpClient: MockClient((r) async {
+          bodies.add(jsonDecode(r.body) as Map);
+          if (bodies.length == 1) {
+            return json({
+              'content': [
+                {
+                  'type': 'tool_use',
+                  'id': 'tu1',
+                  'name': 'get_calendar',
+                  'input': {'from': '2026-11-01', 'to': '2026-11-02'},
+                },
+              ],
+              'stop_reason': 'tool_use',
+              'usage': {'input_tokens': 900, 'output_tokens': 20},
+            });
+          }
+          return json(anthropicOk('Done.'));
+        }),
+      );
+      final tools = HubTools(db, clock: () => now);
+      await ai.ask(
+        const [AiMessage('user', 'Next days?')],
+        system: 'Fixed',
+        systemTail: 'Now: noon',
+        tools: tools.tools,
+        runTool: tools.run,
+      );
+      expect(bodies, hasLength(2));
+      for (final b in bodies) {
+        final system = b['system'] as List;
+        expect(system.first, {'type': 'text', 'text': 'Fixed', 'cache_control': {'type': 'ephemeral'}});
+        expect(system.last, {'type': 'text', 'text': 'Now: noon'}, reason: 'the changing part is never cached');
+        final t = b['tools'] as List;
+        expect(t.last['cache_control'], {'type': 'ephemeral'});
+        expect(t.where((x) => x['cache_control'] != null), hasLength(1));
+        final msgs = b['messages'] as List;
+        final lastBlocks = msgs.last['content'] as List;
+        expect(lastBlocks.last['cache_control'], {'type': 'ephemeral'});
+        expect(msgs.take(msgs.length - 1).where((m) => m['content'] is List && (m['content'] as List).any((x) => x is Map && x['cache_control'] != null)), isEmpty);
+      }
+    });
+
+    test('other providers get the fixed and changing system text as one message', () async {
+      final bodies = <Map>[];
+      final ai = AiSetup(
+        settings,
+        keys: MemoryAiKeyStore()..values['ai-key-openrouter'] = 'sk-or-v1-k',
+        httpClient: MockClient((r) async {
+          bodies.add(jsonDecode(r.body) as Map);
+          return json(openAiOk('ok'));
+        }),
+      );
+      await settings.setRaw(AiSettings.model, 'openrouter');
+      await ai.ask(const [AiMessage('user', 'hi')], system: 'Fixed', systemTail: 'Now: noon');
+      expect((bodies.single['messages'] as List).first, {'role': 'system', 'content': 'Fixed\n\nNow: noon'});
+    });
+
     test('a model without tools is remembered and the next ask goes without them', () async {
       await settings.setRaw(AiSettings.model, 'openrouter');
       await settings.setRaw(AiSettings.openrouterModel, 'some/old-model');

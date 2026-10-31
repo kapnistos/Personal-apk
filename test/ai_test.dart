@@ -20,6 +20,9 @@ import 'widget_test.dart' show pumpWithDb;
 http.Response json(Object body, [int status = 200]) =>
     http.Response(jsonEncode(body), status, headers: {'content-type': 'application/json'});
 
+/// The text of an Anthropic `system` or message `content`, which is a string or a list of text blocks.
+String textOf(Object? v) => v is List ? v.map((b) => (b as Map)['text'] ?? '').join('\n\n') : '$v';
+
 Map<String, dynamic> anthropicOk(String text) => {
   'content': [
     {'type': 'text', 'text': text},
@@ -793,7 +796,7 @@ Sure!
             // Models on OpenRouter often wrap the JSON in a fence with a line before it.
             return json(openAiOk('Sure:\n```json\n$agentJson\n```'));
           }
-          expect(body['system'], contains('Hub agent'));
+          expect(textOf(body['system']), contains('Hub agent'));
           return json(anthropicOk(agentJson));
         });
         await pumpWithDb(
@@ -902,7 +905,7 @@ Sure!
       AiSetup.store = MemoryAiKeyStore()..values['ai-key-anthropic'] = 'k';
       final asked = <String>[];
       AiSetup.newClient = () => MockClient((r) async {
-        asked.add(((jsonDecode(r.body) as Map)['messages'] as List).last['content'] as String);
+        asked.add(textOf(((jsonDecode(r.body) as Map)['messages'] as List).last['content']));
         return json(anthropicOk('{"reply":"Added to your list.","actions":[{"type":"shopping","name":"milk"}]}'));
       });
       await pumpWithDb(

@@ -16,7 +16,7 @@ import 'package:hub/core/settings.dart';
 import 'package:hub/main.dart';
 import 'package:hub/shell/search_page.dart';
 
-import 'ai_test.dart' show anthropicOk, json, settle;
+import 'ai_test.dart' show anthropicOk, json, settle, textOf;
 import 'widget_test.dart' show pumpWithDb;
 
 void main() {
@@ -104,7 +104,7 @@ void main() {
     AiSetup.store = MemoryAiKeyStore()..values['ai-key-anthropic'] = 'k';
     String? system;
     AiSetup.newClient = () => MockClient((r) async {
-      system = (jsonDecode(r.body) as Map)['system'] as String?;
+      system = textOf((jsonDecode(r.body) as Map)['system']);
       return json(anthropicOk('Here is your plan.'));
     });
     late AppSettings settings;
