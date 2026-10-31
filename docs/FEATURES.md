@@ -133,7 +133,9 @@ are on track, ahead or behind plan.
   (Albert Heijn, Jumbo, Lidl, Aldi, Plus, Dirk, Hoogvliet, Vomar and more). Each item on offer moves to the chain
   where it is cheapest, with the price, the old price and until when. Common English words are searched in Dutch.
   Items no chain has on offer are checked by your AI (API key or Claude Code), or stay at their usual shop.
-  PrijsProfeet only knows offers, not regular shelf prices.
+  Regular shelf prices come from [Checkjebon](https://www.checkjebon.nl)'s open price file (downloaded at most once a
+  day and compared on the device, per kilo or litre where the pack size says), so items not on offer find their
+  cheapest shop too. An offer wins unless another shop's everyday price is lower.
 - View by shop or by aisle, tick items into the basket, clear the basket.
 
 <br clear="right">

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../../core/format.dart';
 import '../../core/settings.dart';
+import 'shelf_prices.dart';
 
 /// This week's supermarket offers from PrijsProfeet (prijsprofeet.nl), a free public API with the folder deals of
 /// sixteen Dutch chains. It only knows what is on offer: an item that no chain has on offer finds nothing, and the
@@ -73,8 +74,11 @@ class Offer {
     this.until,
     this.unitPrice,
     this.unit,
+    this.onOffer = true,
   });
 
+  /// False for a regular shelf price rather than this week's offer.
+  final bool onOffer;
   final String store;
   final double price;
   final double? was;
@@ -83,12 +87,19 @@ class Offer {
   final double? unitPrice;
   final String? unit;
 
-  /// "€1.29 at Lidl, was €1.89, until Sun"
+  /// "€1.29 at Lidl, was €1.89, until Sun", or for a shelf price "€1.55 at Jumbo, €0.78 a litre"
   String describe(String currency, {DateTime? now}) {
     String m(double v) => money((v * 100).round(), currency);
     final end = until;
+    final per = switch (unit) {
+      'kg' => 'a kilo',
+      'l' => 'a litre',
+      'piece' => 'each',
+      _ => null,
+    };
     return [
       '${m(price)} at $store',
+      if (!onOffer && unitPrice != null && per != null && (unitPrice! - price).abs() > 0.005) '${m(unitPrice!)} $per',
       if (was != null && was! > price) 'was ${m(was!)}',
       if (end != null) 'until ${friendlyDay(end, now: now)}',
     ].join(', ');
@@ -102,6 +113,7 @@ class Offer {
     if (until != null) 'until': until!.toIso8601String(),
     if (unitPrice != null) 'unitPrice': unitPrice,
     if (unit != null) 'unit': unit,
+    if (!onOffer) 'onOffer': false,
   };
 
   static Offer? fromJson(Object? j) {
@@ -114,6 +126,7 @@ class Offer {
       until: DateTime.tryParse(j['until'] as String? ?? ''),
       unitPrice: (j['unitPrice'] as num?)?.toDouble(),
       unit: j['unit'] as String?,
+      onOffer: j['onOffer'] != false,
     );
   }
 }
@@ -298,4 +311,21 @@ Future<Map<String, Offer?>> fetchOffers(PrijsProfeet api, List<String> items, {D
   }
   if (items.isNotEmpty && failed == items.length) throw error!;
   return out;
+}
+
+/// The better of this week's offer and the cheapest regular shelf price for [item]. An offer wins unless a shop's
+/// everyday price is lower still.
+Offer? cheapestOf(Offer? deal, ShelfPrices? shelf, String item) {
+  final matches = shelf?.compare(dutchQuery(item)) ?? const <ShelfMatch>[];
+  if (matches.isEmpty) return deal;
+  final m = matches.first;
+  if (deal != null && deal.price <= m.product.price) return deal;
+  return Offer(
+    store: m.shop,
+    price: m.product.price,
+    product: m.product.name,
+    unitPrice: m.perUnit,
+    unit: m.unit,
+    onOffer: false,
+  );
 }

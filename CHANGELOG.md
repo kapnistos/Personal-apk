@@ -8,6 +8,8 @@ Builds are numbered by the CI run. Notable changes, newest first.
 - Shopping's **Best prices** now looks up this week's real offers at 16 Dutch chains through PrijsProfeet, moves
   each item to the chain where it is on offer cheapest, and shows the price, the old price and until when. What
   no chain has on offer is still checked by your AI.
+- Regular shelf prices too, from Checkjebon's open data: items not on offer go to the shop where they are cheapest
+  per kilo or litre, with the product found shown under the item.
 - The release page now always points at the newest build.
 
 ### Home layout fixes

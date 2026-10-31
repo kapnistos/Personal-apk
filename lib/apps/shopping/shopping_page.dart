@@ -14,6 +14,7 @@ import '../claude/claude_bridge.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'offers.dart';
+import 'shelf_prices.dart';
 import 'shopping_model.dart';
 
 /// One list for everything, grouped by the shop where each item is cheapest.
@@ -89,19 +90,25 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
     final settings = context.settings;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _checking = true);
-    messenger.showSnackBar(const SnackBar(content: Text("Looking for this week's offers")));
+    messenger.showSnackBar(const SnackBar(content: Text('Comparing prices at Dutch supermarkets')));
     final api = PrijsProfeet();
-    Map<String, Offer?> found;
-    try {
-      found = await fetchOffers(api, open.map((i) => i.name).toList());
-    } catch (e) {
-      // No connection to the offers, or they are down: the AI check still works.
-      api.close();
+    // This week's offers and the regular shelf prices, side by side; either one alone is still useful.
+    final (dealsResult, shelfResult) = await (
+      fetchOffers(api, open.map((i) => i.name).toList()).then<Object>((v) => v, onError: (Object e) => e),
+      ShelfPrices.load().then<Object>((v) => v, onError: (Object e) => e),
+    ).wait;
+    api.close();
+    final deals = dealsResult is Map<String, Offer?> ? dealsResult : null;
+    final shelf = shelfResult is ShelfPrices ? shelfResult : null;
+    if (deals == null && shelf == null) {
+      // No connection to either, or both are down: the AI check still works.
       if (mounted) setState(() => _checking = false);
       await _askClaude(items);
       return;
     }
-    api.close();
+    final found = <String, Offer?>{
+      for (final i in open) i.name.trim().toLowerCase(): cheapestOf(deals?[i.name.trim().toLowerCase()], shelf, i.name),
+    };
     final offers = savedOffers(settings);
     final rest = <ShoppingItem>[];
     for (final i in open) {
@@ -122,10 +129,10 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
       _checking = false;
       _byShop = true;
     });
-    final onOffer = open.length - rest.length;
+    final priced = open.length - rest.length;
     final ai = AiSetup(settings);
     if (rest.isNotEmpty && await ai.apiReady()) {
-      await _askClaude(rest, offersFound: onOffer);
+      await _askClaude(rest, offersFound: priced);
       return;
     }
     messenger
@@ -133,9 +140,9 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
       ..showSnackBar(
         SnackBar(
           content: Text(
-            onOffer == 0
-                ? 'Nothing on your list is on offer this week'
-                : '$onOffer on offer this week${rest.isEmpty ? '' : '; the rest stay at their usual shop'}',
+            priced == 0
+                ? 'No prices found for your list'
+                : 'Moved $priced to their cheapest shop${rest.isEmpty ? '' : '; the rest stay where they were'}',
           ),
           action: rest.isEmpty ? null : SnackBarAction(label: 'Ask Claude', onPressed: () => _askClaude(rest)),
         ),
@@ -483,20 +490,30 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
                     ),
                   ),
                 ),
-              if (open.any((i) {
-                final o = savedOffers(context.settings)[i.name.trim().toLowerCase()];
-                return o != null && o.store == i.store && !_ended(o);
-              }))
-                // Their free tier asks for a visible credit wherever their offers show.
-                ContentWidth(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton(
-                      onPressed: () => launchUrl(Uri.parse(PrijsProfeet.site), mode: LaunchMode.externalApplication),
-                      child: Text(PrijsProfeet.credit, style: TextStyle(color: p.muted, fontSize: 13)),
-                    ),
-                  ),
-                ),
+              // Both sources ask for a visible credit wherever their prices show.
+              ...() {
+                final saved = savedOffers(context.settings);
+                final shown = [
+                  for (final i in open)
+                    if (saved[i.name.trim().toLowerCase()] case final o? when o.store == i.store && !_ended(o)) o,
+                ];
+                return [
+                  for (final (on, label, site) in [
+                    (true, PrijsProfeet.credit, PrijsProfeet.site),
+                    (false, ShelfPrices.credit, ShelfPrices.site),
+                  ])
+                    if (shown.any((o) => o.onOffer == on))
+                      ContentWidth(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(
+                            onPressed: () => launchUrl(Uri.parse(site), mode: LaunchMode.externalApplication),
+                            child: Text(label, style: TextStyle(color: p.muted, fontSize: 13)),
+                          ),
+                        ),
+                      ),
+                ];
+              }(),
               if (bought.isNotEmpty)
                 ContentWidth(
                   child: Padding(
