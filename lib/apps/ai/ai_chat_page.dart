@@ -232,10 +232,12 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
   /// Chat: a general assistant that knows the date, the user's name and that it is read on a phone.
   String _chatBase(DateTime now) {
     final s = context.settings;
-    return 'You are a helpful assistant inside Hub, the user\'s personal app. Answer plainly and briefly, '
-        'like a knowledgeable friend. Avoid headings and filler.\n'
-        '${hubWhen(now, currency: s.currency, name: s.name)}\n$phoneStyle';
+    return '$_chatIntro\n${hubWhen(now, currency: s.currency, name: s.name)}\n$phoneStyle';
   }
+
+  static const _chatIntro =
+      'You are a helpful assistant inside Hub, the user\'s personal app. Answer plainly and briefly, '
+      'like a knowledgeable friend. Avoid headings and filler.';
 
   /// The system prompt for a model that reads the app with tools, in two parts: the fixed instructions, which
   /// the provider can cache, and the time and today at a glance, which change on every call.

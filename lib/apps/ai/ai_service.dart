@@ -528,7 +528,7 @@ class AiSetup {
       final r = await ClaudePlan.ask(
         settings,
         messages,
-        system: _joinSystem(system, systemTail),
+        system: AiClient.joinSystem(system, systemTail),
         model: planAlias,
         client: httpClient,
       );
@@ -689,7 +689,7 @@ class AiClient {
   static const _ephemeral = {'type': 'ephemeral'};
 
   /// [system] and [tail] as one prompt, for providers that take a single string.
-  static String? _joinSystem(String? system, String? tail) {
+  static String? joinSystem(String? system, String? tail) {
     final t = tail == null || tail.isEmpty ? null : tail;
     if (system == null || system.isEmpty) return t;
     return t == null ? system : '$system\n\n$t';
@@ -745,7 +745,7 @@ class AiClient {
       if (!anthropic && apiKey.isNotEmpty) 'authorization': 'Bearer $apiKey',
       if (openrouter) ...openRouterHeaders,
     };
-    final joined = _joinSystem(system, systemTail);
+    final joined = joinSystem(system, systemTail);
     final msgs = <Map<String, Object?>>[
       if (!anthropic && joined != null && joined.isNotEmpty) {'role': 'system', 'content': joined},
       for (final m in messages) {'role': m.role, 'content': m.content},
