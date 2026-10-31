@@ -5,7 +5,6 @@ import 'package:hub/apps/calendar/event_editor.dart';
 import 'package:hub/apps/spaces/work_hours.dart';
 import 'package:hub/apps/todo/todo_page.dart';
 import 'package:hub/apps/wallet/insights.dart';
-import 'package:hub/apps/wallet/wallet_model.dart';
 import 'package:hub/core/db/database.dart';
 import 'package:hub/core/edition.dart';
 import 'package:hub/core/format.dart';
