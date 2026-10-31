@@ -10,6 +10,7 @@ import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../ai/ask_agent.dart';
 import 'calendar_model.dart';
 import 'event_editor.dart';
 
@@ -218,6 +219,7 @@ class _CalendarPageState extends State<CalendarPage> {
                   ],
                 ),
               ],
+              const AskAgentButton(label: 'Plan my week', prompt: AgentPrompts.planWeek),
             ],
           ),
           floatingActionButton: wide

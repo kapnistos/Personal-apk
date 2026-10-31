@@ -8,6 +8,7 @@ import '../../core/db/database.dart';
 import '../../core/format.dart';
 import '../../core/reminders.dart' show occurrences, occurrenceEnd;
 import '../habits/habits_page.dart' show habitDueOn, habitStreak;
+import '../spaces/work_hours.dart' show WorkSchedule;
 import '../wallet/wallet_model.dart';
 import '../weather/weather_service.dart';
 import 'ai_service.dart';
@@ -154,10 +155,15 @@ class HubTools {
     ),
   ];
 
+  static const _id = {'type': 'integer', 'description': 'The id from a read tool.'};
+  static const _time = {'type': 'string', 'description': 'YYYY-MM-DDTHH:MM, or YYYY-MM-DD for all day.'};
+  static const _clock = {'type': 'string', 'description': 'HH:MM, 24 hour.'};
+  static const _saved = 'The user sees a card and it is saved only when they tap it.';
+
   static final writeTools = [
     AiTool(
       'propose_expense',
-      'Proposes logging money spent. The user sees a card and it is saved only when they tap Add.',
+      'Proposes logging money spent. $_saved',
       _obj(
         {
           'amount': {'type': 'number'},
@@ -171,7 +177,7 @@ class HubTools {
     ),
     AiTool(
       'propose_income',
-      'Proposes logging money received. Saved only when the user taps Add.',
+      'Proposes logging money received. $_saved',
       _obj(
         {
           'amount': {'type': 'number'},
@@ -185,7 +191,7 @@ class HubTools {
     ),
     AiTool(
       'propose_task',
-      'Proposes a to-do. Saved only when the user taps Add.',
+      'Proposes a new to-do. $_saved',
       _obj(
         {
           'title': {'type': 'string'},
@@ -196,33 +202,87 @@ class HubTools {
       ),
     ),
     AiTool(
-      'propose_complete_task',
-      'Proposes ticking off an open task. Give its id from get_tasks. Done only when the user taps Add.',
+      'propose_edit_task',
+      'Proposes changing an open task: rename it, move its due date (reschedule), clear the date, star it or '
+          'change its details. Give only what changes. $_saved',
       _obj(
         {
-          'id': {'type': 'integer'},
+          'id': _id,
+          'title': {'type': 'string', 'description': 'New title.'},
+          'due': {..._date, 'description': 'New due date, YYYY-MM-DD.'},
+          'clear_due': {'type': 'boolean', 'description': 'True to take the due date away.'},
+          'important': {'type': 'boolean'},
+          'details': {'type': 'string'},
+        },
+        ['id'],
+      ),
+    ),
+    AiTool(
+      'propose_complete_task',
+      'Proposes ticking off an open task. Give its id from get_tasks. $_saved',
+      _obj(
+        {
+          'id': _id,
           'title': {'type': 'string'},
         },
         ['id'],
       ),
     ),
     AiTool(
+      'propose_delete_task',
+      'Proposes deleting a task for good. Only when the user asks to delete or remove it. $_saved',
+      _obj({'id': _id}, ['id']),
+    ),
+    AiTool(
       'propose_event',
-      'Proposes a calendar event. Saved only when the user taps Add.',
+      'Proposes a new calendar event. $_saved',
       _obj(
         {
           'title': {'type': 'string'},
-          'start': {'type': 'string', 'description': 'YYYY-MM-DDTHH:MM, or YYYY-MM-DD for all day.'},
-          'end': {'type': 'string'},
+          'start': _time,
+          'end': {..._time, 'description': 'Default one hour after start, or the same day for all day.'},
           'allDay': {'type': 'boolean'},
           'location': {'type': 'string'},
+          'calendar': {
+            'type': 'string',
+            'description': 'Which calendar, by name (from get_calendar), e.g. Personal, Work, Study. Default Personal.',
+          },
+          'repeat': {
+            'type': 'string',
+            'enum': ['none', 'daily', 'weekly', 'monthly', 'yearly'],
+          },
+          'remind_minutes': {'type': 'integer', 'description': 'Reminder this many minutes before.'},
+          'notes': {'type': 'string'},
         },
         ['title', 'start'],
       ),
     ),
     AiTool(
+      'propose_edit_event',
+      'Proposes changing an event: move it to another time or day (reschedule), rename it, change the place or '
+          'calendar. Give only what changes; a new start keeps the length. A repeating event moves as a whole. '
+          'Events from imported calendars cannot be changed. $_saved',
+      _obj(
+        {
+          'id': _id,
+          'title': {'type': 'string'},
+          'start': _time,
+          'end': _time,
+          'allDay': {'type': 'boolean'},
+          'location': {'type': 'string'},
+          'calendar': {'type': 'string'},
+        },
+        ['id'],
+      ),
+    ),
+    AiTool(
+      'propose_delete_event',
+      'Proposes deleting an event (all its repeats). Only when the user asks to delete, cancel or remove it. $_saved',
+      _obj({'id': _id}, ['id']),
+    ),
+    AiTool(
       'propose_note',
-      'Proposes a note. Saved only when the user taps Add.',
+      'Proposes a new note. $_saved',
       _obj(
         {
           'title': {'type': 'string'},
@@ -232,8 +292,22 @@ class HubTools {
       ),
     ),
     AiTool(
+      'propose_edit_note',
+      'Proposes changing a note: add text at the end (append), or replace its title or text. Prefer append '
+          'unless the user wants it rewritten. $_saved',
+      _obj(
+        {
+          'id': {'type': 'integer', 'description': 'The id from search_notes.'},
+          'append': {'type': 'string', 'description': 'Text to add on a new line at the end.'},
+          'title': {'type': 'string', 'description': 'New title.'},
+          'body': {'type': 'string', 'description': 'New full text, replacing the old.'},
+        },
+        ['id'],
+      ),
+    ),
+    AiTool(
       'propose_shopping',
-      'Proposes an item for the shopping list. Saved only when the user taps Add.',
+      'Proposes an item for the shopping list. Call it once per item. $_saved',
       _obj(
         {
           'name': {'type': 'string'},
@@ -244,7 +318,7 @@ class HubTools {
     ),
     AiTool(
       'propose_recurring',
-      'Proposes a recurring payment, subscription or recurring income. Saved only when the user taps Add.',
+      'Proposes a new recurring payment, subscription or recurring income. $_saved',
       _obj(
         {
           'name': {'type': 'string'},
@@ -259,6 +333,96 @@ class HubTools {
           'account': {'type': 'string'},
         },
         ['name', 'amount'],
+      ),
+    ),
+    AiTool(
+      'propose_edit_recurring',
+      'Proposes changing a recurring payment or subscription: new price, period, next date, category, account, '
+          'or pausing (active false) and resuming it. Give only what changes. $_saved',
+      _obj(
+        {
+          'id': {'type': 'integer', 'description': 'The id from get_recurring.'},
+          'name': {'type': 'string'},
+          'amount': {'type': 'number'},
+          'period_months': {'type': 'integer'},
+          'next_date': _date,
+          'category': {'type': 'string'},
+          'account': {'type': 'string'},
+          'active': {'type': 'boolean'},
+        },
+        ['id'],
+      ),
+    ),
+    AiTool(
+      'propose_savings_deposit',
+      'Proposes putting money into a savings goal (or taking it out with withdraw true). $_saved',
+      _obj(
+        {
+          'goal': {'type': 'string', 'description': 'The goal name from get_savings.'},
+          'amount': {'type': 'number'},
+          'withdraw': {'type': 'boolean'},
+          'note': {'type': 'string'},
+          'date': _date,
+        },
+        ['goal', 'amount'],
+      ),
+    ),
+    AiTool(
+      'propose_budget_target',
+      'Proposes the monthly spending budget in Wallet (the target the month is paced against). 0 removes it. $_saved',
+      _obj(
+        {
+          'amount': {'type': 'number', 'description': 'Per month.'},
+        },
+        ['amount'],
+      ),
+    ),
+    AiTool(
+      'propose_work_hours',
+      'Proposes logging a day in the Job work log: worked, from home, day off, holiday, sick or public holiday, '
+          'with hours or start and end times. One call per day. Replaces what that day had. $_saved',
+      _obj(
+        {
+          'date': _date,
+          'status': {
+            'type': 'string',
+            'enum': ['work', 'remote', 'off', 'holiday', 'sick', 'public'],
+            'description': 'Default work.',
+          },
+          'hours': {'type': 'number', 'description': 'Hours worked. Leave out for a normal day or with start and end.'},
+          'start': _clock,
+          'end': _clock,
+          'break_minutes': {'type': 'integer'},
+          'note': {'type': 'string'},
+        },
+        ['date'],
+      ),
+    ),
+    AiTool(
+      'propose_space_date',
+      'Proposes an important date (exam, deadline, shift, hand-in) in a space such as University or Job. It goes '
+          'into that space\'s calendar with a reminder. $_saved',
+      _obj(
+        {
+          'space': {'type': 'string', 'description': 'The space name from get_spaces.'},
+          'title': {'type': 'string'},
+          'date': _date,
+          'end_date': {..._date, 'description': 'Last day, for something that spans days.'},
+          'time': {..._clock, 'description': 'Only when it has a time.'},
+          'notes': {'type': 'string'},
+        },
+        ['space', 'title', 'date'],
+      ),
+    ),
+    AiTool(
+      'propose_habit_done',
+      'Proposes ticking a habit off for a day. $_saved',
+      _obj(
+        {
+          'name': {'type': 'string', 'description': 'The habit name from get_habits.'},
+          'date': {..._date, 'description': 'Default today.'},
+        },
+        ['name'],
       ),
     ),
   ];
@@ -359,30 +523,37 @@ class HubTools {
       case 'search_hub':
         return search(s('query') ?? '');
     }
-    if (name.startsWith('propose_') && writes) return _propose(name.substring(8), a);
+    if (name.startsWith('propose_') && writes) return await _propose(name.substring(8), a);
     return {'error': 'There is no tool called $name.'};
   }
 
-  Map<String, Object?> _propose(String what, Map<String, dynamic> a) {
+  /// The card type each propose_ tool makes.
+  static const _proposeTypes = {
+    'complete_task': 'complete',
+    'savings_deposit': 'saving',
+    'work_hours': 'work_day',
+    'habit_done': 'habit',
+  };
+
+  Future<Map<String, Object?>> _propose(String what, Map<String, dynamic> a) async {
     final fields = Map<String, dynamic>.of(a);
-    final type = switch (what) {
-      'complete_task' => 'complete',
-      'recurring' => 'recurring',
-      _ => what,
-    };
-    if (type == 'recurring') {
-      fields['next'] = fields.remove('next_date');
-      fields['period'] = fields.remove('period_months');
-    }
+    final type = _proposeTypes[what] ?? what;
+    if (fields.containsKey('next_date')) fields['next'] = fields.remove('next_date');
+    if (fields.containsKey('period_months')) fields['period'] = fields.remove('period_months');
     final action = AgentAction(type, fields);
     if (!AgentAction.types.contains(type) || !action.valid) {
       return {'proposed': false, 'error': 'Something needed is missing, so nothing was proposed.'};
     }
+    final problem = await action.resolve(db, now: clock());
+    if (problem != null) return {'proposed': false, 'error': problem};
     proposals.add(action);
+    final detail = action.detailIn(currency);
     return {
       'proposed': true,
-      'card': '${action.label}: ${action.summary}',
-      'note': 'The user sees this as a card and it is saved only if they tap Add. Do not say it is saved.',
+      'card': '${action.label}: ${action.summaryIn(currency)}${detail == null ? '' : ' ($detail)'}',
+      'note':
+          'The user sees this as a card with a ${action.verb} button; nothing changes until they tap it. '
+          'Do not say it is done.',
     };
   }
 
@@ -425,6 +596,7 @@ class HubTools {
             if (e.repeat != 'none') 'repeats': e.repeat,
             if (cal != null) 'calendar': cal.name,
             if (cal != null && !cal.visible) 'hiddenCalendar': true,
+            if (cal?.icsUrl != null) 'readOnly': true,
           },
         ));
       }
@@ -571,6 +743,7 @@ class HubTools {
       'items': [
         for (final s in subs)
           {
+            'id': s.id,
             'name': s.name,
             'amount': _m(s.amountCents),
             'type': s.kind == EntryKind.income
@@ -621,6 +794,7 @@ class HubTools {
       'goals': [
         for (final g in goals)
           {
+            'id': g.id,
             'name': g.name,
             'target': _m(g.targetCents),
             'saved': _m(moves.where((m) => m.goalId == g.id).fold(0, (a, m) => a + m.amountCents)),
@@ -673,6 +847,7 @@ class HubTools {
       'notes': [
         for (final n in list.take(limit.clamp(1, 60)))
           {
+            'id': n.id,
             if (n.title.isNotEmpty) 'title': n.title,
             'text': _clip(n.body, 1500),
             if (n.pinned) 'pinned': true,
@@ -694,6 +869,7 @@ class HubTools {
             final done = {for (final c in checks.where((c) => c.habitId == h.id)) c.day};
             final since = AppDatabase.dayKey(addDays(today, -days + 1));
             return {
+              'id': h.id,
               'name': h.name,
               'on': h.days == '1111111' || h.days.length != 7
                   ? 'every day'
@@ -775,9 +951,11 @@ class HubTools {
       count[d.status] = (count[d.status] ?? 0) + 1;
       if (d.status == 'work' || d.status == 'remote') hours += d.hours ?? 0;
     }
+    final schedule = WorkSchedule.parse((await db.readSettings())[WorkSchedule.key]);
     return {
       'from': day(from),
       'to': day(addDays(to, -1)),
+      'contract': schedule.describe(),
       'totals': count,
       'hours': hours,
       'days': [
@@ -869,7 +1047,7 @@ class HubTools {
         .take(10);
     return {
       'notes': [
-        for (final n in notesHit) {if (n.title.isNotEmpty) 'title': n.title, 'text': _clip(n.body, 300)},
+        for (final n in notesHit) {'id': n.id, if (n.title.isNotEmpty) 'title': n.title, 'text': _clip(n.body, 300)},
       ],
       'tasks': [
         for (final t in todos)
@@ -882,7 +1060,7 @@ class HubTools {
         'latest': [for (final e in entries.take(15)) _entry(e)],
       },
       'recurring': [
-        for (final s in subs) {'name': s.name, 'amount': _m(s.amountCents), 'next': day(s.nextDate)},
+        for (final s in subs) {'id': s.id, 'name': s.name, 'amount': _m(s.amountCents), 'next': day(s.nextDate)},
       ],
       'shopping': [
         for (final i in shop) {'name': i.name, 'bought': i.done},

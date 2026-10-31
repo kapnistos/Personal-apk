@@ -48,6 +48,15 @@ class _Turn {
   final Map<int, String> done; // action index to 'added' or 'skipped'
   final DateTime at;
 
+  /// How to take back each card added in this session; not saved, so Undo goes once the chat closes.
+  final undo = <int, Undo>{};
+
+  /// Cards still waiting for a tap.
+  List<int> get pending => [
+    for (var i = 0; i < actions.length; i++)
+      if (done[i] == null) i,
+  ];
+
   /// "597 in, 114 out tokens", and the cost when it is known.
   String? get usage {
     if (inputTokens == 0 && outputTokens == 0) return null;
@@ -220,29 +229,36 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
     if (note) _save();
   }
 
-  static const _chatBase =
-      'You are a helpful assistant inside Hub, the user\'s personal app. Answer plainly and briefly, '
-      'like a knowledgeable friend. Avoid headings and filler.';
+  /// Chat: a general assistant that knows the date, the user's name and that it is read on a phone.
+  String _chatBase(DateTime now) {
+    final s = context.settings;
+    return 'You are a helpful assistant inside Hub, the user\'s personal app. Answer plainly and briefly, '
+        'like a knowledgeable friend. Avoid headings and filler.\n'
+        '${hubWhen(now, currency: s.currency, name: s.name)}\n$phoneStyle';
+  }
 
   /// The system prompt for a model that reads the app with tools: who it is, and today at a glance.
   Future<String> _toolSystem(bool agent) async {
     final now = DateTime.now();
     final currency = context.settings.currency;
+    final name = context.settings.name;
+    final chat = _chatBase(now);
     final glance = await hubContext(context.db, now: now, currency: currency);
     final base = agent
-        ? agentToolPrompt(now, currency: currency)
-        : '$_chatBase\nYou can read the user\'s calendar, tasks, money, notes, habits, spaces and more with '
-              'the tools. Look before answering questions about their life. Now: $now.';
+        ? agentToolPrompt(now, currency: currency, name: name)
+        : '$chat\nYou can read the user\'s calendar, tasks, money, notes, habits, spaces and more with '
+              'the tools. Look before answering questions about their life. You cannot change anything from '
+              'Chat; for that the user switches to Hub agent.';
     return '$base\n\nToday at a glance (use the tools for anything more):\n$glance';
   }
 
   /// The system prompt with the data written in, for setups that cannot call tools. Null for a plain chat.
   Future<String?> _fullSystem(bool agent) async {
+    final now = DateTime.now();
     if (!agent && !_memory.shareContext) return null;
     final db = context.db;
     final currency = context.settings.currency;
-    final now = DateTime.now();
-    final base = agent ? agentSystemPrompt(now) : _chatBase;
+    final base = agent ? agentSystemPrompt(now, currency: currency, name: context.settings.name) : _chatBase(now);
     final data = await HubTools(db, currency: currency).snapshot();
     return '$base\n\nThe user\'s Hub right now (${HubTools.day(now)}):\n$data';
   }
@@ -362,7 +378,12 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
         }
       }
       if (!mounted || gen != _gen) return;
-      reply ??= await ai.ask(history, system: await _fullSystem(agent));
+      if (reply == null) {
+        // A plain chat still knows the date, the name and that it is read on a phone.
+        final system = await _fullSystem(agent);
+        if (!mounted || gen != _gen) return;
+        reply = await ai.ask(history, system: system ?? _chatBase(DateTime.now()));
+      }
       if (!mounted || gen != _gen) return;
       await usage.record(reply.model ?? ai.modelId, reply.inputTokens, reply.outputTokens, reply.cost);
       if (!mounted || gen != _gen) return;
@@ -399,23 +420,94 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
     await askClaude(prompt);
   }
 
+  /// Runs one card. Returns whether it went through.
+  Future<bool> _apply(_Turn t, int i) async {
+    final a = t.actions[i];
+    try {
+      final undo = await a.apply(context.db, settings: context.settings);
+      t.undo[i] = undo;
+      t.done[i] = 'added';
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static String _failed(AgentAction a) => switch (a.type) {
+    'complete' || 'edit_task' || 'delete_task' => 'Could not find that task',
+    'edit_event' || 'delete_event' => 'Could not find that event',
+    'edit_note' => 'Could not find that note',
+    _ => 'Could not do that',
+  };
+
   Future<void> _act(_Turn t, int i, bool add) async {
     if (t.done[i] != null) return;
     final a = t.actions[i];
+    final messenger = ScaffoldMessenger.of(context);
     if (add) {
-      final db = context.db;
-      final messenger = ScaffoldMessenger.of(context);
-      try {
-        await a.apply(db);
-      } catch (_) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(a.type == 'complete' ? 'Could not find that task' : 'Could not add that')),
-        );
+      HapticFeedback.lightImpact();
+      if (!await _apply(t, i)) {
+        messenger.showSnackBar(SnackBar(content: Text(_failed(a))));
         return;
       }
-      messenger.showSnackBar(SnackBar(content: Text(a.type == 'complete' ? 'Marked done' : '${a.label} added')));
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(a.doneMessage),
+          action: SnackBarAction(label: 'Undo', onPressed: () => _undo(t, [i])),
+        ),
+      );
+    } else {
+      t.done[i] = 'skipped';
     }
-    if (mounted) setState(() => t.done[i] = add ? 'added' : 'skipped');
+    if (mounted) setState(() {});
+    await _save();
+  }
+
+  /// "Add all": every waiting card except deletes, which always get their own tap.
+  Future<void> _actAll(_Turn t) async {
+    final todo = [
+      for (final i in t.pending)
+        if (!t.actions[i].destructive) i,
+    ];
+    if (todo.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    HapticFeedback.lightImpact();
+    final done = <int>[];
+    for (final i in todo) {
+      if (await _apply(t, i)) done.add(i);
+    }
+    if (!mounted) return;
+    setState(() {});
+    final failed = todo.length - done.length;
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(failed == 0 ? 'All ${done.length} done' : '${done.length} done, $failed could not be added'),
+        action: done.isEmpty ? null : SnackBarAction(label: 'Undo', onPressed: () => _undo(t, done)),
+      ),
+    );
+    await _save();
+  }
+
+  /// Takes cards back, newest first, and offers them again.
+  Future<void> _undo(_Turn t, List<int> which) async {
+    var ok = true;
+    for (final i in which.reversed) {
+      final undo = t.undo.remove(i);
+      if (undo == null) continue;
+      try {
+        await undo();
+        t.done.remove(i);
+      } catch (_) {
+        ok = false;
+      }
+    }
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(ok ? 'Undone' : 'Could not undo all of it')));
     await _save();
   }
 
@@ -534,7 +626,14 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               if (newDay && i > 0) _DayDivider(day: t.at),
-                              _Bubble(turn: t, onAction: (j, add) => _act(t, j, add), onCopy: () => _copy(t.text)),
+                              _Bubble(
+                                turn: t,
+                                currency: settings.currency,
+                                onAction: (j, add) => _act(t, j, add),
+                                onAll: () => _actAll(t),
+                                onUndo: (j) => _undo(t, [j]),
+                                onCopy: () => _copy(t.text),
+                              ),
                             ],
                           );
                         },
@@ -853,22 +952,20 @@ class _Empty extends StatelessWidget {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.turn, required this.onAction, required this.onCopy});
+  const _Bubble({
+    required this.turn,
+    required this.currency,
+    required this.onAction,
+    required this.onAll,
+    required this.onUndo,
+    required this.onCopy,
+  });
   final _Turn turn;
+  final String currency;
   final void Function(int index, bool add) onAction;
+  final VoidCallback onAll;
+  final void Function(int index) onUndo;
   final VoidCallback onCopy;
-
-  static IconData _icon(String type) => switch (type) {
-    'expense' => Icons.arrow_outward_rounded,
-    'income' => Icons.south_west_rounded,
-    'note' => Icons.sticky_note_2_outlined,
-    'task' => Icons.check_circle_outline_rounded,
-    'complete' => Icons.task_alt_rounded,
-    'event' => Icons.event_outlined,
-    'shopping' => Icons.shopping_basket_outlined,
-    'recurring' => Icons.autorenew_rounded,
-    _ => Icons.add_rounded,
-  };
 
   @override
   Widget build(BuildContext context) {
@@ -886,6 +983,10 @@ class _Bubble extends StatelessWidget {
       height: 1.45,
     );
     final looked = [for (final t in turn.tools) HubTools.labelFor(t)].where((s) => s.isNotEmpty).toSet().toList();
+    final allable = [
+      for (final i in turn.pending)
+        if (!turn.actions[i].destructive) i,
+    ];
     return Padding(
       padding: EdgeInsets.only(top: mine ? 10 : 4, bottom: 4),
       child: Column(
@@ -914,42 +1015,32 @@ class _Bubble extends StatelessWidget {
                   : SelectableText(turn.text, style: style),
             ),
           for (var i = 0; i < turn.actions.length; i++)
-            Container(
-              constraints: const BoxConstraints(maxWidth: 560),
-              margin: const EdgeInsets.only(top: 10),
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-              decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(20)),
-              child: Row(
-                children: [
-                  AppGlyph(icon: _icon(turn.actions[i].type), color: aiColor, size: 40),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(turn.actions[i].label, style: TextStyle(color: p.muted, fontSize: 12.5)),
-                        Text(turn.actions[i].summary, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      ],
-                    ),
+            _ActionCard(
+              key: ValueKey('ai-card-$i'),
+              action: turn.actions[i],
+              currency: currency,
+              state: turn.done[i],
+              canUndo: turn.undo.containsKey(i),
+              onAdd: () => onAction(i, true),
+              onSkip: () => onAction(i, false),
+              onUndo: () => onUndo(i),
+            ),
+          if (allable.length >= 2)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: AiPill(
+                    label: allable.length == turn.pending.length
+                        ? 'Add all ${allable.length}'
+                        : 'Add the other ${allable.length}',
+                    icon: Icons.done_all_rounded,
+                    filled: true,
+                    onTap: onAll,
                   ),
-                  const SizedBox(width: 8),
-                  if (turn.done[i] != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Text(
-                        turn.done[i] == 'added' ? (turn.actions[i].type == 'complete' ? 'Done' : 'Added') : 'Skipped',
-                        style: TextStyle(
-                          color: turn.done[i] == 'added' ? p.positive : p.muted,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    )
-                  else ...[
-                    AiPill(label: 'Skip', onTap: () => onAction(i, false)),
-                    const SizedBox(width: 6),
-                    AiPill(label: turn.actions[i].verb, filled: true, onTap: () => onAction(i, true)),
-                  ],
-                ],
+                ),
               ),
             ),
           if (answer)
@@ -988,4 +1079,164 @@ class _Bubble extends StatelessWidget {
 
   static String _list(List<String> l) =>
       l.length == 1 ? l.first : '${l.sublist(0, l.length - 1).join(', ')} and ${l.last}';
+}
+
+/// One proposed change: what it is, what it changes, and the button that does it. Deletes are red.
+class _ActionCard extends StatelessWidget {
+  const _ActionCard({
+    super.key,
+    required this.action,
+    required this.currency,
+    required this.state,
+    required this.canUndo,
+    required this.onAdd,
+    required this.onSkip,
+    required this.onUndo,
+  });
+  final AgentAction action;
+  final String currency;
+
+  /// null while waiting, 'added' or 'skipped'.
+  final String? state;
+  final bool canUndo;
+  final VoidCallback onAdd;
+  final VoidCallback onSkip;
+  final VoidCallback onUndo;
+
+  static IconData icon(String type) => switch (type) {
+    'expense' => Icons.arrow_outward_rounded,
+    'income' => Icons.south_west_rounded,
+    'note' => Icons.sticky_note_2_outlined,
+    'edit_note' => Icons.edit_note_rounded,
+    'task' => Icons.check_circle_outline_rounded,
+    'edit_task' => Icons.edit_calendar_rounded,
+    'complete' => Icons.task_alt_rounded,
+    'event' => Icons.event_outlined,
+    'edit_event' => Icons.edit_calendar_rounded,
+    'delete_event' || 'delete_task' => Icons.delete_outline_rounded,
+    'shopping' => Icons.shopping_basket_outlined,
+    'recurring' || 'edit_recurring' => Icons.autorenew_rounded,
+    'saving' => Icons.savings_outlined,
+    'budget_target' => Icons.speed_rounded,
+    'work_day' => Icons.schedule_rounded,
+    'space_date' => Icons.flag_outlined,
+    'habit' => Icons.local_fire_department_outlined,
+    _ => Icons.add_rounded,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final danger = action.destructive;
+    final tint = danger ? p.danger : aiColor;
+    final detail = action.detailIn(currency);
+    final added = state == 'added';
+    final text = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          action.label,
+          style: TextStyle(
+            color: danger ? p.danger : p.muted,
+            fontSize: 12.5,
+            fontWeight: danger ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+        const SizedBox(height: 1),
+        Text(
+          action.summaryIn(currency),
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            height: 1.3,
+            decoration: danger && added ? TextDecoration.lineThrough : null,
+            color: state == 'skipped' ? p.muted : p.ink,
+          ),
+        ),
+        if (detail != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(detail, style: TextStyle(color: p.muted, fontSize: 13, height: 1.3)),
+          ),
+      ],
+    );
+    final Widget buttons = state != null
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (added) Icon(Icons.check_rounded, size: 18, color: danger ? p.muted : p.positive),
+              if (added) const SizedBox(width: 4),
+              Text(
+                added ? action.doneLabel : 'Skipped',
+                style: TextStyle(color: added && !danger ? p.positive : p.muted, fontWeight: FontWeight.w600),
+              ),
+              if (canUndo) ...[
+                const SizedBox(width: 4),
+                TextButton(
+                  onPressed: onUndo,
+                  style: TextButton.styleFrom(minimumSize: const Size(56, 44)),
+                  child: const Text('Undo'),
+                ),
+              ] else
+                const SizedBox(width: 8),
+            ],
+          )
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AiPill(label: 'Skip', onTap: onSkip),
+              const SizedBox(width: 6),
+              AiPill(label: action.verb, filled: true, color: danger ? p.danger : null, onTap: onAdd),
+            ],
+          );
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 560),
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: danger && state == null ? Color.alphaBlend(p.danger.withValues(alpha: 0.07), p.surface) : p.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: danger && state == null ? Border.all(color: p.danger.withValues(alpha: 0.35)) : null,
+      ),
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final glyph = AnimatedOpacity(
+            duration: const Duration(milliseconds: 200),
+            opacity: state == null ? 1 : 0.55,
+            child: AppGlyph(icon: icon(action.type), color: tint, size: 40),
+          );
+          // On a phone the buttons sit under the text, so the text keeps the width.
+          // A short line, or a card already answered, keeps everything on one row.
+          final short = detail == null && action.summaryIn(currency).length <= (box.maxWidth < 360 ? 12 : 20);
+          if (box.maxWidth < 440 && !short && state == null) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    glyph,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Padding(padding: const EdgeInsets.only(top: 1), child: text),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Align(alignment: Alignment.centerRight, child: buttons),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              glyph,
+              const SizedBox(width: 12),
+              Expanded(child: text),
+              const SizedBox(width: 8),
+              buttons,
+            ],
+          );
+        },
+      ),
+    );
+  }
 }

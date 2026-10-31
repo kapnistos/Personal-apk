@@ -16,6 +16,7 @@ class AiPill extends StatelessWidget {
     this.filled = false,
     this.icon,
     this.busy = false,
+    this.color,
   });
   final String label;
   final VoidCallback? onTap;
@@ -23,10 +24,13 @@ class AiPill extends StatelessWidget {
   final IconData? icon;
   final bool busy;
 
+  /// Fill for a filled pill in place of ink, e.g. red for Delete. Text goes white on it.
+  final Color? color;
+
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    final fg = filled ? p.background : p.ink;
+    final fg = filled ? (color != null ? Colors.white : p.background) : p.ink;
     final enabled = onTap != null && !busy;
     return Semantics(
       button: true,
@@ -41,7 +45,7 @@ class AiPill extends StatelessWidget {
             child: Container(
               constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: ShapeDecoration(color: filled ? p.ink : p.raised, shape: const StadiumBorder()),
+              decoration: ShapeDecoration(color: filled ? (color ?? p.ink) : p.raised, shape: const StadiumBorder()),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
