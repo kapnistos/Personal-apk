@@ -12,6 +12,10 @@ The home screen is a grid of widgets. Two ways to change it:
 - **Hold any widget** to open its settings, or
 - tap the **Edit home** button next to your avatar.
 
+Under **Me** (or **Top of Home** while editing) you can switch the greeting, weather card, Today strip and apps on
+or off, and show apps grouped or as one grid. **Choose apps** hides apps and drags them into order. Hold the bottom
+bar to choose which tabs it shows, their order and the tab Hub opens on.
+
 For each widget you can choose:
 
 | Setting | Options |
@@ -185,6 +189,11 @@ a balance for the year next to holidays left.
 - **The Hub agent reads all your data** through tools: calendar for any dates, recurring payments and subscriptions,
   transactions, balances, savings, investments, notes, tasks, habits, shopping, spaces, the work log and weather.
   Each answer says what it looked at. Models without tool support get a full snapshot in the prompt instead.
+- **The agent can change things too**, always as a card you confirm: edit, reschedule or delete tasks and events,
+  edit notes, edit recurring payments, savings deposits, the monthly budget, Job hours, space dates and habits.
+  Cards show what a change replaces; deletes are red. Add all, and Undo after each change.
+- **Ask AI from any app**: Explain my month (Wallet menu), Plan my week (Calendar), Prioritise (To-do), Summarise
+  (Notes).
 - **History**: every conversation is kept per mode. Reopen, search, rename or delete them; the empty chat lists the
   latest three.
 - **Usage**: tokens per message and per conversation, totals for today, this month and all time per model, and cost

@@ -15,8 +15,7 @@ import '../apps/notes/notes_page.dart';
 import '../apps/registry.dart';
 import '../apps/spaces/my_spaces.dart';
 import '../apps/todo/todo_page.dart';
-import '../apps/wallet/insights.dart' show SpendPlan, spendTargetKey;
-import '../apps/wallet/wallet_model.dart';
+import '../apps/wallet/insights.dart' show monthSpendPlan, spentSoFar, spendTargetKey;
 import '../apps/weather/weather_page.dart';
 import '../apps/weather/weather_service.dart';
 import '../core/db/database.dart';
@@ -603,21 +602,20 @@ class _TodayStrip extends StatelessWidget {
                       stream: db.watchSubscriptions(),
                       builder: (context, sSnap) {
                         final entries = eSnap.data ?? const <Entry>[];
-                        // Booked payments are entries already; count only what is still to leave this month.
-                        final spent = MonthSummary(entries.where((e) => !e.date.isAfter(now)).toList()).out;
+                        // The same sums as Wallet's hero, so Home and Wallet never disagree.
                         if (target == null || target <= 0) {
-                          return _StripCell(value: _wholeMoney(spent, currency), label: 'Spent', onTap: onWallet);
+                          return _StripCell(
+                            value: _wholeMoney(spentSoFar(entries, now), currency),
+                            label: 'Spent',
+                            onTap: onWallet,
+                          );
                         }
-                        final billsAhead = (sSnap.data ?? const <Subscription>[])
-                            .where(
-                              (s) =>
-                                  s.active &&
-                                  s.kind.sign < 0 &&
-                                  !s.nextDate.isBefore(today) &&
-                                  s.nextDate.isBefore(monthEnd),
-                            )
-                            .fold<int>(0, (t, s) => t + s.amountCents);
-                        final plan = SpendPlan(target: target, spent: spent, billsAhead: billsAhead, now: now);
+                        final plan = monthSpendPlan(
+                          target: target,
+                          monthEntries: entries,
+                          subs: sSnap.data ?? const <Subscription>[],
+                          now: now,
+                        );
                         return _StripCell(
                           value: _wholeMoney(plan.left.abs(), currency),
                           label: plan.over ? 'Over target' : 'To spend',

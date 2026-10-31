@@ -4,6 +4,27 @@ Builds are numbered by the CI run. Notable changes, newest first.
 
 ## October 2026
 
+### Your tabs, an agent that can change things, and 22 fixes
+- **Choose your bottom tabs**: pick which tabs sit next to Home (Calendar, Wallet, To-do, AI, Notes), drag them into
+  order and choose the tab Hub opens on. Hold the bar, or go to Me > Navigation.
+- **Top of Home**: switch the greeting, weather card, Today strip and apps on or off, show apps grouped or as one
+  grid, and drag apps into your own order.
+- **Text size**: Standard, Larger or Largest on top of your phone's own setting. The black dark background is now
+  called True black.
+- **The Hub agent can change things**: edit, reschedule or delete tasks and events, add to or rewrite notes, edit
+  recurring payments, add savings deposits, set your monthly budget, log Job hours, add important dates to a space
+  and tick habits. Every change is a card with what it was before; deletes are red. **Add all** for several cards,
+  and **Undo** after any of them.
+- **Ask AI from inside apps**: Explain my month (Wallet), Plan my week (Calendar), Prioritise (To-do), Summarise
+  (Notes).
+- Home and Wallet always agree on what is left to spend. The Work widget shows overtime or hours owed. The Clock
+  widget opens Calendar.
+- Fixes: edits in the task, shopping and event sheets are no longer lost when you swipe them away or press back;
+  date pickers no longer crash on old or far-off dates; Undo always undoes the last thing; "Clear all" done tasks
+  asks first; Duplicate keeps a task's details; an all-day event's start no longer jumps to 23:00; new events start
+  on the hour; mail dates show the year when needed; several sheets no longer overflow with large text or the
+  keyboard up; the Job + button no longer covers the day counts; Wallet scrolls under the glass bar.
+
 ### Wallet tab, an agent that knows your data, Job hours
 - **Wallet is a tab** next to Home, Calendar, To-do and AI. Back from any tab goes to Home; back on Home closes the app.
 - **Am I on track?** Wallet's "Day by day" card: a bar per day, no-spend days, safe to spend today, where the month will

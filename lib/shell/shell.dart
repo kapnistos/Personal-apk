@@ -138,8 +138,8 @@ class _ShellState extends State<Shell> {
         key: ValueKey(t.id),
         child: switch (t.tab) {
           ShellTab.home => HomePage(onOpenTab: openTab),
-          // Pages that end with fixed padding stop above the bar instead of running on under it.
-          ShellTab.wallet || ShellTab.notes => _AboveBar(child: t.page()),
+          // Notes ends with fixed padding, so it stops above the bar instead of running on under it.
+          ShellTab.notes => _AboveBar(child: t.page()),
           _ => t.page(),
         },
       ),
