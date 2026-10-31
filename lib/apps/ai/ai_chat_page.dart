@@ -237,19 +237,20 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
         '${hubWhen(now, currency: s.currency, name: s.name)}\n$phoneStyle';
   }
 
-  /// The system prompt for a model that reads the app with tools: who it is, and today at a glance.
-  Future<String> _toolSystem(bool agent) async {
+  /// The system prompt for a model that reads the app with tools, in two parts: the fixed instructions, which
+  /// the provider can cache, and the time and today at a glance, which change on every call.
+  Future<(String, String)> _toolSystem(bool agent) async {
     final now = DateTime.now();
     final currency = context.settings.currency;
     final name = context.settings.name;
-    final chat = _chatBase(now);
     final glance = await hubContext(context.db, now: now, currency: currency);
     final base = agent
-        ? agentToolPrompt(now, currency: currency, name: name)
-        : '$chat\nYou can read the user\'s calendar, tasks, money, notes, habits, spaces and more with '
-              'the tools. Look before answering questions about their life. You cannot change anything from '
-              'Chat; for that the user switches to Hub agent.';
-    return '$base\n\nToday at a glance (use the tools for anything more):\n$glance';
+        ? agentToolPrompt(now, currency: currency, name: name, withWhen: false)
+        : '$_chatIntro\n$phoneStyle\nYou can read the user\'s calendar, tasks, money, notes, habits, spaces and '
+              'more with the tools. Look before answering questions about their life. You cannot change anything '
+              'from Chat; for that the user switches to Hub agent.';
+    final when = hubWhen(now, currency: currency, name: name);
+    return (base, '$when\n\nToday at a glance (use the tools for anything more):\n$glance');
   }
 
   /// The system prompt with the data written in, for setups that cannot call tools. Null for a plain chat.
@@ -261,6 +262,17 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
     final base = agent ? agentSystemPrompt(now, currency: currency, name: context.settings.name) : _chatBase(now);
     final data = await HubTools(db, currency: currency).snapshot();
     return '$base\n\nThe user\'s Hub right now (${HubTools.day(now)}):\n$data';
+  }
+
+  /// Most messages sent with a question.
+  static const maxHistory = 20;
+
+  /// The last [maxHistory] of [all], starting on a user message so the conversation still opens correctly.
+  static List<AiMessage> _recent(List<AiMessage> all) {
+    if (all.length <= maxHistory) return all;
+    final tail = all.sublist(all.length - maxHistory);
+    final firstUser = tail.indexWhere((m) => m.role == 'user');
+    return firstUser <= 0 ? tail : tail.sublist(firstUser);
   }
 
   @override
@@ -344,10 +356,11 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
       _activity = null;
     });
     _running = ai;
-    final history = [
+    // Only the latest turns are sent: every call is billed for all of them, and older ones rarely matter.
+    final history = _recent([
       for (final t in _turns)
         if (!t.error && t.role != 'note') AiMessage(t.role, t.raw ?? t.text),
-    ];
+    ]);
     final db = context.db;
     final currency = context.settings.currency;
     final usage = AiUsage(context.settings);
@@ -357,9 +370,11 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
       if (ai.canUseTools && (agent || _memory.shareContext)) {
         final tools = HubTools(db, currency: currency, writes: agent);
         try {
+          final (system, systemTail) = await _toolSystem(agent);
           reply = await ai.ask(
             history,
-            system: await _toolSystem(agent),
+            system: system,
+            systemTail: systemTail,
             tools: tools.tools,
             runTool: (name, args) {
               final label = HubTools.labelFor(name);

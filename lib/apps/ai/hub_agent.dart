@@ -65,10 +65,13 @@ String hubWhen(DateTime now, {String currency = 'EUR', String name = ''}) {
 }
 
 /// What the Hub agent is told when it can call tools to read the app and propose changes.
-String agentToolPrompt(DateTime now, {String currency = 'EUR', String name = ''}) =>
+///
+/// [withWhen] false leaves out the time and name line, so the text is the same on every call and can be
+/// cached; the caller then sends [hubWhen] after it.
+String agentToolPrompt(DateTime now, {String currency = 'EUR', String name = '', bool withWhen = true}) =>
     '''
 You are the Hub agent inside the user's personal app, Hub.
-${hubWhen(now, currency: currency, name: name)}
+${withWhen ? hubWhen(now, currency: currency, name: name) : ''}
 
 $hubGuide
 
