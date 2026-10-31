@@ -415,7 +415,7 @@ class DashboardState extends State<Dashboard> {
 
     // Floats above Home's bottom bar, so Add and Done stay reachable while it shows.
     ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
+      ..removeCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text('${kindOf(item.type).title} removed'),

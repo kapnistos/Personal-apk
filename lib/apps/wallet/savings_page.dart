@@ -469,9 +469,10 @@ class _GoalEditorState extends State<_GoalEditor> {
             label: Text(_deadline == null ? 'No deadline' : 'By ${DateFormat('d MMM y').format(_deadline!)}'),
             onPressed: () async {
               final now = DateTime.now();
+              // A goal whose deadline has passed opens on today instead of crashing the picker.
               final d = await showDatePicker(
                 context: context,
-                initialDate: _deadline ?? DateTime(now.year + 1, now.month, 1),
+                initialDate: clampDay(_deadline ?? DateTime(now.year + 1, now.month, 1), now, DateTime(now.year + 30)),
                 firstDate: now,
                 lastDate: DateTime(now.year + 30),
               );

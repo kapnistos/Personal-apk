@@ -1067,7 +1067,7 @@ class _Breakdown extends StatelessWidget {
         ],
       ),
     );
-    c.dispose();
+    // Not disposed here: the dialog still rebuilds with it while it fades out, which crashed.
     if (v == null) return;
     final cents = parseMoney(v);
     // Typos like "abc" or "-50" must not wipe a budget; only an empty field removes it.

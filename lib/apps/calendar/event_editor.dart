@@ -143,9 +143,10 @@ class _EventEditorState extends State<_EventEditor> {
     final current = isStart ? _start : _end;
     final d = await showDatePicker(
       context: context,
+      // A birthday that repeats from 1990 must still open the picker.
       initialDate: current,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
+      firstDate: current.year < 2000 ? DateTime(current.year) : DateTime(2000),
+      lastDate: current.year > 2100 ? DateTime(current.year + 1) : DateTime(2100),
     );
     if (d == null || !mounted) return;
     setState(() {
@@ -443,7 +444,7 @@ Future<void> deleteEventWithUndo(BuildContext context, Event e) async {
   final messenger = ScaffoldMessenger.of(context);
   await db.deleteEvent(e.id);
   messenger
-    ..hideCurrentSnackBar()
+    ..removeCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
         content: const Text('Event deleted'),

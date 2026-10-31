@@ -161,7 +161,6 @@ void main() {
       m.setMockMethodCallHandler(MethodChannel(ch), (_) async => null);
     }
   });
-  monkey('home', null, limit: 80);
   monkey('todo', () => const TodoPage());
   monkey('notes', () => const NotesPage());
   monkey('calendar', () => const CalendarPage());

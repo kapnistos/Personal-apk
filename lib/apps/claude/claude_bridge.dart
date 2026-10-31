@@ -36,7 +36,7 @@ class ClaudeBridge {
     if (text.isNotEmpty) await Clipboard.setData(ClipboardData(text: text));
     final opened = await open(text);
     messenger
-      ..hideCurrentSnackBar()
+      ..removeCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(
@@ -91,7 +91,7 @@ mixin ClaudeAnswerWatcher<T extends StatefulWidget> on State<T>, WidgetsBindingO
     _sentPrompt = null;
     WidgetsBinding.instance.removeObserver(this);
     ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
+      ..removeCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           duration: const Duration(seconds: 12),

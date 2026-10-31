@@ -292,7 +292,9 @@ class _CalendarPageState extends State<CalendarPage> {
 
   DateTime _defaultStart() {
     final now = DateTime.now();
-    final base = _selected == dateOnly(now) ? now : DateTime(_selected.year, _selected.month, _selected.day, 9);
+    // Another day starts at 9:00 sharp, not 9:30.
+    if (_selected != dateOnly(now)) return DateTime(_selected.year, _selected.month, _selected.day, 9);
+    final base = now;
     // Next half hour.
     final m = base.minute < 30 ? 30 : 60;
     return DateTime(base.year, base.month, base.day, base.hour).add(Duration(minutes: m));

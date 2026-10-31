@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hub/apps/calendar/event_editor.dart';
+import 'package:hub/apps/internships/internships_page.dart';
+import 'package:hub/apps/wallet/savings_page.dart';
 import 'package:hub/apps/spaces/work_hours.dart';
 import 'package:hub/apps/todo/todo_page.dart';
 import 'package:hub/apps/wallet/insights.dart';
@@ -128,5 +130,88 @@ void main() {
     expect(hoursBalanceWords(s.balance), '+3 h overtime');
     expect(hoursBalanceWords(-2.5), '2.5 h owed');
     expect(addDays(today, 0), today);
+  });
+
+  Widget opener(void Function(BuildContext) open) => Builder(
+    builder: (context) => Scaffold(
+      body: Center(
+        child: TextButton(onPressed: () => open(context), child: const Text('open')),
+      ),
+    ),
+  );
+
+  testWidgets('a savings goal whose deadline has passed opens the date picker', (t) async {
+    final past = DateTime(2025, 3, 1);
+    final goal = SavingsGoal(
+      id: 1,
+      name: 'Bike',
+      targetCents: 50000,
+      deadline: past,
+      color: 0xFF1F7A5A,
+      archived: false,
+      createdAt: DateTime(2024),
+    );
+    final db = await pumpPage(t, _phone, () => opener((c) => editGoal(c, goal: goal)), demo: false);
+    await t.tap(find.text('open'));
+    await settle(t);
+    await t.tap(find.textContaining('By 1 Mar 2025'));
+    await settle(t);
+    expect(t.takeException(), isNull);
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+    await done(t, db);
+  });
+
+  testWidgets('an application whose reminder has gone off opens the date picker', (t) async {
+    final now = DateTime.now();
+    final app = Application(
+      id: 1,
+      company: 'Acme',
+      role: 'Intern',
+      location: '',
+      url: '',
+      status: 'applied',
+      deadline: DateTime(now.year - 3, 1, 5),
+      remindAt: addDays(now, -10),
+      appliedAt: null,
+      notes: '',
+      favourite: false,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final db = await pumpPage(t, _phone, () => opener((c) => editApplication(c, application: app)), demo: false);
+    await t.tap(find.text('open'));
+    await settle(t);
+    for (final chip in [find.textContaining('Deadline '), find.byIcon(Icons.notifications_none_rounded)]) {
+      await t.ensureVisible(chip.first);
+      await t.tap(chip.first);
+      await settle(t);
+      expect(t.takeException(), isNull);
+      expect(find.byType(DatePickerDialog), findsOneWidget);
+      await t.tap(find.text('Cancel'));
+      await settle(t);
+    }
+    await done(t, db);
+  });
+
+  testWidgets('swipe a task right to finish it, left to delete it, and undo brings it back', (t) async {
+    final db = await pumpPage(t, (const Size(360, 740), false, 1.3), () => const TodoPage(), demo: false);
+    await t.runAsync(() => db.addTodo('Swipe me'));
+    await settle(t);
+    await t.drag(find.text('Swipe me'), const Offset(300, 0));
+    await settle(t);
+    expect((await t.runAsync(() => db.select(db.todos).getSingle()))!.done, isTrue);
+    await t.runAsync(() => db.addTodo('Delete me'));
+    await settle(t);
+    await t.drag(find.text('Delete me'), const Offset(-300, 0));
+    await settle(t);
+    expect((await t.runAsync(() => db.select(db.todos).get()))!.where((x) => x.title == 'Delete me'), isEmpty);
+    // The Undo on screen is the delete's own straight away, not the "Done" one still fading out.
+    expect(find.text('Task deleted'), findsOneWidget);
+    expect(find.text('Done: Swipe me'), findsNothing);
+    await t.pump(const Duration(milliseconds: 600));
+    await t.tap(find.text('Undo'));
+    await settle(t);
+    expect((await t.runAsync(() => db.select(db.todos).get()))!.where((x) => x.title == 'Delete me').length, 1);
+    await done(t, db);
   });
 }

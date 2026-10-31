@@ -43,6 +43,7 @@ Future<AppDatabase> pumpPage(
   (Size, bool, double) c,
   Widget Function()? page, {
   bool demo = true,
+  Future<void> Function(AppSettings s)? before,
 }) async {
   t.view.physicalSize = c.$1;
   t.view.devicePixelRatio = 1;
@@ -55,6 +56,7 @@ Future<AppDatabase> pumpPage(
     await settings.load();
     if (demo) await seed(db, settings);
     await settings.setThemeMode(c.$2 ? ThemeMode.dark : ThemeMode.light);
+    await before?.call(settings);
   });
   await t.pumpWidget(
     page == null

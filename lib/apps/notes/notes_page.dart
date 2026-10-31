@@ -499,7 +499,7 @@ Future<void> showNoteActions(BuildContext context, Note note) async {
   } else if (action == 'delete') {
     await db.deleteNote(note.id);
     messenger
-      ?..hideCurrentSnackBar()
+      ?..removeCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: const Text('Note deleted'),
@@ -698,7 +698,7 @@ class _NoteEditorState extends State<NoteEditor> {
       );
       await _db.deleteNote(id);
       messenger
-        ..hideCurrentSnackBar()
+        ..removeCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
             content: const Text('Note deleted'),

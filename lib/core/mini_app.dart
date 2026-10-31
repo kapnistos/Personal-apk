@@ -28,7 +28,7 @@ class MiniApp {
   void open(BuildContext context) {
     if (!available) {
       ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
+        ..removeCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text('$title is coming in a later phase.')));
       return;
     }

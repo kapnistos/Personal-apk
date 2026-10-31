@@ -118,73 +118,77 @@ class SpacePage extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
+      // Six rows with large text are taller than a sheet on a small phone, so they scroll.
+      isScrollControlled: true,
       builder: (sheet) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Press(
-              child: ListTile(
-                leading: const Icon(Icons.flag_outlined),
-                title: Text('Add to ${words.dates.toLowerCase()}'),
-                subtitle: const Text('Exam, deadline, holiday: a whole-day date with a reminder'),
-                onTap: () {
-                  Navigator.pop(sheet);
-                  addImportantDate(context, space);
-                },
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Press(
+                child: ListTile(
+                  leading: const Icon(Icons.flag_outlined),
+                  title: Text('Add to ${words.dates.toLowerCase()}'),
+                  subtitle: const Text('Exam, deadline, holiday: a whole-day date with a reminder'),
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    addImportantDate(context, space);
+                  },
+                ),
               ),
-            ),
-            Press(
-              child: ListTile(
-                leading: const Icon(Icons.groups_outlined),
-                title: Text('Add to ${words.meetings.toLowerCase()}'),
-                subtitle: const Text('A meeting, lecture or shift with a time'),
-                onTap: () {
-                  Navigator.pop(sheet);
-                  addMeeting(context, space);
-                },
+              Press(
+                child: ListTile(
+                  leading: const Icon(Icons.groups_outlined),
+                  title: Text('Add to ${words.meetings.toLowerCase()}'),
+                  subtitle: const Text('A meeting, lecture or shift with a time'),
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    addMeeting(context, space);
+                  },
+                ),
               ),
-            ),
-            Press(
-              child: ListTile(
-                leading: const Icon(Icons.check_circle_outline_rounded),
-                title: Text('Add to ${words.plan.toLowerCase()}'),
-                onTap: () {
-                  Navigator.pop(sheet);
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => TodoPage(spaceId: space.id)));
-                },
+              Press(
+                child: ListTile(
+                  leading: const Icon(Icons.check_circle_outline_rounded),
+                  title: Text('Add to ${words.plan.toLowerCase()}'),
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => TodoPage(spaceId: space.id)));
+                  },
+                ),
               ),
-            ),
-            Press(
-              child: ListTile(
-                leading: const Icon(Icons.notes_rounded),
-                title: const Text('Save a note'),
-                onTap: () {
-                  Navigator.pop(sheet);
-                  editSpaceItem(context, space, kind: 'note');
-                },
+              Press(
+                child: ListTile(
+                  leading: const Icon(Icons.notes_rounded),
+                  title: const Text('Save a note'),
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    editSpaceItem(context, space, kind: 'note');
+                  },
+                ),
               ),
-            ),
-            Press(
-              child: ListTile(
-                leading: const Icon(Icons.link_rounded),
-                title: const Text('Save a link'),
-                onTap: () {
-                  Navigator.pop(sheet);
-                  editSpaceItem(context, space, kind: 'link');
-                },
+              Press(
+                child: ListTile(
+                  leading: const Icon(Icons.link_rounded),
+                  title: const Text('Save a link'),
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    editSpaceItem(context, space, kind: 'link');
+                  },
+                ),
               ),
-            ),
-            Press(
-              child: ListTile(
-                leading: const Icon(Icons.attach_file_rounded),
-                title: const Text('Save a file'),
-                onTap: () {
-                  Navigator.pop(sheet);
-                  pickSpaceFile(context, space);
-                },
+              Press(
+                child: ListTile(
+                  leading: const Icon(Icons.attach_file_rounded),
+                  title: const Text('Save a file'),
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    pickSpaceFile(context, space);
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

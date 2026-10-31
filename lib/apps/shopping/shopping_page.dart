@@ -97,11 +97,11 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
       // Claude Code could not be reached: hand the list to the Claude app.
       if (mounted) await askClaude(prompt);
       messenger
-        ..hideCurrentSnackBar()
+        ..removeCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text('${e.note}. The list is on your clipboard.')));
     } on AiException catch (e) {
       messenger
-        ..hideCurrentSnackBar()
+        ..removeCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _checking = false);
@@ -149,7 +149,7 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
     }
     if (mounted) setState(() => _byShop = true);
     messenger
-      ..hideCurrentSnackBar()
+      ..removeCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(

@@ -284,7 +284,7 @@ Future<void> toggleTodoDone(BuildContext context, Todo todo) async {
   await db.setTodoDone(todo.id, done);
   if (!done || messenger == null) return;
   messenger
-    ..hideCurrentSnackBar()
+    ..removeCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
         content: Text(
@@ -373,7 +373,7 @@ Future<void> showTodoActions(BuildContext context, Todo todo) async {
       };
       await db.updateTodo(moveTodoTo(todo, day));
       messenger
-        ?..hideCurrentSnackBar()
+        ?..removeCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
             content: Text(day == null ? 'Date removed' : 'Moved to ${friendlyDay(day).toLowerCase()}'),
@@ -397,7 +397,7 @@ Future<void> showTodoActions(BuildContext context, Todo todo) async {
     case 'delete':
       await db.deleteTodo(todo.id);
       messenger
-        ?..hideCurrentSnackBar()
+        ?..removeCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
             content: const Text('Task deleted'),
@@ -866,7 +866,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       initialDate: _due ?? now,
       // An old due date must still be inside the picker's range, or it throws.
       firstDate: _due != null && _due!.isBefore(first) ? dateOnly(_due!) : first,
-      lastDate: DateTime(now.year + 5),
+      lastDate: _due != null && _due!.isAfter(DateTime(now.year + 5)) ? dateOnly(_due!) : DateTime(now.year + 5),
     );
     if (picked != null) setState(() => _due = picked);
   }
@@ -1028,7 +1028,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                     db.deleteTodo(widget.todo.id);
                     Navigator.of(context).pop();
                     messenger
-                      ..hideCurrentSnackBar()
+                      ..removeCurrentSnackBar()
                       ..showSnackBar(
                         SnackBar(
                           content: const Text('Task deleted'),

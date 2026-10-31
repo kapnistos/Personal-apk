@@ -11,6 +11,15 @@ DateTime addDays(DateTime d, int days) =>
 int daysBetween(DateTime a, DateTime b) =>
     DateTime.utc(b.year, b.month, b.day).difference(DateTime.utc(a.year, a.month, a.day)).inDays;
 
+/// [d] moved inside [first]..[last] (by date), so a date picker opened on an old or far-off date
+/// does not throw.
+DateTime clampDay(DateTime d, DateTime first, DateTime last) {
+  final day = dateOnly(d);
+  if (day.isBefore(dateOnly(first))) return dateOnly(first);
+  if (day.isAfter(dateOnly(last))) return dateOnly(last);
+  return day;
+}
+
 /// Adds calendar months, clamping to the last day (31 Jan + 1 month = 28/29 Feb).
 DateTime addMonths(DateTime d, int months) {
   final total = d.year * 12 + (d.month - 1) + months;
