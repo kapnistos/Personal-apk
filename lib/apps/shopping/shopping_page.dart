@@ -584,6 +584,8 @@ class _ItemTile extends StatelessWidget {
           subtitle: Text(
             [
               if (offer != null) offer.describe(context.settings.currency),
+              // The product it was matched to, so a wrong match is easy to spot.
+              if (offer != null && offer.product.isNotEmpty) offer.product,
               if (item.quantity.isNotEmpty) item.quantity,
               if (byShop && item.category.isNotEmpty && item.category != otherCategory) item.category,
               if (!byShop && item.store.isNotEmpty) item.store,
