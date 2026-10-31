@@ -25,6 +25,7 @@ import '../core/mini_app.dart';
 import '../core/settings.dart';
 import '../core/theme.dart';
 import '../core/widgets.dart';
+import 'customize.dart';
 import 'dashboard.dart';
 import 'me_page.dart';
 import 'search_page.dart';
@@ -164,6 +165,12 @@ class _HomePageState extends State<HomePage> {
           ),
           _RoundButton(icon: Icons.restart_alt_rounded, tooltip: 'Back to the starting layout', onTap: _confirmReset),
           const SizedBox(width: 8),
+          _RoundButton(
+            icon: Icons.view_agenda_outlined,
+            tooltip: 'Top of Home',
+            onTap: () => showHomeTopSheet(context),
+          ),
+          const SizedBox(width: 8),
           _RoundButton(icon: Icons.apps_rounded, tooltip: 'Choose apps', onTap: () => pickVisibleApps(context)),
         ],
       );
@@ -195,22 +202,29 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  /// Weather, the three numbers for today and the apps: the fixed top of Home. Holding it starts arranging.
+  /// Weather, the three numbers for today and the apps: the fixed top of Home, each part one the owner can switch
+  /// off (Me → Home). Holding it starts arranging.
   Widget _hero(BuildContext context) => GestureDetector(
     onLongPress: _startEditing,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 18),
-        const WeatherHero(),
-        _TodayStrip(
-          onCalendar: () => widget.onOpenTab(ShellTab.calendar),
-          onTasks: () => widget.onOpenTab(ShellTab.todo),
-          onWallet: () => widget.onOpenTab(ShellTab.wallet),
-        ),
-        const SizedBox(height: 6),
-        const AppGrid(),
-      ],
+    child: SettingSelector<(bool, bool, bool)>(
+      select: (s) => (homeShows(s, 'weather'), homeShows(s, 'today'), homeShows(s, 'apps')),
+      builder: (context, v) {
+        final (weather, today, apps) = v;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (weather || today) const SizedBox(height: 18),
+            if (weather) const WeatherHero(),
+            if (today)
+              _TodayStrip(
+                onCalendar: () => widget.onOpenTab(ShellTab.calendar),
+                onTasks: () => widget.onOpenTab(ShellTab.todo),
+                onWallet: () => widget.onOpenTab(ShellTab.wallet),
+              ),
+            if (apps) ...[const SizedBox(height: 6), const AppGrid()],
+          ],
+        );
+      },
     ),
   );
 
@@ -693,8 +707,14 @@ const _appGroups = [
 ];
 
 /// Splits the apps into Home's groups, keeping each group's own order. Empty groups are left out.
-List<(String, List<MiniApp>)> groupApps(List<MiniApp> apps) {
-  int rank(List<String> ids, MiniApp a) => ids.indexOf(a.id.startsWith('space:') ? 'space:' : a.id);
+///
+/// With [keepOrder], apps keep the order they come in within their group: the owner put them in order.
+List<(String, List<MiniApp>)> groupApps(List<MiniApp> apps, {bool keepOrder = false}) {
+  int rank(List<String> ids, MiniApp a) {
+    final i = ids.indexOf(a.id.startsWith('space:') ? 'space:' : a.id);
+    return keepOrder && i >= 0 ? 0 : i;
+  }
+
   final out = <(String, List<MiniApp>)>[];
   final placed = <MiniApp>{};
   for (final (title, ids) in _appGroups) {
@@ -717,7 +737,10 @@ class AppGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final db = context.db;
-    final hidden = hiddenApps(context.settings);
+    final s = context.settings;
+    final hidden = hiddenApps(s);
+    final grouped = homeGroupsApps(s);
+    final custom = s.raw(_appOrderKey) != null;
     return LayoutBuilder(
       builder: (context, c) {
         final perRow = c.maxWidth >= 640 ? (c.maxWidth / 104).floor().clamp(5, 9) : 5;
@@ -731,14 +754,17 @@ class AppGrid extends StatelessWidget {
               final now = DateTime.now();
               final due = (tSnap.data ?? const <Todo>[]).where((t) => isTodayTask(t, now: now)).length;
               final apps = [
-                for (final a in [...miniApps, ...customSpaceApps(sSnap.data ?? const [])])
+                for (final a in orderedApps(s, [...miniApps, ...customSpaceApps(sSnap.data ?? const [])]))
                   if (!hidden.contains(a.id)) a,
               ];
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final (title, group) in groupApps(apps)) ...[
-                    Padding(padding: const EdgeInsets.fromLTRB(4, 18, 4, 4), child: SectionLabel(title)),
+                  for (final (title, group) in grouped ? groupApps(apps, keepOrder: custom) : [('', apps)]) ...[
+                    if (title.isEmpty)
+                      const SizedBox(height: 18)
+                    else
+                      Padding(padding: const EdgeInsets.fromLTRB(4, 18, 4, 4), child: SectionLabel(title)),
                     // No gap between rows: the space between circles belongs to the circles, so every tap lands.
                     Wrap(
                       alignment: WrapAlignment.center,
@@ -1507,49 +1533,112 @@ const _hiddenAppsKey = 'home.hiddenApps';
 /// Apps the user took off the Apps widget.
 Set<String> hiddenApps(AppSettings s) => {...?s.raw(_hiddenAppsKey)?.split(',').where((x) => x.isNotEmpty)};
 
-/// Tick the apps to show on Home; your own spaces are listed too.
+/// The owner's order for Home's apps, as app ids.
+const _appOrderKey = 'home.appOrder';
+
+/// [apps] in the owner's order. Apps the order does not know yet (a new space) follow the rest, in their own order.
+List<MiniApp> orderedApps(AppSettings s, List<MiniApp> apps) {
+  final order = s.raw(_appOrderKey)?.split(',') ?? const <String>[];
+  if (order.isEmpty) return apps;
+  int rank(MiniApp a) {
+    final i = order.indexOf(a.id);
+    return i < 0 ? order.length : i;
+  }
+
+  final ranked = [for (final (i, a) in apps.indexed) (rank(a), i, a)]
+    ..sort((x, y) => x.$1 != y.$1 ? x.$1.compareTo(y.$1) : x.$2.compareTo(y.$2));
+  return [for (final r in ranked) r.$3];
+}
+
+/// Tick the apps to show on Home and drag them into order; your own spaces are listed too.
 Future<void> pickVisibleApps(BuildContext context) async {
   final settings = context.settings;
   final spaces = await context.db.watchSpaces().first;
   if (!context.mounted) return;
-  final apps = [...miniApps, ...customSpaceApps(spaces)];
+  final apps = orderedApps(settings, [...miniApps, ...customSpaceApps(spaces)]);
   final hidden = hiddenApps(settings);
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setSheet) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.75,
-        builder: (ctx, scroll) => ListView(
-          controller: scroll,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Text('Apps on Home', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+      builder: (ctx, setSheet) {
+        final p = Palette.of(ctx);
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.75,
+          builder: (ctx, scroll) => ReorderableListView.builder(
+            scrollController: scroll,
+            buildDefaultDragHandles: false,
+            header: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Apps on Home',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.4),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    homeGroupsApps(settings)
+                        ? 'Tick the ones to show and drag to reorder. Each app stays in its group.'
+                        : 'Tick the ones to show and drag to reorder.',
+                    style: TextStyle(color: p.muted, height: 1.35),
+                  ),
+                ],
+              ),
             ),
-            for (final a in apps)
-              CheckboxListTile(
-                secondary: AppGlyph(icon: a.icon, color: a.color, size: 36),
-                title: Text(a.title),
-                value: !hidden.contains(a.id),
-                onChanged: (on) {
-                  setSheet(() => on == true ? hidden.remove(a.id) : hidden.add(a.id));
-                  settings.setRaw(_hiddenAppsKey, hidden.join(','));
+            footer: Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: ListTile(
+                leading: const Icon(Icons.add_rounded),
+                title: const Text('Make a new space'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  editSpace(context);
                 },
               ),
-            ListTile(
-              leading: const Icon(Icons.add_rounded),
-              title: const Text('Make a new space'),
-              onTap: () {
-                Navigator.pop(ctx);
-                editSpace(context);
-              },
             ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
+            itemCount: apps.length,
+            onReorderItem: (from, to) {
+              HapticFeedback.selectionClick();
+              setSheet(() {
+                apps.insert(to, apps.removeAt(from));
+              });
+              settings.setRaw(_appOrderKey, [for (final a in apps) a.id].join(','));
+            },
+            itemBuilder: (ctx, i) {
+              final a = apps[i];
+              return Material(
+                key: ValueKey(a.id),
+                color: Colors.transparent,
+                child: CheckboxListTile(
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: Row(
+                    children: [
+                      AppGlyph(icon: a.icon, color: a.color, size: 36),
+                      const SizedBox(width: 14),
+                      Expanded(child: Text(a.title)),
+                    ],
+                  ),
+                  value: !hidden.contains(a.id),
+                  onChanged: (on) {
+                    setSheet(() => on == true ? hidden.remove(a.id) : hidden.add(a.id));
+                    settings.setRaw(_hiddenAppsKey, hidden.join(','));
+                  },
+                  secondary: ReorderableDragStartListener(
+                    index: i,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Icon(Icons.drag_handle_rounded, color: p.muted, semanticLabel: 'Drag to reorder'),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
     ),
   );
 }

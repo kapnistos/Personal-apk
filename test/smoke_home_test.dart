@@ -98,12 +98,14 @@ void main() {
             await settle();
             final pink = accentById('pink').forBrightness(mode == ThemeMode.dark ? Brightness.dark : Brightness.light);
             expect(Palette.of(tester.element(find.text('Appearance'))).accent, pink);
-            await show(find.text('Compact'), MePage);
-            await tap(find.text('Compact'));
+            await show(find.text('Dark grey'), MePage);
             await tap(find.text('Dark grey'));
             await settle();
-            await show(find.text('Greeting on Home'), MePage);
-            await tap(find.text('Greeting on Home'));
+            await show(find.text('Compact'), MePage);
+            await tap(find.text('Compact'));
+            await settle();
+            await show(find.text('Greeting'), MePage);
+            await tap(find.text('Greeting'));
             await settle();
             await tester.pageBack();
             await settle(800);

@@ -9,7 +9,7 @@ import '../core/sync/sync_service.dart';
 import '../core/theme.dart';
 import '../core/widgets.dart';
 import 'automations_page.dart';
-import 'dashboard.dart';
+import 'customize.dart';
 
 class MePage extends StatelessWidget {
   const MePage({super.key});
@@ -94,29 +94,41 @@ class MePage extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 18),
-                      _SubLabel('Home spacing'),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          for (final e in const {'comfortable': 'Comfortable', 'compact': 'Compact'}.entries)
-                            ChoiceChip(
-                              label: Text(e.value),
-                              selected: (s.raw(homeDensityKey) ?? 'comfortable') == e.key,
-                              onSelected: (_) => s.setRaw(homeDensityKey, e.key),
-                            ),
-                        ],
+                      _SubLabel('Text size'),
+                      SizedBox(
+                        width: double.infinity,
+                        child: PillToggle<String>(
+                          options: [for (final e in textSizes.entries) (e.key, e.value.$1)],
+                          value: textSizes.containsKey(s.raw(textSizeKey)) ? s.raw(textSizeKey)! : 'system',
+                          onChanged: (v) => s.setRaw(textSizeKey, v),
+                        ),
                       ),
                       const SizedBox(height: 8),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Greeting on Home'),
-                        subtitle: const Text('The date and a hello above your widgets'),
-                        value: s.raw(homeGreetingKey) != 'off',
-                        onChanged: (v) => s.setRaw(homeGreetingKey, v ? 'on' : 'off'),
-                      ),
+                      Text('On top of your phone\'s own font size.', style: TextStyle(color: p.muted, fontSize: 13.5)),
                     ],
                   ),
                 ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const ContentWidth(
+              child: GroupSection(title: 'Home', child: HomeTopOptions()),
+            ),
+            const SizedBox(height: 16),
+            ContentWidth(
+              child: GroupSection(
+                title: 'Navigation',
+                children: [
+                  Press(
+                    child: ListTile(
+                      leading: const RowIcon(Icons.space_dashboard_outlined),
+                      title: const Text('Bottom tabs'),
+                      subtitle: Text(tabsSummary(s)),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => showTabsSheet(context),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 16),

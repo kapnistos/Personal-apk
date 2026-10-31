@@ -122,12 +122,40 @@ const accentChoices = [
   AccentChoice('teal', 'Teal', Color(0xFF2EC4C4), Color(0xFF0B7C83)),
 ];
 
-/// Dark backgrounds: pure black or a softer dark grey.
-const darkBackgrounds = {'black': 'Black', 'grey': 'Dark grey'};
+/// Dark backgrounds: pure black (lights no pixels on an OLED screen) or a softer dark grey.
+const darkBackgrounds = {'black': 'True black', 'grey': 'Dark grey'};
+
+/// Text sizes on top of the phone's own font size setting.
+const textSizes = {'system': ('Standard', 1.0), 'large': ('Larger', 1.12), 'larger': ('Largest', 1.25)};
 
 /// Appearance keys kept in raw settings.
 const accentKey = 'look.accent';
 const darkBackgroundKey = 'look.background';
+const textSizeKey = 'look.textSize';
+
+/// How much bigger than the phone's own setting text is drawn, for the saved [textSizeKey] value.
+double textSizeFactor(String? id) => textSizes[id]?.$2 ?? 1.0;
+
+/// The phone's text scaler, made [factor] times larger. Android's own non-linear scaling (big text grows less)
+/// stays as it is underneath.
+class BoostedTextScaler extends TextScaler {
+  const BoostedTextScaler(this.base, this.factor);
+  final TextScaler base;
+  final double factor;
+
+  @override
+  double scale(double fontSize) => base.scale(fontSize) * factor;
+
+  @override
+  // ignore: deprecated_member_use
+  double get textScaleFactor => base.textScaleFactor * factor;
+
+  @override
+  bool operator ==(Object other) => other is BoostedTextScaler && other.base == base && other.factor == factor;
+
+  @override
+  int get hashCode => Object.hash(base, factor);
+}
 
 AccentChoice accentById(String? id) => accentChoices.firstWhere((a) => a.id == id, orElse: () => accentChoices.first);
 

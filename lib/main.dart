@@ -119,6 +119,7 @@ class _HubAppState extends State<HubApp> {
   late ThemeMode _mode = widget.settings.themeMode;
   late String _accent = widget.settings.raw(accentKey) ?? 'blue';
   late String _background = widget.settings.raw(darkBackgroundKey) ?? 'black';
+  late double _textSize = textSizeFactor(widget.settings.raw(textSizeKey));
 
   // buildTheme caches by its arguments, so these stay the same object until a colour changes.
   ThemeData get _light => buildTheme(Brightness.light, accent: _accent);
@@ -141,11 +142,13 @@ class _HubAppState extends State<HubApp> {
     final s = widget.settings;
     final accent = s.raw(accentKey) ?? 'blue';
     final background = s.raw(darkBackgroundKey) ?? 'black';
-    if (s.themeMode == _mode && accent == _accent && background == _background) return;
+    final textSize = textSizeFactor(s.raw(textSizeKey));
+    if (s.themeMode == _mode && accent == _accent && background == _background && textSize == _textSize) return;
     setState(() {
       _mode = s.themeMode;
       _accent = accent;
       _background = background;
+      _textSize = textSize;
     });
   }
 
@@ -164,6 +167,15 @@ class _HubAppState extends State<HubApp> {
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
         supportedLocales: const [Locale('en', 'GB'), Locale('en', 'US'), Locale('nl'), Locale('el')],
         locale: const Locale('en', 'GB'),
+        // Me → Appearance → Text size draws all text a step larger than the phone's own setting.
+        builder: (context, child) {
+          if (_textSize == 1.0) return child!;
+          final mq = MediaQuery.of(context);
+          return MediaQuery(
+            data: mq.copyWith(textScaler: BoostedTextScaler(mq.textScaler, _textSize)),
+            child: child!,
+          );
+        },
         home: const Shell(),
       ),
     );

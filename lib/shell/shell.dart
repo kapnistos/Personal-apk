@@ -1,23 +1,117 @@
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../apps/ai/ai_page.dart';
 import '../apps/calendar/calendar_page.dart';
+import '../apps/notes/notes_page.dart';
 import '../apps/todo/todo_page.dart';
 import '../apps/wallet/wallet_page.dart';
+import '../core/settings.dart';
 import '../core/theme.dart';
+import 'customize.dart';
 import 'home_page.dart';
 import 'search_page.dart';
 
-/// The bottom tabs, by position. Home's shortcuts open them through [HomePage.onOpenTab].
+/// The bottom tabs, by a fixed id that does not change when the owner reorders them (Me → Bottom tabs).
+/// Home's shortcuts open them through [HomePage.onOpenTab]; a tab that is not on the bar opens as a page.
 abstract final class ShellTab {
   static const home = 0;
   static const calendar = 1;
   static const wallet = 2;
   static const todo = 3;
   static const ai = 4;
+  static const notes = 5;
+}
+
+/// One tab the bar can hold.
+class TabSpec {
+  const TabSpec(this.tab, this.id, this.icon, this.selectedIcon, this.label, this.page);
+  final int tab;
+
+  /// The name kept in settings.
+  final String id;
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final Widget Function() page;
+}
+
+/// Every tab, Home first, then the rest in their starting order.
+final tabSpecs = <TabSpec>[
+  TabSpec(ShellTab.home, 'home', Icons.grid_view_outlined, Icons.grid_view_rounded, 'Home', () => const SizedBox()),
+  TabSpec(
+    ShellTab.calendar,
+    'calendar',
+    Icons.calendar_today_outlined,
+    Icons.calendar_today_rounded,
+    'Calendar',
+    () => const CalendarPage(),
+  ),
+  TabSpec(
+    ShellTab.wallet,
+    'wallet',
+    Icons.account_balance_wallet_outlined,
+    Icons.account_balance_wallet_rounded,
+    'Wallet',
+    () => const WalletPage(),
+  ),
+  TabSpec(
+    ShellTab.todo,
+    'todo',
+    Icons.check_circle_outline_rounded,
+    Icons.check_circle_rounded,
+    'To-do',
+    () => const TodoPage(),
+  ),
+  TabSpec(ShellTab.ai, 'ai', Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'AI', () => const AiPage()),
+  TabSpec(
+    ShellTab.notes,
+    'notes',
+    Icons.sticky_note_2_outlined,
+    Icons.sticky_note_2_rounded,
+    'Notes',
+    () => const NotesPage(),
+  ),
+];
+
+TabSpec tabSpec(int tab) => tabSpecs.firstWhere((t) => t.tab == tab);
+
+/// Which tabs follow Home on the bar, in order, and which one opens on start.
+const tabsKey = 'shell.tabs';
+const startTabKey = 'shell.startTab';
+
+/// The bar holds Home and at most this many more, so labels stay readable on a phone.
+const maxExtraTabs = 4;
+const defaultTabs = [ShellTab.calendar, ShellTab.wallet, ShellTab.todo, ShellTab.ai];
+
+/// The tabs after Home, in the owner's order. Unknown names are skipped, and an empty or broken value falls
+/// back to the starting four, so the bar always has at least two tabs.
+List<int> barTabs(AppSettings s) {
+  final raw = s.raw(tabsKey);
+  if (raw == null) return defaultTabs;
+  final byId = {for (final t in tabSpecs.skip(1)) t.id: t.tab};
+  final out = <int>[];
+  for (final id in raw.split(',')) {
+    final t = byId[id];
+    if (t != null && !out.contains(t) && out.length < maxExtraTabs) out.add(t);
+  }
+  return out.isEmpty ? defaultTabs : out;
+}
+
+Future<void> setBarTabs(AppSettings s, List<int> tabs) =>
+    s.setRaw(tabsKey, [for (final t in tabs) tabSpec(t).id].join(','));
+
+/// The tab Hub opens on, if it is still on the bar; Home otherwise.
+int startTab(AppSettings s) {
+  final id = s.raw(startTabKey);
+  final tabs = barTabs(s);
+  for (final t in tabs) {
+    if (tabSpec(t).id == id) return t;
+  }
+  return ShellTab.home;
 }
 
 /// Top-level navigation: bottom bar on phones, side rail on wide windows.
@@ -29,50 +123,101 @@ class Shell extends StatefulWidget {
 }
 
 class _ShellState extends State<Shell> {
-  int _index = ShellTab.home;
+  /// The open tab, by [ShellTab] id.
+  int _tab = ShellTab.home;
+  List<int> _order = [ShellTab.home, ...defaultTabs];
+  AppSettings? _settings;
 
   // Tabs are built the first time they are opened, then kept alive, so start-up only pays for Home.
   final _visited = <int>{ShellTab.home};
 
-  static const _destinations = [
-    (Icons.grid_view_outlined, Icons.grid_view_rounded, 'Home'),
-    (Icons.calendar_today_outlined, Icons.calendar_today_rounded, 'Calendar'),
-    (Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Wallet'),
-    (Icons.check_circle_outline_rounded, Icons.check_circle_rounded, 'To-do'),
-    (Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'AI'),
-  ];
+  // Made once, so a redraw of the shell (a tab added, say) does not rebuild the pages under it.
+  late final Map<int, Widget> _pages = {
+    for (final t in tabSpecs)
+      t.tab: KeyedSubtree(
+        key: ValueKey(t.id),
+        child: switch (t.tab) {
+          ShellTab.home => HomePage(onOpenTab: openTab),
+          // Pages that end with fixed padding stop above the bar instead of running on under it.
+          ShellTab.wallet || ShellTab.notes => _AboveBar(child: t.page()),
+          _ => t.page(),
+        },
+      ),
+  };
 
-  void select(int i) {
-    if (i < 0 || i >= _destinations.length) return;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Listened to directly, not through Hub, so the shell only redraws when the tabs change.
+    final s = context.getInheritedWidgetOfExactType<Hub>()?.settings;
+    if (s == null || s == _settings) return;
+    _settings?.removeListener(_settingsChanged);
+    _settings = s..addListener(_settingsChanged);
+    _order = [ShellTab.home, ...barTabs(s)];
+    _tab = startTab(s);
+    _visited.add(_tab);
+  }
+
+  @override
+  void dispose() {
+    _settings?.removeListener(_settingsChanged);
+    super.dispose();
+  }
+
+  void _settingsChanged() {
+    final next = [ShellTab.home, ...barTabs(_settings!)];
+    if (listEquals(next, _order)) return;
     setState(() {
-      _index = i;
-      _visited.add(i);
+      _order = next;
+      if (!_order.contains(_tab)) _tab = ShellTab.home;
     });
+  }
+
+  /// Opens a tab by position on the bar (taps, Ctrl+1 to Ctrl+N).
+  void select(int position) {
+    if (position < 0 || position >= _order.length) return;
+    _show(_order[position]);
+  }
+
+  void _show(int tab) {
+    setState(() {
+      _tab = tab;
+      _visited.add(tab);
+    });
+  }
+
+  /// Opens a tab by [ShellTab] id. One the owner took off the bar opens as an ordinary page instead.
+  void openTab(int tab) {
+    if (_order.contains(tab)) {
+      _show(tab);
+    } else {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => tabSpec(tab).page()));
+    }
+  }
+
+  void _customize() {
+    HapticFeedback.mediumImpact();
+    showTabsSheet(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      HomePage(onOpenTab: select),
-      const CalendarPage(),
-      // Wallet's lists end with fixed padding, so it stops above the bar instead of running on under it.
-      const _AboveBar(child: WalletPage()),
-      const TodoPage(),
-      const AiPage(),
-    ];
     final body = CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
             Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchPage())),
-        // Ctrl+1 to Ctrl+5 jump to the tabs in order.
-        for (var i = 0; i < pages.length; i++)
+        // Ctrl+1, Ctrl+2 and on jump to the tabs in their order on the bar.
+        for (var i = 0; i < _order.length; i++)
           SingleActivator(LogicalKeyboardKey(LogicalKeyboardKey.digit1.keyId + i), control: true): () => select(i),
       },
       child: Focus(
         autofocus: true,
         child: IndexedStack(
-          index: _index,
-          children: [for (var i = 0; i < pages.length; i++) _visited.contains(i) ? pages[i] : const SizedBox.shrink()],
+          index: _order.indexOf(_tab),
+          children: [
+            for (final t in _order)
+              _visited.contains(t) ? _pages[t]! : KeyedSubtree(key: ValueKey('empty-$t'), child: const SizedBox()),
+          ],
         ),
       ),
     );
@@ -80,9 +225,9 @@ class _ShellState extends State<Shell> {
 
     // Back on any other tab goes to Home first; only back on Home leaves the app.
     return PopScope(
-      canPop: _index == ShellTab.home,
+      canPop: _tab == ShellTab.home,
       onPopInvokedWithResult: (popped, _) {
-        if (!popped && _index != ShellTab.home) select(ShellTab.home);
+        if (!popped && _tab != ShellTab.home) _show(ShellTab.home);
       },
       child: wide ? _rail(context, body) : _bar(body),
     );
@@ -91,19 +236,22 @@ class _ShellState extends State<Shell> {
   Widget _rail(BuildContext context, Widget body) => Scaffold(
     body: Row(
       children: [
-        NavigationRail(
-          selectedIndex: _index,
-          onDestinationSelected: select,
-          labelType: NavigationRailLabelType.all,
-          minWidth: 76,
-          leading: Padding(
-            padding: const EdgeInsets.only(top: 8, bottom: 20),
-            child: Image.asset('assets/icon/icon.png', width: 40, height: 40),
+        GestureDetector(
+          onLongPress: _customize,
+          child: NavigationRail(
+            selectedIndex: _order.indexOf(_tab),
+            onDestinationSelected: select,
+            labelType: NavigationRailLabelType.all,
+            minWidth: 76,
+            leading: Padding(
+              padding: const EdgeInsets.only(top: 8, bottom: 20),
+              child: Image.asset('assets/icon/icon.png', width: 40, height: 40),
+            ),
+            destinations: [
+              for (final t in _order.map(tabSpec))
+                NavigationRailDestination(icon: Icon(t.icon), selectedIcon: Icon(t.selectedIcon), label: Text(t.label)),
+            ],
           ),
-          destinations: [
-            for (final (icon, selected, label) in _destinations)
-              NavigationRailDestination(icon: Icon(icon), selectedIcon: Icon(selected), label: Text(label)),
-          ],
         ),
         VerticalDivider(width: 1, color: Palette.of(context).line),
         Expanded(child: body),
@@ -115,16 +263,26 @@ class _ShellState extends State<Shell> {
     // Pages run on under the bar; it blurs what passes beneath and fades it out above its top edge.
     extendBody: true,
     body: body,
-    bottomNavigationBar: _FrostedBar(
-      child: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: select,
-        backgroundColor: Colors.transparent,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: [
-          for (final (icon, selected, label) in _destinations)
-            NavigationDestination(icon: Icon(icon), selectedIcon: Icon(selected), label: label),
-        ],
+    // Holding the bar opens the tab picker.
+    bottomNavigationBar: GestureDetector(
+      onLongPress: _customize,
+      child: _FrostedBar(
+        child: NavigationBar(
+          selectedIndex: _order.indexOf(_tab),
+          onDestinationSelected: select,
+          backgroundColor: Colors.transparent,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          destinations: [
+            for (final t in _order.map(tabSpec))
+              NavigationDestination(
+                // No tooltip: labels always show, and holding the bar opens the tab picker instead.
+                tooltip: '',
+                icon: Icon(t.icon),
+                selectedIcon: Icon(t.selectedIcon),
+                label: t.label,
+              ),
+          ],
+        ),
       ),
     ),
   );
