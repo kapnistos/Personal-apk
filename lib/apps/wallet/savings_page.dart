@@ -51,7 +51,8 @@ class SavingsTab extends StatelessWidget {
           final active = goals.where((g) => !g.archived).toList();
           final archived = goals.where((g) => g.archived).toList();
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+            // The bottom inset lets the list scroll on under the bottom bar when Wallet is a tab.
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 96 + MediaQuery.paddingOf(context).bottom),
             children: [
               ContentWidth(child: NetWorthCard(currency: currency)),
               const SizedBox(height: 12),

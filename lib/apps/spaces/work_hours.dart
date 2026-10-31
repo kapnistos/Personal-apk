@@ -237,3 +237,22 @@ String signedHours(double h) {
   if (h.abs() < 0.005) return '0 h';
   return '${h > 0 ? '+' : '−'}${formatHours(h.abs())} h';
 }
+
+/// "+3.5 h overtime", "6 h owed" or "even": the balance in words.
+String hoursBalanceWords(double h) => h.abs() < 0.005
+    ? 'even'
+    : h > 0
+    ? '${signedHours(h)} overtime'
+    : '${formatHours(-h)} h owed';
+
+/// The running month's hours for [days] (worked and planned) against [schedule], as the Job page shows them.
+HoursSummary monthHours(Iterable<WorkDay> days, WorkSchedule schedule, DateTime now) {
+  final today = dateOnly(now);
+  return HoursSummary.of(
+    from: DateTime(today.year, today.month),
+    to: DateTime(today.year, today.month + 1),
+    days: {for (final d in days) d.day: d},
+    schedule: schedule,
+    today: today,
+  );
+}

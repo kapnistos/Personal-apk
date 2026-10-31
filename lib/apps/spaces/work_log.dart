@@ -213,11 +213,7 @@ class _WorkLogCardState extends State<WorkLogCard> {
   }
 }
 
-String _balanceWords(double h) => h.abs() < 0.005
-    ? 'even'
-    : h > 0
-    ? '${signedHours(h)} overtime'
-    : '${formatHours(-h)} h owed';
+String _balanceWords(double h) => hoursBalanceWords(h);
 
 /// One square of the month: the date, its status colour and, quietly, its hours.
 class _DayCell extends StatelessWidget {

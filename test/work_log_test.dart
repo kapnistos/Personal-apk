@@ -67,7 +67,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('9 h'));
     await tester.pump();
-    expect(find.text('1 h more than a normal day'), findsOneWidget);
+    // Weekends have no contract hours, so there all 9 count as overtime.
+    final weekend = today.weekday >= DateTime.saturday;
+    expect(find.text(weekend ? 'All overtime: not a workday' : '1 h more than a normal day'), findsOneWidget);
     await tester.tap(find.text('Save'));
     await settle(tester);
     final days = await tester.runAsync(() => db.watchWorkDays(today, addDays(today, 1)).first);

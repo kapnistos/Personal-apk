@@ -513,6 +513,9 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
                     );
                   },
                 ),
+              // Room for the system gesture bar, or the bottom bar when Wallet is a tab: the list scrolls on
+              // under the glass and its last day still comes clear of it.
+              SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).bottom)),
             ],
           ),
         );

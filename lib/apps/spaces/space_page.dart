@@ -88,7 +88,9 @@ class SpacePage extends StatelessWidget {
             child: const Icon(Icons.add_rounded),
           ),
           body: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+            // Room for the floating button (56 + its 16 margin) and the gesture bar, so the last rows, such
+            // as the Worked / Off / Holiday / Sick counts, can scroll clear of it.
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 120 + MediaQuery.paddingOf(context).bottom),
             children: [
               // The work log is what a job page is mostly for, so it comes first there.
               if (space.icon == 'work') ...[ContentWidth(child: WorkLogCard(color: color)), const SizedBox(height: 12)],
