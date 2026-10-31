@@ -30,6 +30,12 @@ void main() {
     testWidgets('every Home widget draws and opens ${configName(c)}', (t) async {
       final db = await pumpPage(t, c, null, before: (s) => s.setRaw('home.layout', layout));
       await scrollThrough(t);
+      // Back at the bottom of Home, where the widgets are, whatever the top of Home takes up.
+      final home = t.state<ScrollableState>(
+        find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down).first,
+      );
+      home.position.jumpTo(home.position.maxScrollExtent);
+      await t.pump();
       expect(find.byType(DashFrame), findsWidgets);
       await done(t, db);
     });

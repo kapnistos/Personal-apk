@@ -45,6 +45,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  static const _panelFog = 22.0;
+
   final _dash = GlobalKey<DashboardState>();
   final _ask = TextEditingController();
   bool _editing = false;
@@ -89,24 +91,7 @@ class _HomePageState extends State<HomePage> {
     final p = Palette.of(context);
     return Row(
       children: [
-        Semantics(
-          button: true,
-          label: 'Me and settings',
-          child: GestureDetector(
-            // Your profile holds every setting.
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MePage())),
-            child: Pressable(
-              child: CircleAvatar(
-                radius: 24,
-                backgroundColor: p.accent,
-                child: Text(
-                  name.isEmpty ? '?' : name.characters.first.toUpperCase(),
-                  style: TextStyle(color: p.onAccent, fontWeight: FontWeight.w700, fontSize: 19),
-                ),
-              ),
-            ),
-          ),
-        ),
+        _RoundButton(icon: Icons.tune_rounded, tooltip: 'Edit home', onTap: _startEditing),
         const SizedBox(width: 10),
         Expanded(
           child: Semantics(
@@ -142,7 +127,24 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         const SizedBox(width: 10),
-        _RoundButton(icon: Icons.tune_rounded, tooltip: 'Edit home', onTap: _startEditing),
+        Semantics(
+          button: true,
+          label: 'Me and settings',
+          child: GestureDetector(
+            // Your profile holds every setting.
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MePage())),
+            child: Pressable(
+              child: CircleAvatar(
+                radius: 24,
+                backgroundColor: p.accent,
+                child: Text(
+                  name.isEmpty ? '?' : name.characters.first.toUpperCase(),
+                  style: TextStyle(color: p.onAccent, fontWeight: FontWeight.w700, fontSize: 19),
+                ),
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -246,7 +248,7 @@ class _HomePageState extends State<HomePage> {
             SafeArea(
               bottom: false,
               child: ListView(
-                padding: EdgeInsets.fromLTRB(16, 12, 16, askBottom + homeAskHeight + 24),
+                padding: EdgeInsets.fromLTRB(16, 12, 16, askBottom + homeAskHeight + _panelFog + 24),
                 children: [
                   ContentWidth(
                     maxWidth: 960,
@@ -295,21 +297,36 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             ...[
-              // A soft fog behind the ask bar, so the page fades out under it as it does under the bottom bar.
+              // The ask bar sits on the same frosted glass as the tab bar, so the two read as one panel and
+              // nothing on the page shows through sharply between them. A short fog above lets the page fade out.
               Positioned(
                 left: 0,
                 right: 0,
                 bottom: underBar ? pad - navFogHeight : 0,
-                height: (underBar ? navFogHeight + 2 : askBottom) + homeAskHeight + 30,
+                height: (underBar ? navFogHeight : askBottom) + homeAskHeight + 12 + _panelFog,
                 child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [p.background.withValues(alpha: 0), p.background.withValues(alpha: 0.7)],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        height: _panelFog,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [p.background.withValues(alpha: 0), frostedGlass(context)],
+                          ),
+                        ),
                       ),
-                    ),
+                      Expanded(
+                        child: ClipRect(
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: frostedBlur, sigmaY: frostedBlur),
+                            child: ColoredBox(color: frostedGlass(context)),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

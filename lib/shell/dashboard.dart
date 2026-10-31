@@ -664,6 +664,7 @@ class DashboardState extends State<Dashboard> {
             return unit * span + gap * (span - 1);
           }
 
+          final sizes = _rowSizes(perRow: wide ? 3 : 2);
           return Wrap(
             spacing: gap,
             runSpacing: widget.editing ? gap + 4 : gap,
@@ -671,8 +672,13 @@ class DashboardState extends State<Dashboard> {
               for (final item in _items)
                 SizedBox(
                   key: ValueKey(item.id),
-                  width: widthOf(_sizeOf(item)),
-                  child: _slot(item, widthOf(_sizeOf(item)), compact ? 150 : 164),
+                  width: sizes[item.id] == 'fill' ? c.maxWidth : widthOf(sizes[item.id]!),
+                  child: _slot(
+                    item,
+                    sizes[item.id] == 'fill' ? c.maxWidth : widthOf(sizes[item.id]!),
+                    compact ? 150 : 164,
+                    size: sizes[item.id] == 'fill' ? 's' : sizes[item.id],
+                  ),
                 ),
               if (widget.editing)
                 SizedBox(
@@ -689,14 +695,37 @@ class DashboardState extends State<Dashboard> {
     );
   }
 
+  /// The size each widget is drawn at. A small widget left alone on its row would leave a half-empty row, so it
+  /// takes its medium form when it has one, or else stretches across the row.
+  Map<String, String> _rowSizes({required int perRow}) {
+    final out = <String, String>{};
+    var run = 0;
+    for (var i = 0; i < _items.length; i++) {
+      final item = _items[i];
+      final size = _sizeOf(item);
+      out[item.id] = size;
+      if (size != 's') {
+        run = 0;
+        continue;
+      }
+      run++;
+      final nextSmall = i + 1 < _items.length && _sizeOf(_items[i + 1]) == 's';
+      if (run == perRow || !nextSmall) {
+        if (run == 1) out[item.id] = kindOf(item.type).sizes.contains('m') ? 'm' : 'fill';
+        run = 0;
+      }
+    }
+    return out;
+  }
+
   String _sizeOf(DashItem item) {
     final kind = kindOf(item.type);
     return kind.sizes.contains(item.size) ? item.size : kind.size;
   }
 
-  Widget _slot(DashItem item, double width, double smallHeight) {
+  Widget _slot(DashItem item, double width, double smallHeight, {String? size}) {
     final kind = kindOf(item.type);
-    final size = _sizeOf(item);
+    size ??= _sizeOf(item);
     Widget body = DashFrame(
       item: item,
       kind: kind,
@@ -1137,23 +1166,36 @@ class StatTile extends StatelessWidget {
                   ),
                 ],
               ),
-              const Spacer(),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  value,
-                  maxLines: 1,
-                  style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -0.5, height: 1.15),
+              // The figure sits in the middle of the space under the title, not pushed to the bottom edge.
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        value,
+                        maxLines: 1,
+                        style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.5,
+                          height: 1.15,
+                        ),
+                      ),
+                    ),
+                    if (caption != null)
+                      Text(
+                        caption!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: p.muted, fontSize: 13, height: 1.3),
+                      ),
+                  ],
                 ),
               ),
-              if (caption != null)
-                Text(
-                  caption!,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: p.muted, fontSize: 13, height: 1.3),
-                ),
               if (extra != null) ...[const SizedBox(height: 6), extra!],
             ],
           ),

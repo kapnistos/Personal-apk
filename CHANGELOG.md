@@ -4,6 +4,13 @@ Builds are numbered by the CI run. Notable changes, newest first.
 
 ## October 2026
 
+### Home layout fixes
+- The ask bar and the tab bar are one frosted panel, so apps no longer peek through between them.
+- A small widget alone on its row takes its wide form instead of leaving half the row empty.
+- The Edit home button is now on the left and your profile picture on the right.
+- Small widgets keep their figure in the middle of the card, and Home scrolls far enough that the last widget clears
+  the bottom bar, in Edit home too.
+
 ### Your tabs, an agent that can change things, and 22 fixes
 - **Choose your bottom tabs**: pick which tabs sit next to Home (Calendar, Wallet, To-do, AI, Notes), drag them into
   order and choose the tab Hub opens on. Hold the bar, or go to Me > Navigation.

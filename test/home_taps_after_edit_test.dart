@@ -90,17 +90,16 @@ void main() {
         final shapes = dashShapes.keys.toList();
         for (final (round, size) in const ['Small', 'Medium', 'Large'].indexed) {
           // Arrange: every widget gets this style, a shape, a colour and a size.
-          await tester.scrollUntilVisible(
-            find.byTooltip('Edit home'),
-            -400,
-            scrollable: home(find.byType(Scrollable)).first,
-          );
+          // Back to the top of Home, where the Edit home button is.
+          tester.state<ScrollableState>(home(find.byType(Scrollable)).first).position.jumpTo(0);
+          await settle(tester, 100);
           await tester.tap(find.byTooltip('Edit home'));
           await settle(tester);
           final n = find.byTooltip('Customise').evaluate().length;
           for (var i = 0; i < n; i++) {
             final badge = find.byTooltip('Customise').at(i);
-            await tester.ensureVisible(badge);
+            // Well clear of the glass panel at the bottom, as a thumb would have it.
+            await Scrollable.ensureVisible(badge.evaluate().single, alignment: 0.3);
             await settle(tester, 100);
             await tester.tap(badge);
             await settle(tester, 600);
