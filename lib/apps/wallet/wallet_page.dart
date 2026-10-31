@@ -516,6 +516,9 @@ class _SpendingTabState extends State<_SpendingTab> with AutomaticKeepAliveClien
                     );
                   },
                 ),
+              // Room for the system gesture bar, or the bottom bar when Wallet is a tab: the list scrolls on
+              // under the glass and its last day still comes clear of it.
+              SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).bottom)),
             ],
           ),
         );
@@ -1067,7 +1070,7 @@ class _Breakdown extends StatelessWidget {
         ],
       ),
     );
-    c.dispose();
+    // Not disposed here: the dialog still rebuilds with it while it fades out, which crashed.
     if (v == null) return;
     final cents = parseMoney(v);
     // Typos like "abc" or "-50" must not wipe a budget; only an empty field removes it.
@@ -1437,7 +1440,13 @@ class _EntryEditorState extends State<_EntryEditor> {
 Future<void> importBankFile(BuildContext context) async {
   final db = context.db;
   final messenger = ScaffoldMessenger.of(context);
-  final picked = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['csv', 'txt', 'tab']);
+  final List<PlatformFile> picked;
+  try {
+    picked = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['csv', 'txt', 'tab']);
+  } catch (_) {
+    messenger.showSnackBar(const SnackBar(content: Text('Could not open the file picker')));
+    return;
+  }
   final file = picked.firstOrNull;
   if (file == null) return;
 

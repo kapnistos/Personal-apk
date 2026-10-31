@@ -67,6 +67,18 @@ class _TodoPageState extends State<TodoPage> {
           if (_filter == TodoFilter.done)
             TextButton(
               onPressed: () async {
+                final sure = await showDialog<bool>(
+                  context: context,
+                  builder: (d) => AlertDialog(
+                    title: const Text('Clear completed tasks?'),
+                    content: const Text('All finished tasks are deleted for good.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Cancel')),
+                      FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('Clear')),
+                    ],
+                  ),
+                );
+                if (sure != true) return;
                 final n = await db.clearCompletedTodos();
                 if (context.mounted && n > 0) {
                   ScaffoldMessenger.of(context)
@@ -274,7 +286,7 @@ Future<void> toggleTodoDone(BuildContext context, Todo todo) async {
   await db.setTodoDone(todo.id, done);
   if (!done || messenger == null) return;
   messenger
-    ..hideCurrentSnackBar()
+    ..removeCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
         content: Text(
@@ -363,7 +375,7 @@ Future<void> showTodoActions(BuildContext context, Todo todo) async {
       };
       await db.updateTodo(moveTodoTo(todo, day));
       messenger
-        ?..hideCurrentSnackBar()
+        ?..removeCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
             content: Text(day == null ? 'Date removed' : 'Moved to ${friendlyDay(day).toLowerCase()}'),
@@ -382,11 +394,12 @@ Future<void> showTodoActions(BuildContext context, Todo todo) async {
         repeat: todo.repeat,
         important: todo.important,
         spaceId: todo.spaceId,
+        details: todo.details,
       );
     case 'delete':
       await db.deleteTodo(todo.id);
       messenger
-        ?..hideCurrentSnackBar()
+        ?..removeCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
             content: const Text('Task deleted'),
@@ -813,8 +826,35 @@ class _TodoEditorState extends State<_TodoEditor> {
   late String _repeat = widget.todo.repeat;
   late int? _spaceId = widget.todo.spaceId;
 
+  /// Set once Save or Delete has dealt with the task, so closing the sheet does nothing more.
+  bool _closed = false;
+  late AppDatabase _db;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _db = context.db;
+  }
+
+  Todo? _edited() {
+    final title = _title.text.trim();
+    if (title.isEmpty) return null;
+    return widget.todo.copyWith(
+      title: title,
+      details: _details.text.trim(),
+      due: Value(_due),
+      remindAt: Value(_remind),
+      important: _important,
+      repeat: _repeat,
+      spaceId: Value(_spaceId),
+    );
+  }
+
   @override
   void dispose() {
+    // Swiped down or tapped outside: keep what was typed rather than losing it.
+    final edited = _closed ? null : _edited();
+    if (edited != null && edited != widget.todo) _db.updateTodo(edited);
     _title.dispose();
     _details.dispose();
     super.dispose();
@@ -828,7 +868,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       initialDate: _due ?? now,
       // An old due date must still be inside the picker's range, or it throws.
       firstDate: _due != null && _due!.isBefore(first) ? dateOnly(_due!) : first,
-      lastDate: DateTime(now.year + 5),
+      lastDate: _due != null && _due!.isAfter(DateTime(now.year + 5)) ? dateOnly(_due!) : DateTime(now.year + 5),
     );
     if (picked != null) setState(() => _due = picked);
   }
@@ -850,20 +890,10 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   Future<void> _save() async {
-    final title = _title.text.trim();
-    if (title.isEmpty) return;
-    final db = context.db;
-    await db.updateTodo(
-      widget.todo.copyWith(
-        title: title,
-        details: _details.text.trim(),
-        due: Value(_due),
-        remindAt: Value(_remind),
-        important: _important,
-        repeat: _repeat,
-        spaceId: Value(_spaceId),
-      ),
-    );
+    final edited = _edited();
+    if (edited == null) return;
+    _closed = true;
+    await _db.updateTodo(edited);
     if (_remind != null && _remind != widget.todo.remindAt) await Reminders.instance.ensurePermission();
     if (mounted) Navigator.of(context).pop();
   }
@@ -996,10 +1026,11 @@ class _TodoEditorState extends State<_TodoEditor> {
                   onPressed: () {
                     final db = context.db;
                     final messenger = ScaffoldMessenger.of(context);
+                    _closed = true;
                     db.deleteTodo(widget.todo.id);
                     Navigator.of(context).pop();
                     messenger
-                      ..hideCurrentSnackBar()
+                      ..removeCurrentSnackBar()
                       ..showSnackBar(
                         SnackBar(
                           content: const Text('Task deleted'),

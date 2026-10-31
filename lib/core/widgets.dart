@@ -176,9 +176,10 @@ class BigAmount extends StatelessWidget {
   }
 }
 
+/// Replaces any snackbar at once (not after it fades), so the Undo on screen is always this action's own.
 void showUndo(BuildContext context, String message, VoidCallback onUndo) {
   ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
+    ..removeCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
         content: Text(message),

@@ -288,7 +288,9 @@ class _SubscriptionEditorState extends State<_SubscriptionEditor> {
           final s = widget.sub!;
           final messenger = ScaffoldMessenger.of(context);
           final now = DateTime.now();
-          final due = addDays(dateOnly(s.nextDate), -1);
+          // The day before it renews, but never in the past: a payment due today gets a task for today.
+          final dayBefore = addDays(dateOnly(s.nextDate), -1);
+          final due = dayBefore.isBefore(dateOnly(now)) ? dateOnly(now) : dayBefore;
           var remind = DateTime(due.year, due.month, due.day - 2, 9);
           if (remind.isBefore(now)) remind = now.add(const Duration(hours: 1));
           await context.db.addTodo('Cancel ${s.name}', due: due, remindAt: remind, important: true);

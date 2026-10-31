@@ -476,7 +476,7 @@ Future<void> editHabit(BuildContext context, {Habit? habit}) async {
     final kept = checks.where((c) => c.habitId == habit.id).toList();
     await db.deleteHabit(habit.id);
     messenger
-      ?..hideCurrentSnackBar()
+      ?..removeCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text('${habit.name} deleted'),

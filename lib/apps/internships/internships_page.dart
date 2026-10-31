@@ -419,9 +419,10 @@ class _ApplicationEditorState extends State<_ApplicationEditor> {
   Future<void> _pickRemind() async {
     final now = DateTime.now();
     final base = _remind ?? DateTime(now.year, now.month, now.day + 1, 10);
+    // A reminder that has already gone off opens on today instead of crashing the picker.
     final day = await showDatePicker(
       context: context,
-      initialDate: base,
+      initialDate: clampDay(base, now, DateTime(now.year + 3)),
       firstDate: dateOnly(now),
       lastDate: DateTime(now.year + 3),
     );
@@ -537,8 +538,14 @@ class _ApplicationEditorState extends State<_ApplicationEditor> {
                     final now = DateTime.now();
                     final d = await showDatePicker(
                       context: context,
-                      initialDate: _deadline ?? addDays(dateOnly(now), 14),
-                      firstDate: DateTime(now.year - 1),
+                      initialDate: clampDay(
+                        _deadline ?? addDays(dateOnly(now), 14),
+                        DateTime(now.year - 1),
+                        DateTime(now.year + 3),
+                      ),
+                      firstDate: _deadline != null && _deadline!.isBefore(DateTime(now.year - 1))
+                          ? dateOnly(_deadline!)
+                          : DateTime(now.year - 1),
                       lastDate: DateTime(now.year + 3),
                     );
                     if (d != null) setState(() => _deadline = d);

@@ -51,7 +51,8 @@ class SavingsTab extends StatelessWidget {
           final active = goals.where((g) => !g.archived).toList();
           final archived = goals.where((g) => g.archived).toList();
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+            // The bottom inset lets the list scroll on under the bottom bar when Wallet is a tab.
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 96 + MediaQuery.paddingOf(context).bottom),
             children: [
               ContentWidth(child: NetWorthCard(currency: currency)),
               const SizedBox(height: 12),
@@ -468,9 +469,10 @@ class _GoalEditorState extends State<_GoalEditor> {
             label: Text(_deadline == null ? 'No deadline' : 'By ${DateFormat('d MMM y').format(_deadline!)}'),
             onPressed: () async {
               final now = DateTime.now();
+              // A goal whose deadline has passed opens on today instead of crashing the picker.
               final d = await showDatePicker(
                 context: context,
-                initialDate: _deadline ?? DateTime(now.year + 1, now.month, 1),
+                initialDate: clampDay(_deadline ?? DateTime(now.year + 1, now.month, 1), now, DateTime(now.year + 30)),
                 firstDate: now,
                 lastDate: DateTime(now.year + 30),
               );

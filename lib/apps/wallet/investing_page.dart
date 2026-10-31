@@ -124,7 +124,8 @@ class _InvestingTabState extends State<InvestingTab> {
         return RefreshIndicator(
           onRefresh: _refresh,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+            // The bottom inset lets the list scroll on under the bottom bar when Wallet is a tab.
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 96 + MediaQuery.paddingOf(context).bottom),
             children: [
               ContentWidth(
                 child: Container(
@@ -539,21 +540,29 @@ class _HoldingEditorState extends State<_HoldingEditor> {
                 child: Text(_status!, style: TextStyle(color: p.muted)),
               ),
             const SizedBox(height: 14),
+            // Remove and Bought more wrap under each other with large text on a small phone, Save stays put.
             Row(
               children: [
-                if (widget.holding != null) ...[
-                  TextButton(
-                    style: TextButton.styleFrom(foregroundColor: p.danger),
-                    onPressed: () async {
-                      if (!await confirmDelete(context, 'Remove ${widget.holding!.name}?') || !context.mounted) return;
-                      await context.db.deleteHolding(widget.holding!.id);
-                      if (context.mounted) Navigator.pop(context);
-                    },
-                    child: const Text('Remove'),
-                  ),
-                  TextButton(onPressed: _buyMore, child: const Text('Bought more')),
-                ],
-                const Spacer(),
+                if (widget.holding != null)
+                  Expanded(
+                    child: Wrap(
+                      children: [
+                        TextButton(
+                          style: TextButton.styleFrom(foregroundColor: p.danger),
+                          onPressed: () async {
+                            final sure = await confirmDelete(context, 'Remove ${widget.holding!.name}?');
+                            if (!sure || !context.mounted) return;
+                            await context.db.deleteHolding(widget.holding!.id);
+                            if (context.mounted) Navigator.pop(context);
+                          },
+                          child: const Text('Remove'),
+                        ),
+                        TextButton(onPressed: _buyMore, child: const Text('Bought more')),
+                      ],
+                    ),
+                  )
+                else
+                  const Spacer(),
                 FilledButton(onPressed: _save, child: const Text('Save')),
               ],
             ),

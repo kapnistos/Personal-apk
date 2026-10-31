@@ -88,7 +88,9 @@ class SpacePage extends StatelessWidget {
             child: const Icon(Icons.add_rounded),
           ),
           body: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+            // Room for the floating button (56 + its 16 margin) and the gesture bar, so the last rows, such
+            // as the Worked / Off / Holiday / Sick counts, can scroll clear of it.
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 120 + MediaQuery.paddingOf(context).bottom),
             children: [
               // The work log is what a job page is mostly for, so it comes first there.
               if (space.icon == 'work') ...[ContentWidth(child: WorkLogCard(color: color)), const SizedBox(height: 12)],
@@ -116,73 +118,77 @@ class SpacePage extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
+      // Six rows with large text are taller than a sheet on a small phone, so they scroll.
+      isScrollControlled: true,
       builder: (sheet) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Press(
-              child: ListTile(
-                leading: const Icon(Icons.flag_outlined),
-                title: Text('Add to ${words.dates.toLowerCase()}'),
-                subtitle: const Text('Exam, deadline, holiday: a whole-day date with a reminder'),
-                onTap: () {
-                  Navigator.pop(sheet);
-                  addImportantDate(context, space);
-                },
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Press(
+                child: ListTile(
+                  leading: const Icon(Icons.flag_outlined),
+                  title: Text('Add to ${words.dates.toLowerCase()}'),
+                  subtitle: const Text('Exam, deadline, holiday: a whole-day date with a reminder'),
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    addImportantDate(context, space);
+                  },
+                ),
               ),
-            ),
-            Press(
-              child: ListTile(
-                leading: const Icon(Icons.groups_outlined),
-                title: Text('Add to ${words.meetings.toLowerCase()}'),
-                subtitle: const Text('A meeting, lecture or shift with a time'),
-                onTap: () {
-                  Navigator.pop(sheet);
-                  addMeeting(context, space);
-                },
+              Press(
+                child: ListTile(
+                  leading: const Icon(Icons.groups_outlined),
+                  title: Text('Add to ${words.meetings.toLowerCase()}'),
+                  subtitle: const Text('A meeting, lecture or shift with a time'),
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    addMeeting(context, space);
+                  },
+                ),
               ),
-            ),
-            Press(
-              child: ListTile(
-                leading: const Icon(Icons.check_circle_outline_rounded),
-                title: Text('Add to ${words.plan.toLowerCase()}'),
-                onTap: () {
-                  Navigator.pop(sheet);
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => TodoPage(spaceId: space.id)));
-                },
+              Press(
+                child: ListTile(
+                  leading: const Icon(Icons.check_circle_outline_rounded),
+                  title: Text('Add to ${words.plan.toLowerCase()}'),
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => TodoPage(spaceId: space.id)));
+                  },
+                ),
               ),
-            ),
-            Press(
-              child: ListTile(
-                leading: const Icon(Icons.notes_rounded),
-                title: const Text('Save a note'),
-                onTap: () {
-                  Navigator.pop(sheet);
-                  editSpaceItem(context, space, kind: 'note');
-                },
+              Press(
+                child: ListTile(
+                  leading: const Icon(Icons.notes_rounded),
+                  title: const Text('Save a note'),
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    editSpaceItem(context, space, kind: 'note');
+                  },
+                ),
               ),
-            ),
-            Press(
-              child: ListTile(
-                leading: const Icon(Icons.link_rounded),
-                title: const Text('Save a link'),
-                onTap: () {
-                  Navigator.pop(sheet);
-                  editSpaceItem(context, space, kind: 'link');
-                },
+              Press(
+                child: ListTile(
+                  leading: const Icon(Icons.link_rounded),
+                  title: const Text('Save a link'),
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    editSpaceItem(context, space, kind: 'link');
+                  },
+                ),
               ),
-            ),
-            Press(
-              child: ListTile(
-                leading: const Icon(Icons.attach_file_rounded),
-                title: const Text('Save a file'),
-                onTap: () {
-                  Navigator.pop(sheet);
-                  pickSpaceFile(context, space);
-                },
+              Press(
+                child: ListTile(
+                  leading: const Icon(Icons.attach_file_rounded),
+                  title: const Text('Save a file'),
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    pickSpaceFile(context, space);
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -616,7 +622,14 @@ class _Saved extends StatelessWidget {
 
 Future<void> pickSpaceFile(BuildContext context, Space space) async {
   final db = context.db;
-  final res = await FilePicker.pickFiles();
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  final List<PlatformFile> res;
+  try {
+    res = await FilePicker.pickFiles();
+  } catch (_) {
+    messenger?.showSnackBar(const SnackBar(content: Text('Could not open the file picker')));
+    return;
+  }
   final f = res.firstOrNull;
   if (f == null || f.path == null) return;
   await db.saveSpaceItem(

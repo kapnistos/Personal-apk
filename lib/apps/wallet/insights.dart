@@ -1210,31 +1210,33 @@ class PaydayTile extends StatelessWidget {
       builder: (d) => StatefulBuilder(
         builder: (d, setState) => AlertDialog(
           title: const Text('Save on payday'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: amount,
-                autofocus: true,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(hintText: 'Amount', prefixText: '${currencySymbol(settings.currency)} '),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final g in active)
-                    ChoiceChip(
-                      showCheckmark: false,
-                      label: Text(g.name),
-                      selected: goalId == g.id,
-                      onSelected: (_) => setState(() => goalId = g.id),
-                    ),
-                ],
-              ),
-            ],
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: amount,
+                  autofocus: true,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(hintText: 'Amount', prefixText: '${currencySymbol(settings.currency)} '),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final g in active)
+                      ChoiceChip(
+                        showCheckmark: false,
+                        label: Text(g.name),
+                        selected: goalId == g.id,
+                        onSelected: (_) => setState(() => goalId = g.id),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Cancel')),
@@ -1244,7 +1246,7 @@ class PaydayTile extends StatelessWidget {
       ),
     );
     final cents = parseMoney(amount.text);
-    amount.dispose();
+    // Not disposed here: the dialog still rebuilds with it while it fades out, which crashed.
     if (ok == true && cents != null && cents > 0) await settings.setRaw(paydayKey, '$goalId:${cents.abs()}');
   }
 }

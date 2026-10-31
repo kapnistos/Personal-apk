@@ -193,6 +193,26 @@ int fixedCostsBooked(Iterable<Entry> monthEntries, DateTime now) => monthEntries
     .where((e) => e.kind.sign < 0 && e.kind != EntryKind.expense && !e.date.isAfter(now))
     .fold(0, (t, e) => t + e.amountCents);
 
+/// Everything gone out in [monthEntries] up to [now]: future-dated entries are plans, not spending yet.
+int spentSoFar(Iterable<Entry> monthEntries, DateTime now) =>
+    MonthSummary(monthEntries.where((e) => !e.date.isAfter(now)).toList()).out;
+
+/// The running month against [target], worked out exactly as the Wallet hero does: spending so far, bills
+/// already booked set aside, and every recurring payment still due this month (repeats included) taken off.
+/// Home's "To spend" and the dashboard money widget use this so they always agree with Wallet.
+SpendPlan monthSpendPlan({
+  required int target,
+  required Iterable<Entry> monthEntries,
+  required Iterable<Subscription> subs,
+  required DateTime now,
+}) => SpendPlan(
+  target: target,
+  spent: spentSoFar(monthEntries, now),
+  billsAhead: billsLeftThisMonth(subs, now).cents,
+  billsPaid: fixedCostsBooked(monthEntries, now),
+  now: now,
+);
+
 /// How a savings goal with a deadline is doing.
 enum GoalState { reached, onTrack, ahead, behind }
 

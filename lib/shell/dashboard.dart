@@ -16,9 +16,11 @@ import '../apps/notes/notes_page.dart';
 import '../apps/shopping/shopping_model.dart';
 import '../apps/shopping/shopping_page.dart';
 import '../apps/spaces/space_page.dart';
+import '../apps/spaces/work_hours.dart';
 import '../apps/spaces/work_log.dart';
 import '../apps/todo/todo_page.dart';
 import '../apps/wallet/accounts_page.dart';
+import '../apps/wallet/insights.dart' show monthSpendPlan, spendTargetKey;
 import '../apps/wallet/investing_page.dart';
 import '../apps/wallet/wallet_model.dart';
 import '../apps/wallet/wallet_page.dart';
@@ -219,10 +221,15 @@ const _allKinds = [
     's',
     'm',
   ], 's'),
-  DashKind('work', 'Work days', 'Days worked this month and holidays left', Icons.work_outline_rounded, 0xFF1F7A5A, [
+  DashKind(
+    'work',
+    'Work days',
+    'Hours balance, days worked and holidays left',
+    Icons.work_outline_rounded,
+    0xFF1F7A5A,
+    ['s', 'm'],
     's',
-    'm',
-  ], 's'),
+  ),
   DashKind('news', 'Headlines', 'The news that matters now', Icons.newspaper_rounded, 0xFF8A5A44, ['s', 'm', 'l'], 'l'),
   DashKind('notes', 'Notes', 'Your latest notes', Icons.sticky_note_2_outlined, 0xFFCF9418, ['s', 'm', 'l'], 'm'),
   DashKind(
@@ -408,7 +415,7 @@ class DashboardState extends State<Dashboard> {
 
     // Floats above Home's bottom bar, so Add and Done stay reachable while it shows.
     ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
+      ..removeCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text('${kindOf(item.type).title} removed'),
@@ -1333,37 +1340,41 @@ class _ClockState extends State<_Clock> {
     final thursday = addDays(dateOnly(_now), DateTime.thursday - _now.weekday);
     final week = daysBetween(DateTime(thursday.year), thursday) ~/ 7 + 1;
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              DateFormat('EEEE').format(_now),
-              style: TextStyle(color: p.muted, fontWeight: FontWeight.w600),
-            ),
-            if (widget.small) const Spacer() else const SizedBox(height: 8),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                DateFormat.Hm().format(_now),
-                style: TextStyle(
-                  fontSize: widget.small ? 44 : 56,
-                  fontWeight: FontWeight.w300,
-                  letterSpacing: -2,
-                  height: 1,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _push(context, const CalendarPage()),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                DateFormat('EEEE').format(_now),
+                style: TextStyle(color: p.muted, fontWeight: FontWeight.w600),
+              ),
+              if (widget.small) const Spacer() else const SizedBox(height: 8),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  DateFormat.Hm().format(_now),
+                  style: TextStyle(
+                    fontSize: widget.small ? 44 : 56,
+                    fontWeight: FontWeight.w300,
+                    letterSpacing: -2,
+                    height: 1,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${DateFormat(widget.small ? 'd MMM' : 'd MMMM').format(_now)} · week $week',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: p.muted, fontSize: 13.5),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                '${DateFormat(widget.small ? 'd MMM' : 'd MMMM').format(_now)} · week $week',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: p.muted, fontSize: 13.5),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1486,56 +1497,84 @@ class _Money extends StatelessWidget {
     final now = DateTime.now();
     final month = DateTime(now.year, now.month);
     final currency = context.settings.currency;
+    final target = int.tryParse(context.settings.raw(spendTargetKey) ?? '');
+    final hasTarget = target != null && target > 0;
     return StreamBuilder<List<Entry>>(
       stream: context.db.watchEntries(month, DateTime(now.year, now.month + 1)),
-      builder: (context, snap) {
-        final s = MonthSummary(snap.data ?? const <Entry>[]);
-        if (small) {
-          return StatTile(
-            icon: Icons.account_balance_wallet_outlined,
-            label: DateFormat('MMMM').format(now),
-            color: TileColors.finance,
-            value: money(s.out, currency),
-            caption: 'spent · ${money(s.income - s.out, currency, signed: true)} net',
-            onTap: () => _push(context, const WalletPage()),
-          );
-        }
-        final p = Palette.of(context);
-        return _Panel(
-          title: 'This month',
-          onMore: () => _push(context, const WalletPage()),
-          moreLabel: 'Wallet',
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-              child: Row(
-                children: [
-                  for (final (label, value, color) in [
-                    ('In', s.income, p.positive),
-                    ('Out', s.out, p.ink),
-                    ('Net', s.income - s.out, s.income >= s.out ? p.positive : p.danger),
-                  ])
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(label, style: TextStyle(color: p.muted, fontSize: 13)),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              money(value, currency, signed: label == 'Net'),
-                              style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: color),
+      builder: (context, eSnap) => StreamBuilder<List<Subscription>>(
+        stream: context.db.watchSubscriptions(),
+        builder: (context, sSnap) {
+          final entries = eSnap.data ?? const <Entry>[];
+          // Same numbers as the Wallet hero: only what has happened so far, bills still due set aside.
+          final booked = entries.where((e) => !e.date.isAfter(now)).toList();
+          final s = MonthSummary(booked);
+          final plan = hasTarget
+              ? monthSpendPlan(
+                  target: target,
+                  monthEntries: entries,
+                  subs: sSnap.data ?? const <Subscription>[],
+                  now: now,
+                )
+              : null;
+          final p = Palette.of(context);
+          if (small) {
+            return StatTile(
+              icon: Icons.account_balance_wallet_outlined,
+              label: DateFormat('MMMM').format(now),
+              color: TileColors.finance,
+              value: money(s.out, currency),
+              caption: plan == null
+                  ? 'spent · ${money(s.income - s.out, currency, signed: true)} net'
+                  : plan.over
+                  ? 'spent · ${money(-plan.left, currency)} over target'
+                  : 'spent · ${money(plan.left, currency)} to spend',
+              onTap: () => _push(context, const WalletPage()),
+            );
+          }
+          return _Panel(
+            title: 'This month',
+            onMore: () => _push(context, const WalletPage()),
+            moreLabel: 'Wallet',
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                child: Row(
+                  children: [
+                    for (final (label, value, color, signed) in [
+                      ('In', s.income, p.positive, false),
+                      ('Out', s.out, p.ink, false),
+                      if (plan == null)
+                        ('Net', s.income - s.out, s.income >= s.out ? p.positive : p.danger, true)
+                      else
+                        (plan.over ? 'Over' : 'To spend', plan.left.abs(), plan.over ? p.danger : p.positive, false),
+                    ])
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(color: p.muted, fontSize: 13),
                             ),
-                          ),
-                        ],
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                money(value, currency, signed: signed),
+                                style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: color),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -1790,26 +1829,39 @@ class _Work extends StatelessWidget {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final allowance = int.tryParse(context.settings.raw('job.holidayAllowance') ?? '') ?? 25;
+    final schedule = WorkSchedule.parse(context.settings.raw(WorkSchedule.key));
     return StreamBuilder<List<WorkDay>>(
       stream: context.db.watchWorkDays(DateTime(now.year), DateTime(now.year + 1)),
       builder: (context, snap) {
         final all = snap.data ?? const <WorkDay>[];
         final key = AppDatabase.dayKey(now).substring(0, 7);
-        final month = WorkTotals(all.where((d) => d.day.startsWith(key)));
+        final monthDays = all.where((d) => d.day.startsWith(key)).toList();
+        final month = WorkTotals(monthDays);
         final year = WorkTotals(all);
         final left = allowance - year.of('holiday');
+        // The hours balance, worked out exactly as the Job page does.
+        final hours = monthHours(monthDays, schedule, now);
+        final logged = hours.expectedToDate > 0 || hours.worked > 0;
+        final p = Palette.of(context);
+        final balanceColor = !logged || hours.balance.abs() < 0.005
+            ? p.ink
+            : hours.balance > 0
+            ? p.positive
+            : p.danger;
         void open() => _push(context, const SpaceLauncher(gid: 'seed-job', fallbackName: 'Job'));
         if (small) {
           return StatTile(
             icon: Icons.work_outline_rounded,
-            label: 'Worked in ${DateFormat('MMMM').format(now)}',
+            label: 'Work in ${DateFormat('MMMM').format(now)}',
             color: TileColors.todo,
-            value: '${month.worked} days',
-            caption: '$left holidays left this year',
+            value: logged ? signedHours(hours.balance) : '${month.worked} days',
+            caption: logged
+                ? '${hours.balance.abs() < 0.005 ? 'on target' : (hours.balance > 0 ? 'overtime' : 'owed')} · '
+                      '${month.worked} ${month.worked == 1 ? 'day' : 'days'} worked · $left holidays left'
+                : '$left holidays left this year',
             onTap: open,
           );
         }
-        final p = Palette.of(context);
         return _Panel(
           title: 'Work',
           onMore: open,
@@ -1818,11 +1870,11 @@ class _Work extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
               child: Row(
                 children: [
-                  for (final (label, value) in [
-                    ('Worked', '${month.worked}'),
-                    ('Off', '${month.of('off')}'),
-                    ('Sick', '${month.of('sick')}'),
-                    ('Holidays left', '$left'),
+                  for (final (label, value, color) in [
+                    ('Worked', '${month.worked}', p.ink),
+                    ('Hours', logged ? signedHours(hours.balance) : '–', balanceColor),
+                    ('Sick', '${month.of('sick')}', p.ink),
+                    ('Holidays left', '$left', p.ink),
                   ])
                     Expanded(
                       child: Column(
@@ -1834,13 +1886,30 @@ class _Work extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(color: p.muted, fontSize: 13),
                           ),
-                          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              value,
+                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: color),
+                            ),
+                          ),
                         ],
                       ),
                     ),
                 ],
               ),
             ),
+            if (logged)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: Text(
+                  '${DateFormat('MMMM').format(now)} so far: ${hoursBalanceWords(hours.balance)}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: p.muted, fontSize: 13),
+                ),
+              ),
           ],
         );
       },

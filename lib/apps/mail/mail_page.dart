@@ -47,8 +47,10 @@ class _MailPageState extends State<MailPage> {
   String _time(DateTime d) {
     final now = DateTime.now();
     if (dateOnly(d) == dateOnly(now)) return DateFormat.Hm().format(d);
-    if (now.difference(d).inDays < 6) return DateFormat.E().format(d);
-    return DateFormat('d MMM').format(d);
+    // Calendar days, so last week's same weekday never shows as just "Sat" next to today's mail.
+    final ago = daysBetween(d, now);
+    if (ago > 0 && ago < 7) return DateFormat.E().format(d);
+    return DateFormat(d.year == now.year ? 'd MMM' : 'd MMM y').format(d);
   }
 
   @override
