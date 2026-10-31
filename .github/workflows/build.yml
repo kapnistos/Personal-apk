@@ -116,6 +116,12 @@ jobs:
     needs: [android, windows, ios]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      # Move the "latest" tag to this commit, so the release page shows this build as current
+      # instead of the first commit the tag was made on.
+      - run: |
+          git tag -f latest "$GITHUB_SHA"
+          git push -f origin refs/tags/latest
       - uses: actions/download-artifact@v4
         with:
           merge-multiple: true
