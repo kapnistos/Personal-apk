@@ -25,8 +25,7 @@ import 'package:hub/apps/spaces/space_page.dart';
 import 'package:hub/apps/spaces/my_spaces.dart';
 import 'package:hub/apps/habits/habits_page.dart';
 import 'package:hub/apps/mail/mail_page.dart';
-import 'package:hub/apps/notes/notes_page.dart';
-import 'package:hub/apps/todo/todo_page.dart';
+import 'package:hub/apps/lists/lists_page.dart';
 import 'package:hub/apps/shopping/shopping_model.dart';
 import 'package:hub/apps/shopping/shopping_page.dart';
 import 'package:hub/apps/wallet/subscriptions_page.dart';
@@ -457,8 +456,8 @@ void main() {
     'calendar': () => const CalendarPage(),
     'calendar-event': () => const _CalendarWith(editor: false),
     'calendar-new': () => const _CalendarWith(editor: true),
-    'todo': () => const TodoPage(),
-    'notes': () => const NotesPage(),
+    'todo': () => const ListsPage(initial: ListsView.todo),
+    'notes': () => const ListsPage(initial: ListsView.notes),
     'wallet': () => const WalletPage(),
     'subscriptions': () => const SubscriptionsPage(),
     'claude': () => const ClaudePage(),
