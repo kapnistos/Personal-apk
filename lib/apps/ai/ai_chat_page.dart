@@ -1134,6 +1134,7 @@ class _ActionCard extends StatelessWidget {
     'shopping' => Icons.shopping_basket_outlined,
     'recurring' || 'edit_recurring' => Icons.autorenew_rounded,
     'saving' => Icons.savings_outlined,
+    'purchase_goal' => Icons.shopping_bag_outlined,
     'budget_target' => Icons.speed_rounded,
     'work_day' => Icons.schedule_rounded,
     'space_date' => Icons.flag_outlined,

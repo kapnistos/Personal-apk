@@ -150,6 +150,10 @@ void main() {
       color: 0xFF1F7A5A,
       archived: false,
       createdAt: DateTime(2024),
+      purpose: 'savings',
+      icon: '',
+      link: '',
+      note: '',
     );
     final db = await pumpPage(t, _phone, () => opener((c) => editGoal(c, goal: goal)), demo: false);
     await t.tap(find.text('open'));

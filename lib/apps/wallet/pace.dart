@@ -250,3 +250,152 @@ GoalPace? goalPace({
       : GoalState.onTrack;
   return GoalPace(state: state, expected: expected, gap: gap);
 }
+
+/// Goals that are something to buy rather than money to keep.
+const purchasePurpose = 'purchase';
+
+bool isPurchase(SavingsGoal g) => g.purpose == purchasePurpose;
+
+/// A purchase goal that has been bought: its money is spent, not saved.
+bool isBought(SavingsGoal g) => isPurchase(g) && g.archived;
+
+/// Months left until [deadline], counting the current one.
+int monthsLeft(DateTime deadline, {DateTime? now}) {
+  final n = now ?? DateTime.now();
+  return math.max(1, (deadline.year - n.year) * 12 + deadline.month - n.month + (deadline.day >= n.day ? 1 : 0));
+}
+
+/// Where a purchase goal stands: what is still needed and, with a date, what it takes to get there.
+class PurchasePlan {
+  const PurchasePlan._({
+    required this.target,
+    required this.saved,
+    required this.date,
+    this.perMonth,
+    this.perWeek,
+    this.daysLeft,
+    this.pace,
+    this.projected,
+  });
+
+  final int target;
+  final int saved;
+  final DateTime? date;
+
+  /// Still needed each month (current month included) or week to make the date. Null without a date,
+  /// once reached, or after the date has passed.
+  final int? perMonth;
+  final int? perWeek;
+
+  /// Days from today to the date, negative once it has passed. Null without a date.
+  final int? daysLeft;
+
+  /// On track, ahead or behind an even pace from the start to the date.
+  final GoalPace? pace;
+
+  /// Without a date: roughly when the money is there at the pace so far. Null when there is no pace yet.
+  final DateTime? projected;
+
+  int get left => math.max(0, target - saved);
+  bool get reached => target > 0 && saved >= target;
+  bool get overdue => !reached && daysLeft != null && daysLeft! < 0;
+  double get fraction => target <= 0 ? 0 : (saved / target).clamp(0, 1).toDouble();
+}
+
+/// Works out a [PurchasePlan]. [start] is when saving began: the goal's creation, or an earlier first
+/// deposit. Amounts are rounded up so following the plan always gets there.
+PurchasePlan purchasePlan({
+  required int target,
+  required int saved,
+  required DateTime start,
+  DateTime? date,
+  required DateTime now,
+}) {
+  final today = dateOnly(now);
+  final reached = target > 0 && saved >= target;
+  final left = math.max(0, target - saved);
+  final pace = goalPace(target: target, saved: saved, created: start, deadline: date, now: now);
+  if (date == null) {
+    DateTime? projected;
+    final days = daysBetween(dateOnly(start), today);
+    // Two weeks of history at least, so one early deposit does not promise a date.
+    if (!reached && saved > 0 && days >= 14) {
+      final perDay = saved / days;
+      final need = (left / perDay).ceil();
+      if (need <= 365 * 30) projected = addDays(today, need);
+    }
+    return PurchasePlan._(target: target, saved: saved, date: null, pace: pace, projected: projected);
+  }
+  final daysLeft = daysBetween(today, dateOnly(date));
+  if (reached || daysLeft < 0) {
+    return PurchasePlan._(target: target, saved: saved, date: date, daysLeft: daysLeft, pace: pace);
+  }
+  final weeks = math.max(1, (daysLeft / 7).ceil());
+  return PurchasePlan._(
+    target: target,
+    saved: saved,
+    date: date,
+    daysLeft: daysLeft,
+    pace: pace,
+    perMonth: (left / monthsLeft(date, now: today)).ceil(),
+    perWeek: (left / weeks).ceil(),
+  );
+}
+
+/// Soonest date first, goals without a date after them, then oldest first.
+List<SavingsGoal> sortPurchaseGoals(Iterable<SavingsGoal> goals) => goals.toList()
+  ..sort((a, b) {
+    if (a.deadline != null && b.deadline != null) {
+      final c = a.deadline!.compareTo(b.deadline!);
+      if (c != 0) return c;
+    } else if (a.deadline != null || b.deadline != null) {
+      return a.deadline != null ? -1 : 1;
+    }
+    return a.createdAt.compareTo(b.createdAt);
+  });
+
+/// When saving for [goal] began: the goal's creation, or an earlier first deposit.
+DateTime goalStart(SavingsGoal goal, Iterable<SavingsMove> moves) {
+  var start = goal.createdAt;
+  for (final m in moves) {
+    if (m.goalId == goal.id && m.amountCents > 0 && m.date.isBefore(start)) start = m.date;
+  }
+  return start;
+}
+
+int savedFor(int goalId, Iterable<SavingsMove> moves) =>
+    moves.where((m) => m.goalId == goalId).fold(0, (t, m) => t + m.amountCents);
+
+PurchasePlan planFor(SavingsGoal goal, List<SavingsMove> moves, {DateTime? now}) => purchasePlan(
+  target: goal.targetCents,
+  saved: savedFor(goal.id, moves),
+  start: goalStart(goal, moves),
+  date: goal.deadline,
+  now: now ?? DateTime.now(),
+);
+
+/// Words in a goal's name that suggest one of the purchase icons (keys as stored on the goal).
+const _iconWords = {
+  'laptop': ['laptop', 'macbook', 'computer', 'pc', 'monitor', 'ipad', 'tablet'],
+  'phone': ['phone', 'iphone', 'pixel', 'smartphone'],
+  'headphones': ['headphones', 'airpods', 'earbuds', 'speaker', 'headset'],
+  'camera': ['camera', 'lens', 'gopro'],
+  'game': ['playstation', 'ps5', 'xbox', 'console', 'steam deck', 'gaming'],
+  'home': ['sofa', 'couch', 'chair', 'desk', 'bed', 'furniture', 'kitchen', 'table', 'mattress'],
+  'car': ['car', 'scooter', 'motorbike'],
+  'bike': ['bike', 'bicycle', 'e-bike', 'ebike'],
+  'travel': ['trip', 'holiday', 'vacation', 'flight', 'flights', 'travel', 'tickets'],
+  'gift': ['gift', 'present', 'birthday', 'christmas', 'anniversary'],
+  'watch': ['watch', 'smartwatch'],
+};
+
+/// The purchase icon a name hints at ("New laptop" gives 'laptop'), or 'bag'.
+String purchaseIconFor(String name) {
+  final words = name.toLowerCase();
+  for (final e in _iconWords.entries) {
+    for (final w in e.value) {
+      if (RegExp('(^|[^a-z])${RegExp.escape(w)}(\$|[^a-z])').hasMatch(words)) return e.key;
+    }
+  }
+  return 'bag';
+}

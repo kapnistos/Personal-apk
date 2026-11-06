@@ -98,8 +98,14 @@ NetWorth netWorthOf({
   required List<Subscription> subs,
   required List<SavingsMove> moves,
   required List<Holding> holdings,
+  List<SavingsGoal> goals = const [],
   DateTime? now,
 }) {
+  // Money put aside for something already bought has been spent.
+  final spent = {
+    for (final g in goals)
+      if (isBought(g)) g.id,
+  };
   final byAccount = <String, List<Entry>>{};
   for (final e in entries) {
     (byAccount[e.account.trim().toLowerCase()] ??= []).add(e);
@@ -109,7 +115,7 @@ NetWorth netWorthOf({
     if (a.balanceAt == null) continue;
     cards += AccountState(a, byAccount[a.name.trim().toLowerCase()] ?? const [], subs, now: now).balance;
   }
-  final savings = moves.fold<int>(0, (t, m) => t + m.amountCents);
+  final savings = moves.where((m) => !spent.contains(m.goalId)).fold<int>(0, (t, m) => t + m.amountCents);
   final investments = holdings.fold<int>(0, (t, h) => t + (h.units * h.price * 100).round());
   return NetWorth(cards, savings, investments);
 }
@@ -120,6 +126,7 @@ Future<NetWorth> computeNetWorth(AppDatabase db, {DateTime? now}) async => netWo
   subs: await db.select(db.subscriptions).get(),
   moves: await db.select(db.savingsMoves).get(),
   holdings: await db.select(db.holdings).get(),
+  goals: await db.select(db.savingsGoals).get(),
   now: now,
 );
 
@@ -865,12 +872,22 @@ class _NetWorthCardState extends State<NetWorthCard> {
             stream: db.select(db.savingsMoves).watch(),
             builder: (context, m) => StreamBuilder<List<Holding>>(
               stream: db.select(db.holdings).watch(),
-              builder: (context, h) => _card(
-                p,
-                currency,
-                [a.data, e.data, s.data, m.data, h.data].contains(null)
-                    ? null
-                    : netWorthOf(accounts: a.data!, entries: e.data!, subs: s.data!, moves: m.data!, holdings: h.data!),
+              builder: (context, h) => StreamBuilder<List<SavingsGoal>>(
+                stream: db.select(db.savingsGoals).watch(),
+                builder: (context, g) => _card(
+                  p,
+                  currency,
+                  [a.data, e.data, s.data, m.data, h.data, g.data].contains(null)
+                      ? null
+                      : netWorthOf(
+                          accounts: a.data!,
+                          entries: e.data!,
+                          subs: s.data!,
+                          moves: m.data!,
+                          holdings: h.data!,
+                          goals: g.data!,
+                        ),
+                ),
               ),
             ),
           ),

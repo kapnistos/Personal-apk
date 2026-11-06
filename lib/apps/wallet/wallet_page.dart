@@ -14,6 +14,7 @@ import '../../core/widgets.dart';
 import '../ai/ask_agent.dart';
 import 'accounts_page.dart';
 import 'bank_import.dart';
+import 'goals_page.dart';
 import 'insights.dart';
 import 'investing_page.dart';
 import 'month_bar.dart' show pickMonth;
@@ -26,6 +27,8 @@ import 'wallet_model.dart';
 
 class WalletPage extends StatefulWidget {
   const WalletPage({super.key, this.initialTab = 0});
+
+  /// 0 Spending, 1 Savings, 2 Investing, 3 Goals.
   final int initialTab;
 
   @override
@@ -33,7 +36,7 @@ class WalletPage extends StatefulWidget {
 }
 
 class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateMixin {
-  late final _tabs = TabController(length: 3, vsync: this, initialIndex: widget.initialTab)
+  late final _tabs = TabController(length: 4, vsync: this, initialIndex: widget.initialTab)
     ..addListener(() => setState(() {}));
 
   @override
@@ -53,6 +56,12 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
         onPressed: () => editGoal(context),
         icon: const Icon(Icons.savings_outlined),
         label: const Text('New goal'),
+      ),
+      3 => FloatingActionButton.extended(
+        heroTag: 'wallet-purchase',
+        onPressed: () => editPurchaseGoal(context),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Plan a purchase'),
       ),
       _ => FloatingActionButton.extended(
         heroTag: 'wallet-holding',
@@ -108,7 +117,7 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
         ],
         bottom: PreferredSize(
           preferredSize: Size.fromHeight(MediaQuery.textScalerOf(context).scale(16) + 44),
-          child: _PillTabs(controller: _tabs, labels: const ['Spending', 'Savings', 'Investing']),
+          child: _PillTabs(controller: _tabs, labels: const ['Spending', 'Savings', 'Investing', 'Goals']),
         ),
       ),
       floatingActionButton: fab,
@@ -116,7 +125,7 @@ class _WalletPageState extends State<WalletPage> with SingleTickerProviderStateM
         controller: _tabs,
         // Sideways swipes inside Spending change the month, so tabs change by tapping.
         physics: const NeverScrollableScrollPhysics(),
-        children: const [_SpendingTab(), SavingsTab(), InvestingTab()],
+        children: const [_SpendingTab(), SavingsTab(), InvestingTab(), GoalsTab()],
       ),
     );
   }

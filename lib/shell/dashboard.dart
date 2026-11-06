@@ -20,7 +20,7 @@ import '../apps/spaces/work_hours.dart';
 import '../apps/spaces/work_log.dart';
 import '../apps/todo/todo_page.dart';
 import '../apps/wallet/accounts_page.dart';
-import '../apps/wallet/insights.dart' show monthSpendPlan, spendTargetKey;
+import '../apps/wallet/insights.dart' show isPurchase, monthSpendPlan, planFor, sortPurchaseGoals, spendTargetKey;
 import '../apps/wallet/investing_page.dart';
 import '../apps/wallet/wallet_model.dart';
 import '../apps/wallet/wallet_page.dart';
@@ -217,6 +217,7 @@ const _allKinds = [
   ], 's'),
   DashKind('savings', 'Savings', 'Saved towards your goals', Icons.savings_outlined, 0xFF2F8F5B, ['s', 'm'], 's'),
   DashKind('investing', 'Investing', 'Portfolio value and gain', Icons.show_chart_rounded, 0xFF3A78C9, ['s', 'm'], 's'),
+  DashKind('goals', 'Goals', 'What you are saving up to buy', Icons.shopping_bag_outlined, 0xFF2F5FA8, ['s', 'm'], 's'),
   DashKind('deadlines', 'Applications', 'Internship deadlines coming up', Icons.badge_outlined, 0xFFB5487A, [
     's',
     'm',
@@ -1104,6 +1105,7 @@ class _DashBody extends StatelessWidget {
       'habits' => _HabitsWidget(size: size),
       'savings' => _Savings(small: small),
       'investing' => _Investing(small: small),
+      'goals' => _PurchaseGoals(small: small),
       'deadlines' => _Deadlines(small: small),
       'work' => _Work(small: small),
       'news' => small ? const _NewsSmall() : const HeadlinesCard(),
@@ -1686,7 +1688,7 @@ class _Savings extends StatelessWidget {
       builder: (context, gSnap) => StreamBuilder<List<SavingsMove>>(
         stream: db.watchMoves(),
         builder: (context, mSnap) {
-          final goals = (gSnap.data ?? const <SavingsGoal>[]).where((g) => !g.archived).toList();
+          final goals = (gSnap.data ?? const <SavingsGoal>[]).where((g) => !g.archived && !isPurchase(g)).toList();
           final moves = mSnap.data ?? const <SavingsMove>[];
           int saved(SavingsGoal g) => moves.where((m) => m.goalId == g.id).fold(0, (t, m) => t + m.amountCents);
           final total = goals.fold(0, (t, g) => t + saved(g));
@@ -1737,6 +1739,106 @@ class _Savings extends StatelessWidget {
                         borderRadius: BorderRadius.circular(3),
                         color: Color(g.color),
                       ),
+                    ],
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Purchase goals: what is put aside, and the next few things to buy.
+class _PurchaseGoals extends StatelessWidget {
+  const _PurchaseGoals({required this.small});
+  final bool small;
+
+  static const _color = Color(0xFF2F5FA8);
+
+  @override
+  Widget build(BuildContext context) {
+    final db = context.db;
+    final currency = context.settings.currency;
+    return StreamBuilder<List<SavingsGoal>>(
+      stream: db.watchGoals(),
+      builder: (context, gSnap) => StreamBuilder<List<SavingsMove>>(
+        stream: db.watchMoves(),
+        builder: (context, mSnap) {
+          final moves = mSnap.data ?? const <SavingsMove>[];
+          final goals = sortPurchaseGoals(
+            (gSnap.data ?? const <SavingsGoal>[]).where((g) => isPurchase(g) && !g.archived),
+          );
+          final plans = [for (final g in goals) planFor(g, moves)];
+          final saved = plans.fold(0, (t, p) => t + p.saved.clamp(0, p.target));
+          final target = plans.fold(0, (t, p) => t + p.target);
+          void open() => _push(context, const WalletPage(initialTab: 3));
+          if (small) {
+            final next = goals.isEmpty ? null : goals.first;
+            return StatTile(
+              icon: Icons.shopping_bag_outlined,
+              label: 'Goals',
+              color: _color,
+              value: money(saved, currency),
+              caption: next == null
+                  ? 'Nothing planned yet'
+                  : target - saved > 0
+                  ? '${money(target - saved, currency)} to go'
+                  : 'All covered',
+              extra: goals.isEmpty
+                  ? null
+                  : LinearProgressIndicator(
+                      value: target == 0 ? 0 : (saved / target).clamp(0, 1).toDouble(),
+                      minHeight: 6,
+                      borderRadius: BorderRadius.circular(3),
+                      color: DashAccent.of(context, _color),
+                    ),
+              onTap: open,
+            );
+          }
+          final muted = TextStyle(color: Palette.of(context).muted, fontSize: 13);
+          return _Panel(
+            title: 'Goals · ${money(saved, currency)}',
+            onMore: open,
+            children: [
+              if (goals.isEmpty) const _Muted('Plan a purchase in Wallet → Goals.'),
+              for (final (i, g) in goals.take(3).indexed)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              g.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                          Text(
+                            plans[i].reached ? 'Ready to buy' : '${money(plans[i].left, currency)} to go',
+                            style: muted,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      LinearProgressIndicator(
+                        value: plans[i].fraction,
+                        minHeight: 6,
+                        borderRadius: BorderRadius.circular(3),
+                        color: Color(g.color),
+                      ),
+                      if (plans[i].perMonth != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '${money(plans[i].perMonth!, currency)} a month to buy it by ${DateFormat('MMM y').format(g.deadline!)}',
+                          style: muted,
+                        ),
+                      ],
                     ],
                   ),
                 ),

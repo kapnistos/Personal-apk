@@ -130,6 +130,15 @@ final _cases = <_Case>[
     [(5000, 'Payday')],
   ),
   _Case(
+    'propose_purchase_goal',
+    (db) async => {'name': 'New laptop', 'amount': 1800, 'date': '2027-03-01', 'link': 'example.com/laptop'},
+    (db, _) async => [
+      for (final g in await db.select(db.savingsGoals).get())
+        if (g.purpose == 'purchase') (g.name, g.targetCents, g.deadline, g.icon, g.link),
+    ],
+    [('New laptop', 180000, DateTime(2027, 3, 1), 'laptop', 'example.com/laptop')],
+  ),
+  _Case(
     'propose_budget_target',
     (db) async => {'amount': 1200},
     (db, s) async => (s.raw(spendTargetKey) ?? '', (await db.readSettings())[spendTargetKey] ?? ''),
@@ -312,6 +321,28 @@ void main() {
         reason: 'an edit that changes nothing',
       );
       expect(tools.proposals, isEmpty);
+    });
+
+    test('purchase goals: read with get_savings, refused with a passed date or a name already used', () async {
+      final past = await call('propose_purchase_goal', {'name': 'Bike', 'amount': 500, 'date': '2026-10-01'});
+      expect(past['proposed'], isFalse);
+      expect(past['error'], contains('passed'));
+      final ok = await call('propose_purchase_goal', {'name': 'Bike', 'amount': 500, 'date': '2027-04-30'});
+      expect(ok['card'], contains('Purchase goal: Bike, €500.00, by 30 Apr 2027'));
+      await tools.proposals.single.apply(db, now: now);
+      expect((await call('propose_purchase_goal', {'name': 'bike', 'amount': 600}))['proposed'], isFalse);
+      // Money for it goes in with the usual deposit card.
+      expect((await call('propose_savings_deposit', {'goal': 'Bike', 'amount': 50}))['proposed'], isTrue);
+
+      final read = await call('get_savings', {});
+      expect((read['goals'] as List).map((g) => g['name']), ['Holiday']);
+      final bike = (read['purchaseGoals'] as List).single as Map;
+      expect(bike['name'], 'Bike');
+      expect(bike['price'], '€500.00');
+      expect(bike['left'], '€500.00');
+      expect(bike['targetDate'], isNotNull);
+      expect(bike['neededPerMonth'], isNotNull);
+      expect(bike['neededPerWeek'], isNotNull);
     });
 
     test('cards say what changes and what it was', () async {

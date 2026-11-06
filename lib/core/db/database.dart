@@ -169,6 +169,19 @@ class SavingsGoals extends Table {
   IntColumn get color => integer()();
   BoolColumn get archived => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// 'savings' for money kept aside, 'purchase' for something to buy (Wallet > Goals).
+  TextColumn get purpose => text().withDefault(const Constant('savings'))();
+
+  /// A key from the purchase icon set, or empty.
+  TextColumn get icon => text().withDefault(const Constant(''))();
+
+  /// Where to buy it, or empty.
+  TextColumn get link => text().withDefault(const Constant(''))();
+  TextColumn get note => text().withDefault(const Constant(''))();
+
+  /// When a purchase goal was bought; the money put aside is then spent.
+  DateTimeColumn get doneAt => dateTime().nullable()();
 }
 
 /// Money put into (positive) or taken out of (negative) a savings goal.
@@ -336,7 +349,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? driftDatabase(name: 'hub'));
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -404,12 +417,31 @@ class AppDatabase extends _$AppDatabase {
           await customStatement(sql);
         }
       }
+      if (from < 7) {
+        // A database older than 5 made savings_goals above with these columns already.
+        await _addMissingColumns(m, savingsGoals, [
+          savingsGoals.purpose,
+          savingsGoals.icon,
+          savingsGoals.link,
+          savingsGoals.note,
+          savingsGoals.doneAt,
+        ]);
+      }
     },
     beforeOpen: (details) async {
       // Sync triggers assume this stays off (it is SQLite's default).
       await customStatement('PRAGMA recursive_triggers = OFF');
     },
   );
+
+  Future<void> _addMissingColumns(Migrator m, TableInfo table, List<GeneratedColumn> columns) async {
+    final have = {
+      for (final c in await customSelect('PRAGMA table_info("${table.actualTableName}")').get()) c.read<String>('name'),
+    };
+    for (final c in columns) {
+      if (!have.contains(c.name)) await m.addColumn(table, c);
+    }
+  }
 
   /// Tables added in version 6 that sync.
   static const habitTables = ['habits', 'habit_checks'];
@@ -1021,6 +1053,23 @@ class AppDatabase extends _$AppDatabase {
   );
 
   Future<void> deleteMove(int id) => (delete(savingsMoves)..where((m) => m.id.equals(id))).go();
+
+  /// Puts a removed move back, for Undo.
+  Future<void> restoreMove(SavingsMove m) => into(savingsMoves).insert(m, mode: InsertMode.insertOrReplace);
+
+  /// Marks a purchase goal bought (archived, with the day) or puts it back on the list.
+  Future<void> setGoalBought(int id, bool bought, {DateTime? at}) =>
+      (update(savingsGoals)..where((g) => g.id.equals(id))).write(
+        SavingsGoalsCompanion(archived: Value(bought), doneAt: Value(bought ? (at ?? DateTime.now()) : null)),
+      );
+
+  /// Puts a deleted goal back with its history, for Undo.
+  Future<void> restoreGoal(SavingsGoal goal, List<SavingsMove> moves) => transaction(() async {
+    await into(savingsGoals).insert(goal, mode: InsertMode.insertOrReplace);
+    for (final m in moves) {
+      await into(savingsMoves).insert(m, mode: InsertMode.insertOrReplace);
+    }
+  });
 
   // Investing
 
