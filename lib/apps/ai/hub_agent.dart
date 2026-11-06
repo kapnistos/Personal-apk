@@ -9,7 +9,7 @@ import '../../core/settings.dart';
 import '../shopping/shopping_model.dart';
 import '../spaces/space_model.dart' show allWorkStatuses, workStatusLabels;
 import '../spaces/work_hours.dart' show DayTimes, formatHours;
-import '../wallet/insights.dart' show spendTargetKey;
+import '../wallet/insights.dart' show isPurchase, purchaseIconFor, purchasePlan, purchasePurpose, spendTargetKey;
 import '../wallet/wallet_model.dart';
 
 String _categories() {
@@ -37,7 +37,7 @@ What is in Hub:
 - Calendar: several calendars (Personal, Work, Study and any the user made); imported calendars from a link are read-only. Events can be all day, repeat, and have a reminder.
 - To-do: tasks with an optional due date, a star for important, repeats; some belong to a space.
 - Notes: free text notes with a title.
-- Wallet: every expense and income, accounts, recurring payments and subscriptions (Wallet > Recurring payments), a monthly spending budget (Wallet > Monthly budget), category budgets, savings goals with deposits, and investments.
+- Wallet: every expense and income, accounts, recurring payments and subscriptions (Wallet > Recurring payments), a monthly spending budget (Wallet > Monthly budget), category budgets, savings goals with deposits, purchase goals (Wallet > Goals: something to buy, with a price, money put aside for it and an optional date to buy it by), and investments.
 - Habits: things to do on set weekdays, ticked off per day, with streaks.
 - Shopping list.
 - Spaces: University, Job, Lab research and the user's own. Each has its own calendar for important dates (exams, deadlines, shifts) and meetings, saved notes and links, and tasks. Job also has a work log: hours per day against a contract schedule.
@@ -77,7 +77,7 @@ $hubGuide
 
 Read with the get_ and search_ tools. Always look before you answer a question about the user's data, and never say something is empty without checking with a tool first. For "the next days" or "this week" read the calendar for that whole range. For subscriptions or bills read get_recurring.
 
-To change something, call a propose_ tool for each change: add, edit, reschedule or delete events and tasks, tick tasks off, add or edit notes, log money, add or edit recurring payments, add savings deposits, set the monthly budget, add shopping items, log Job hours, add important dates to a space and tick habits. Each becomes a card, and nothing is saved until the user taps it, so say "here it is to add" rather than "done". Find the id with a read tool before editing, completing or deleting anything. Only propose what the user asked for, or clearly agreed to; when planning, suggest first and propose once they say yes, unless they asked you to add it. Deleting is never a guess: if two things could match, ask.
+To change something, call a propose_ tool for each change: add, edit, reschedule or delete events and tasks, tick tasks off, add or edit notes, log money, add or edit recurring payments, add savings deposits, plan a purchase goal, set the monthly budget, add shopping items, log Job hours, add important dates to a space and tick habits. Each becomes a card, and nothing is saved until the user taps it, so say "here it is to add" rather than "done". Find the id with a read tool before editing, completing or deleting anything. Only propose what the user asked for, or clearly agreed to; when planning, suggest first and propose once they say yes, unless they asked you to add it. Deleting is never a guess: if two things could match, ask.
 ${_categories()}
 
 $_voice
@@ -113,6 +113,7 @@ Each action is one of:
 {"type": "recurring", "name": "Netflix", "amount": 13.99, "kind": "payment", "category": "Streaming", "period": 1, "next": "$iso"}
 {"type": "edit_recurring", "id": 3, "amount": 15.99}
 {"type": "saving", "goal": "Holiday", "amount": 50}
+{"type": "purchase_goal", "name": "New laptop", "amount": 1800, "date": "$iso", "link": "", "note": ""}
 {"type": "budget_target", "amount": 1200}
 {"type": "work_day", "date": "$iso", "status": "work", "start": "09:00", "end": "17:30", "break_minutes": 30}
 {"type": "space_date", "space": "University", "title": "Statistics exam", "date": "$iso"}
@@ -157,6 +158,7 @@ class AgentAction {
     'recurring',
     'edit_recurring',
     'saving',
+    'purchase_goal',
     'budget_target',
     'work_day',
     'space_date',
@@ -251,6 +253,7 @@ class AgentAction {
     'edit_note' || 'edit_task' || 'edit_event' || 'edit_recurring' => id != null && _editsSomething,
     'delete_task' || 'delete_event' => id != null,
     'saving' => cents > 0,
+    'purchase_goal' => name.isNotEmpty && cents > 0,
     'budget_target' => amount != null && amount! >= 0,
     'work_day' => date('date') != null && allWorkStatuses.contains(_status),
     'space_date' => _has('space') && title.isNotEmpty && date('date') != null,
@@ -288,6 +291,8 @@ class AgentAction {
             '${date('next') == null ? '' : ', next ${DateFormat('d MMM').format(date('next')!)}'}',
       'edit_recurring' => _s('target').isNotEmpty ? _s('target') : (name.isNotEmpty ? name : 'Recurring payment $id'),
       'saving' => '${m()} ${_bool('withdraw') == true ? 'from' : 'to'} ${_s('goal').isEmpty ? 'savings' : _s('goal')}',
+      'purchase_goal' =>
+        '$name, ${m()}${date('date') == null ? '' : ', by ${DateFormat('d MMM y').format(date('date')!)}'}',
       'budget_target' => cents == 0 ? 'No monthly budget' : '${m()} a month',
       'work_day' => () {
         final d = date('date')!;
@@ -351,6 +356,15 @@ class AgentAction {
         if (_bool('active') == true) parts.add('Active again');
       case 'saving':
         if (_has('note')) parts.add(_s('note'));
+      case 'purchase_goal':
+        final by = date('date');
+        if (by != null) {
+          final now = DateTime.now();
+          final plan = purchasePlan(target: cents, saved: 0, start: now, date: by, now: now);
+          if (plan.perMonth != null) parts.add('${money(plan.perMonth!, currency)} a month to make it');
+        }
+        if (_has('link')) parts.add(_s('link'));
+        if (_has('note')) parts.add(_clip(_s('note'), 80));
       case 'work_day':
         final t = _times;
         if (t != null) parts.add(t.label);
@@ -426,6 +440,7 @@ class AgentAction {
     'recurring' => recurringKind == EntryKind.income ? 'Recurring income' : 'Recurring payment',
     'edit_recurring' => _bool('active') == false ? 'Pause recurring payment' : 'Edit recurring payment',
     'saving' => _bool('withdraw') == true ? 'Savings withdrawal' : 'Savings deposit',
+    'purchase_goal' => 'Purchase goal',
     'budget_target' => 'Monthly budget',
     'work_day' => 'Job hours',
     'space_date' => 'Important date',
@@ -598,6 +613,16 @@ class AgentAction {
         if (g == null) return 'No savings goal matches that name. Read get_savings for the names.';
         fields['goal'] = g.name;
         fields['goal_id'] = g.id;
+      case 'purchase_goal':
+        final by = date('date');
+        if (by != null && dateOnly(by).isBefore(dateOnly(now ?? DateTime.now()))) {
+          return 'That date has passed. Pick a date from today on, or leave it out.';
+        }
+        final want = name.toLowerCase();
+        final goals = await db.watchGoals().first;
+        if (goals.any((g) => isPurchase(g) && !g.archived && g.name.toLowerCase() == want)) {
+          return 'There is already a purchase goal called $name. Read get_savings to see it.';
+        }
       case 'budget_target':
         final old = int.tryParse((await db.readSettings())[spendTargetKey] ?? '');
         if (old != null && old > 0) fields['was_cents'] = old;
@@ -784,6 +809,21 @@ class AgentAction {
         final signed = _bool('withdraw') == true ? -cents : cents;
         final rowId = await db.addMove(g.id, signed, note: _s('note'), date: date('date') ?? today);
         return () => db.deleteMove(rowId);
+      case 'purchase_goal':
+        final by = date('date');
+        final rowId = await db.saveGoal(
+          SavingsGoalsCompanion.insert(
+            name: name,
+            targetCents: cents,
+            color: 0xFF3A78C9,
+            deadline: Value(by == null ? null : dateOnly(by)),
+            purpose: const Value(purchasePurpose),
+            icon: Value(purchaseIconFor(name)),
+            link: Value(_s('link')),
+            note: Value(_s('note')),
+          ),
+        );
+        return () => db.deleteGoal(rowId);
       case 'budget_target':
         final old = settings?.raw(spendTargetKey) ?? (await db.readSettings())[spendTargetKey] ?? '';
         Future<void> write(String v) =>

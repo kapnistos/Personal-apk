@@ -5781,6 +5781,57 @@ class $SavingsGoalsTable extends SavingsGoals
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _purposeMeta = const VerificationMeta(
+    'purpose',
+  );
+  @override
+  late final GeneratedColumn<String> purpose = GeneratedColumn<String>(
+    'purpose',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('savings'),
+  );
+  static const VerificationMeta _iconMeta = const VerificationMeta('icon');
+  @override
+  late final GeneratedColumn<String> icon = GeneratedColumn<String>(
+    'icon',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _linkMeta = const VerificationMeta('link');
+  @override
+  late final GeneratedColumn<String> link = GeneratedColumn<String>(
+    'link',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _doneAtMeta = const VerificationMeta('doneAt');
+  @override
+  late final GeneratedColumn<DateTime> doneAt = GeneratedColumn<DateTime>(
+    'done_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -5790,6 +5841,11 @@ class $SavingsGoalsTable extends SavingsGoals
     color,
     archived,
     createdAt,
+    purpose,
+    icon,
+    link,
+    note,
+    doneAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5851,6 +5907,36 @@ class $SavingsGoalsTable extends SavingsGoals
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('purpose')) {
+      context.handle(
+        _purposeMeta,
+        purpose.isAcceptableOrUnknown(data['purpose']!, _purposeMeta),
+      );
+    }
+    if (data.containsKey('icon')) {
+      context.handle(
+        _iconMeta,
+        icon.isAcceptableOrUnknown(data['icon']!, _iconMeta),
+      );
+    }
+    if (data.containsKey('link')) {
+      context.handle(
+        _linkMeta,
+        link.isAcceptableOrUnknown(data['link']!, _linkMeta),
+      );
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('done_at')) {
+      context.handle(
+        _doneAtMeta,
+        doneAt.isAcceptableOrUnknown(data['done_at']!, _doneAtMeta),
+      );
+    }
     return context;
   }
 
@@ -5888,6 +5974,26 @@ class $SavingsGoalsTable extends SavingsGoals
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      purpose: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}purpose'],
+      )!,
+      icon: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}icon'],
+      )!,
+      link: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}link'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      )!,
+      doneAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}done_at'],
+      ),
     );
   }
 
@@ -5905,6 +6011,19 @@ class SavingsGoal extends DataClass implements Insertable<SavingsGoal> {
   final int color;
   final bool archived;
   final DateTime createdAt;
+
+  /// 'savings' for money kept aside, 'purchase' for something to buy (Wallet > Goals).
+  final String purpose;
+
+  /// A key from the purchase icon set, or empty.
+  final String icon;
+
+  /// Where to buy it, or empty.
+  final String link;
+  final String note;
+
+  /// When a purchase goal was bought; the money put aside is then spent.
+  final DateTime? doneAt;
   const SavingsGoal({
     required this.id,
     required this.name,
@@ -5913,6 +6032,11 @@ class SavingsGoal extends DataClass implements Insertable<SavingsGoal> {
     required this.color,
     required this.archived,
     required this.createdAt,
+    required this.purpose,
+    required this.icon,
+    required this.link,
+    required this.note,
+    this.doneAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -5926,6 +6050,13 @@ class SavingsGoal extends DataClass implements Insertable<SavingsGoal> {
     map['color'] = Variable<int>(color);
     map['archived'] = Variable<bool>(archived);
     map['created_at'] = Variable<DateTime>(createdAt);
+    map['purpose'] = Variable<String>(purpose);
+    map['icon'] = Variable<String>(icon);
+    map['link'] = Variable<String>(link);
+    map['note'] = Variable<String>(note);
+    if (!nullToAbsent || doneAt != null) {
+      map['done_at'] = Variable<DateTime>(doneAt);
+    }
     return map;
   }
 
@@ -5940,6 +6071,13 @@ class SavingsGoal extends DataClass implements Insertable<SavingsGoal> {
       color: Value(color),
       archived: Value(archived),
       createdAt: Value(createdAt),
+      purpose: Value(purpose),
+      icon: Value(icon),
+      link: Value(link),
+      note: Value(note),
+      doneAt: doneAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(doneAt),
     );
   }
 
@@ -5956,6 +6094,11 @@ class SavingsGoal extends DataClass implements Insertable<SavingsGoal> {
       color: serializer.fromJson<int>(json['color']),
       archived: serializer.fromJson<bool>(json['archived']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      purpose: serializer.fromJson<String>(json['purpose']),
+      icon: serializer.fromJson<String>(json['icon']),
+      link: serializer.fromJson<String>(json['link']),
+      note: serializer.fromJson<String>(json['note']),
+      doneAt: serializer.fromJson<DateTime?>(json['doneAt']),
     );
   }
   @override
@@ -5969,6 +6112,11 @@ class SavingsGoal extends DataClass implements Insertable<SavingsGoal> {
       'color': serializer.toJson<int>(color),
       'archived': serializer.toJson<bool>(archived),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'purpose': serializer.toJson<String>(purpose),
+      'icon': serializer.toJson<String>(icon),
+      'link': serializer.toJson<String>(link),
+      'note': serializer.toJson<String>(note),
+      'doneAt': serializer.toJson<DateTime?>(doneAt),
     };
   }
 
@@ -5980,6 +6128,11 @@ class SavingsGoal extends DataClass implements Insertable<SavingsGoal> {
     int? color,
     bool? archived,
     DateTime? createdAt,
+    String? purpose,
+    String? icon,
+    String? link,
+    String? note,
+    Value<DateTime?> doneAt = const Value.absent(),
   }) => SavingsGoal(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -5988,6 +6141,11 @@ class SavingsGoal extends DataClass implements Insertable<SavingsGoal> {
     color: color ?? this.color,
     archived: archived ?? this.archived,
     createdAt: createdAt ?? this.createdAt,
+    purpose: purpose ?? this.purpose,
+    icon: icon ?? this.icon,
+    link: link ?? this.link,
+    note: note ?? this.note,
+    doneAt: doneAt.present ? doneAt.value : this.doneAt,
   );
   SavingsGoal copyWithCompanion(SavingsGoalsCompanion data) {
     return SavingsGoal(
@@ -6000,6 +6158,11 @@ class SavingsGoal extends DataClass implements Insertable<SavingsGoal> {
       color: data.color.present ? data.color.value : this.color,
       archived: data.archived.present ? data.archived.value : this.archived,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      purpose: data.purpose.present ? data.purpose.value : this.purpose,
+      icon: data.icon.present ? data.icon.value : this.icon,
+      link: data.link.present ? data.link.value : this.link,
+      note: data.note.present ? data.note.value : this.note,
+      doneAt: data.doneAt.present ? data.doneAt.value : this.doneAt,
     );
   }
 
@@ -6012,14 +6175,31 @@ class SavingsGoal extends DataClass implements Insertable<SavingsGoal> {
           ..write('deadline: $deadline, ')
           ..write('color: $color, ')
           ..write('archived: $archived, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('purpose: $purpose, ')
+          ..write('icon: $icon, ')
+          ..write('link: $link, ')
+          ..write('note: $note, ')
+          ..write('doneAt: $doneAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, name, targetCents, deadline, color, archived, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    name,
+    targetCents,
+    deadline,
+    color,
+    archived,
+    createdAt,
+    purpose,
+    icon,
+    link,
+    note,
+    doneAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -6030,7 +6210,12 @@ class SavingsGoal extends DataClass implements Insertable<SavingsGoal> {
           other.deadline == this.deadline &&
           other.color == this.color &&
           other.archived == this.archived &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.purpose == this.purpose &&
+          other.icon == this.icon &&
+          other.link == this.link &&
+          other.note == this.note &&
+          other.doneAt == this.doneAt);
 }
 
 class SavingsGoalsCompanion extends UpdateCompanion<SavingsGoal> {
@@ -6041,6 +6226,11 @@ class SavingsGoalsCompanion extends UpdateCompanion<SavingsGoal> {
   final Value<int> color;
   final Value<bool> archived;
   final Value<DateTime> createdAt;
+  final Value<String> purpose;
+  final Value<String> icon;
+  final Value<String> link;
+  final Value<String> note;
+  final Value<DateTime?> doneAt;
   const SavingsGoalsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
@@ -6049,6 +6239,11 @@ class SavingsGoalsCompanion extends UpdateCompanion<SavingsGoal> {
     this.color = const Value.absent(),
     this.archived = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.purpose = const Value.absent(),
+    this.icon = const Value.absent(),
+    this.link = const Value.absent(),
+    this.note = const Value.absent(),
+    this.doneAt = const Value.absent(),
   });
   SavingsGoalsCompanion.insert({
     this.id = const Value.absent(),
@@ -6058,6 +6253,11 @@ class SavingsGoalsCompanion extends UpdateCompanion<SavingsGoal> {
     required int color,
     this.archived = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.purpose = const Value.absent(),
+    this.icon = const Value.absent(),
+    this.link = const Value.absent(),
+    this.note = const Value.absent(),
+    this.doneAt = const Value.absent(),
   }) : name = Value(name),
        targetCents = Value(targetCents),
        color = Value(color);
@@ -6069,6 +6269,11 @@ class SavingsGoalsCompanion extends UpdateCompanion<SavingsGoal> {
     Expression<int>? color,
     Expression<bool>? archived,
     Expression<DateTime>? createdAt,
+    Expression<String>? purpose,
+    Expression<String>? icon,
+    Expression<String>? link,
+    Expression<String>? note,
+    Expression<DateTime>? doneAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -6078,6 +6283,11 @@ class SavingsGoalsCompanion extends UpdateCompanion<SavingsGoal> {
       if (color != null) 'color': color,
       if (archived != null) 'archived': archived,
       if (createdAt != null) 'created_at': createdAt,
+      if (purpose != null) 'purpose': purpose,
+      if (icon != null) 'icon': icon,
+      if (link != null) 'link': link,
+      if (note != null) 'note': note,
+      if (doneAt != null) 'done_at': doneAt,
     });
   }
 
@@ -6089,6 +6299,11 @@ class SavingsGoalsCompanion extends UpdateCompanion<SavingsGoal> {
     Value<int>? color,
     Value<bool>? archived,
     Value<DateTime>? createdAt,
+    Value<String>? purpose,
+    Value<String>? icon,
+    Value<String>? link,
+    Value<String>? note,
+    Value<DateTime?>? doneAt,
   }) {
     return SavingsGoalsCompanion(
       id: id ?? this.id,
@@ -6098,6 +6313,11 @@ class SavingsGoalsCompanion extends UpdateCompanion<SavingsGoal> {
       color: color ?? this.color,
       archived: archived ?? this.archived,
       createdAt: createdAt ?? this.createdAt,
+      purpose: purpose ?? this.purpose,
+      icon: icon ?? this.icon,
+      link: link ?? this.link,
+      note: note ?? this.note,
+      doneAt: doneAt ?? this.doneAt,
     );
   }
 
@@ -6125,6 +6345,21 @@ class SavingsGoalsCompanion extends UpdateCompanion<SavingsGoal> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (purpose.present) {
+      map['purpose'] = Variable<String>(purpose.value);
+    }
+    if (icon.present) {
+      map['icon'] = Variable<String>(icon.value);
+    }
+    if (link.present) {
+      map['link'] = Variable<String>(link.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (doneAt.present) {
+      map['done_at'] = Variable<DateTime>(doneAt.value);
+    }
     return map;
   }
 
@@ -6137,7 +6372,12 @@ class SavingsGoalsCompanion extends UpdateCompanion<SavingsGoal> {
           ..write('deadline: $deadline, ')
           ..write('color: $color, ')
           ..write('archived: $archived, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('purpose: $purpose, ')
+          ..write('icon: $icon, ')
+          ..write('link: $link, ')
+          ..write('note: $note, ')
+          ..write('doneAt: $doneAt')
           ..write(')'))
         .toString();
   }
@@ -12964,6 +13204,11 @@ typedef $$SavingsGoalsTableCreateCompanionBuilder =
       required int color,
       Value<bool> archived,
       Value<DateTime> createdAt,
+      Value<String> purpose,
+      Value<String> icon,
+      Value<String> link,
+      Value<String> note,
+      Value<DateTime?> doneAt,
     });
 typedef $$SavingsGoalsTableUpdateCompanionBuilder =
     SavingsGoalsCompanion Function({
@@ -12974,6 +13219,11 @@ typedef $$SavingsGoalsTableUpdateCompanionBuilder =
       Value<int> color,
       Value<bool> archived,
       Value<DateTime> createdAt,
+      Value<String> purpose,
+      Value<String> icon,
+      Value<String> link,
+      Value<String> note,
+      Value<DateTime?> doneAt,
     });
 
 class $$SavingsGoalsTableFilterComposer
@@ -13017,6 +13267,31 @@ class $$SavingsGoalsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get purpose => $composableBuilder(
+    column: $table.purpose,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get icon => $composableBuilder(
+    column: $table.icon,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get link => $composableBuilder(
+    column: $table.link,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get doneAt => $composableBuilder(
+    column: $table.doneAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -13064,6 +13339,31 @@ class $$SavingsGoalsTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get purpose => $composableBuilder(
+    column: $table.purpose,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get icon => $composableBuilder(
+    column: $table.icon,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get link => $composableBuilder(
+    column: $table.link,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get doneAt => $composableBuilder(
+    column: $table.doneAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SavingsGoalsTableAnnotationComposer
@@ -13097,6 +13397,21 @@ class $$SavingsGoalsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get purpose =>
+      $composableBuilder(column: $table.purpose, builder: (column) => column);
+
+  GeneratedColumn<String> get icon =>
+      $composableBuilder(column: $table.icon, builder: (column) => column);
+
+  GeneratedColumn<String> get link =>
+      $composableBuilder(column: $table.link, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get doneAt =>
+      $composableBuilder(column: $table.doneAt, builder: (column) => column);
 }
 
 class $$SavingsGoalsTableTableManager
@@ -13137,6 +13452,11 @@ class $$SavingsGoalsTableTableManager
                 Value<int> color = const Value.absent(),
                 Value<bool> archived = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String> purpose = const Value.absent(),
+                Value<String> icon = const Value.absent(),
+                Value<String> link = const Value.absent(),
+                Value<String> note = const Value.absent(),
+                Value<DateTime?> doneAt = const Value.absent(),
               }) => SavingsGoalsCompanion(
                 id: id,
                 name: name,
@@ -13145,6 +13465,11 @@ class $$SavingsGoalsTableTableManager
                 color: color,
                 archived: archived,
                 createdAt: createdAt,
+                purpose: purpose,
+                icon: icon,
+                link: link,
+                note: note,
+                doneAt: doneAt,
               ),
           createCompanionCallback:
               ({
@@ -13155,6 +13480,11 @@ class $$SavingsGoalsTableTableManager
                 required int color,
                 Value<bool> archived = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String> purpose = const Value.absent(),
+                Value<String> icon = const Value.absent(),
+                Value<String> link = const Value.absent(),
+                Value<String> note = const Value.absent(),
+                Value<DateTime?> doneAt = const Value.absent(),
               }) => SavingsGoalsCompanion.insert(
                 id: id,
                 name: name,
@@ -13163,6 +13493,11 @@ class $$SavingsGoalsTableTableManager
                 color: color,
                 archived: archived,
                 createdAt: createdAt,
+                purpose: purpose,
+                icon: icon,
+                link: link,
+                note: note,
+                doneAt: doneAt,
               ),
           withReferenceMapper: (p0) => p0
               .map(

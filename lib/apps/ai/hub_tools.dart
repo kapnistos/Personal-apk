@@ -9,6 +9,7 @@ import '../../core/format.dart';
 import '../../core/reminders.dart' show occurrences, occurrenceEnd;
 import '../habits/habits_page.dart' show habitDueOn, habitStreak;
 import '../spaces/work_hours.dart' show WorkSchedule;
+import '../wallet/pace.dart';
 import '../wallet/wallet_model.dart';
 import '../weather/weather_service.dart';
 import 'ai_service.dart';
@@ -106,7 +107,12 @@ class HubTools {
       'get_accounts',
       'Bank accounts and cards with their current balance (when set) and this month in and out.',
     ),
-    const AiTool('get_savings', 'Savings goals: target, saved so far, deadline and recent moves.'),
+    const AiTool(
+      'get_savings',
+      'Savings goals (target, saved so far, deadline) and purchase goals, things the user is saving up to buy '
+          '(price, put aside, what is left, target date, what is needed per month and week, on track or not), '
+          'plus recent moves.',
+    ),
     const AiTool('get_investments', 'Investments: each holding with units, value, invested and gain.'),
     AiTool(
       'search_notes',
@@ -355,7 +361,7 @@ class HubTools {
     ),
     AiTool(
       'propose_savings_deposit',
-      'Proposes putting money into a savings goal (or taking it out with withdraw true). $_saved',
+      'Proposes putting money into a savings or purchase goal (or taking it out with withdraw true). $_saved',
       _obj(
         {
           'goal': {'type': 'string', 'description': 'The goal name from get_savings.'},
@@ -365,6 +371,21 @@ class HubTools {
           'date': _date,
         },
         ['goal', 'amount'],
+      ),
+    ),
+    AiTool(
+      'propose_purchase_goal',
+      'Proposes a purchase goal in Wallet > Goals: something the user wants to buy and saves up for, with its '
+          'price and an optional date to buy it by. Money goes in later with propose_savings_deposit. $_saved',
+      _obj(
+        {
+          'name': {'type': 'string', 'description': 'What it is, such as "New laptop".'},
+          'amount': {'type': 'number', 'description': 'The price.'},
+          'date': {..._date, 'description': 'When they want to buy it. Leave out when there is no date.'},
+          'link': {'type': 'string', 'description': 'Where to buy it, when the user gives one.'},
+          'note': {'type': 'string'},
+        },
+        ['name', 'amount'],
       ),
     ),
     AiTool(
@@ -790,17 +811,22 @@ class HubTools {
   Future<Map<String, Object?>> savings() async {
     final goals = await db.watchGoals().first;
     final moves = await db.watchMoves().first;
+    final now = clock();
     return {
       'goals': [
         for (final g in goals)
-          {
-            'id': g.id,
-            'name': g.name,
-            'target': _m(g.targetCents),
-            'saved': _m(moves.where((m) => m.goalId == g.id).fold(0, (a, m) => a + m.amountCents)),
-            if (g.deadline != null) 'deadline': day(g.deadline!),
-            if (g.archived) 'archived': true,
-          },
+          if (!isPurchase(g))
+            {
+              'id': g.id,
+              'name': g.name,
+              'target': _m(g.targetCents),
+              'saved': _m(savedFor(g.id, moves)),
+              if (g.deadline != null) 'deadline': day(g.deadline!),
+              if (g.archived) 'archived': true,
+            },
+      ],
+      'purchaseGoals': [
+        for (final g in sortPurchaseGoals(goals.where(isPurchase))) _purchaseGoal(g, planFor(g, moves, now: now)),
       ],
       'recentMoves': [
         for (final m in moves.take(15))
@@ -811,6 +837,39 @@ class HubTools {
             if (m.note.isNotEmpty) 'note': m.note,
           },
       ],
+    };
+  }
+
+  Map<String, Object?> _purchaseGoal(SavingsGoal g, PurchasePlan plan) {
+    final pace = plan.pace;
+    final status = g.archived
+        ? 'bought'
+        : plan.reached
+        ? 'enough saved, ready to buy'
+        : plan.overdue
+        ? 'target date has passed'
+        : pace == null
+        ? null
+        : switch (pace.state) {
+            GoalState.reached => 'enough saved, ready to buy',
+            GoalState.onTrack => 'on track',
+            GoalState.ahead => '${_m(pace.gap)} ahead of plan',
+            GoalState.behind => '${_m(-pace.gap)} behind plan',
+          };
+    return {
+      'id': g.id,
+      'name': g.name,
+      'price': _m(g.targetCents),
+      'putAside': _m(plan.saved),
+      if (!g.archived) 'left': _m(plan.left),
+      if (g.deadline != null) 'targetDate': day(g.deadline!),
+      if (!g.archived && plan.perMonth != null) 'neededPerMonth': _m(plan.perMonth!),
+      if (!g.archived && plan.perWeek != null) 'neededPerWeek': _m(plan.perWeek!),
+      if (!g.archived && plan.projected != null) 'likelyReadyAtCurrentPace': day(plan.projected!),
+      'status': ?status,
+      if (g.archived && g.doneAt != null) 'boughtOn': day(g.doneAt!),
+      if (g.link.isNotEmpty) 'link': g.link,
+      if (g.note.isNotEmpty) 'notes': g.note,
     };
   }
 

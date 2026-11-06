@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -12,13 +10,9 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'insights.dart';
 
-const goalColors = [0xFF1F7A5A, 0xFF3A78C9, 0xFFCF9418, 0xFFB5487A, 0xFF6650AE, 0xFF2D8C9E, 0xFFC0563F];
+export 'pace.dart' show monthsLeft;
 
-/// Months left until [deadline], counting the current one.
-int monthsLeft(DateTime deadline, {DateTime? now}) {
-  final n = now ?? DateTime.now();
-  return math.max(1, (deadline.year - n.year) * 12 + deadline.month - n.month + (deadline.day >= n.day ? 1 : 0));
-}
+const goalColors = [0xFF1F7A5A, 0xFF3A78C9, 0xFFCF9418, 0xFFB5487A, 0xFF6650AE, 0xFF2D8C9E, 0xFFC0563F];
 
 class SavingsTab extends StatelessWidget {
   const SavingsTab({super.key});
@@ -33,8 +27,11 @@ class SavingsTab extends StatelessWidget {
       builder: (context, gSnap) => StreamBuilder<List<SavingsMove>>(
         stream: db.watchMoves(),
         builder: (context, mSnap) {
-          final goals = gSnap.data ?? const <SavingsGoal>[];
-          final moves = mSnap.data ?? const <SavingsMove>[];
+          final all = gSnap.data ?? const <SavingsGoal>[];
+          // Purchase goals live in their own tab; round-ups and payday rules may still feed them.
+          final goals = all.where((g) => !isPurchase(g)).toList();
+          final ids = {for (final g in goals) g.id};
+          final moves = (mSnap.data ?? const <SavingsMove>[]).where((m) => ids.contains(m.goalId)).toList();
           final saved = <int, int>{};
           final first = <int, DateTime>{};
           for (final m in moves) {
@@ -67,10 +64,10 @@ class SavingsTab extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              ContentWidth(child: RoundUpTile(goals: goals)),
+              ContentWidth(child: RoundUpTile(goals: all)),
               const SizedBox(height: 12),
               ContentWidth(
-                child: PaydayTile(goals: goals, moves: moves),
+                child: PaydayTile(goals: all, moves: mSnap.data ?? const <SavingsMove>[]),
               ),
               const SizedBox(height: 12),
               if (goals.isEmpty)
@@ -169,8 +166,8 @@ class _TotalCard extends StatelessWidget {
 }
 
 /// "On track", "€40 ahead" or "€120 behind" against an even pace from the day the goal was made.
-class _GoalTrack extends StatelessWidget {
-  const _GoalTrack({required this.track, required this.currency});
+class GoalTrackLine extends StatelessWidget {
+  const GoalTrackLine({super.key, required this.track, required this.currency});
   final GoalPace track;
   final String currency;
 
@@ -266,7 +263,7 @@ class GoalCard extends StatelessWidget {
                 if (left <= 0)
                   Text('Goal reached', style: TextStyle(color: p.positive, fontSize: 14))
                 else ...[
-                  if (track != null) ...[const SizedBox(height: 2), _GoalTrack(track: track, currency: currency)],
+                  if (track != null) ...[const SizedBox(height: 2), GoalTrackLine(track: track, currency: currency)],
                   if (pace != null) Text(pace, style: TextStyle(color: p.muted, fontSize: 14)),
                 ],
                 const SizedBox(height: 6),
