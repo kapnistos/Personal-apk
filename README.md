@@ -17,7 +17,7 @@ your phone and PC to share data, one of your own computers acts as the server (s
 <p align="center">
   <img src="screenshots/out/phone-light-job.png" width="210" alt="Job: work days, hours and overtime">
   <img src="screenshots/out/phone-light-weather.png" width="210" alt="Weather with rain in the next hours">
-  <img src="screenshots/out/phone-light-todo.png" width="210" alt="To-do">
+  <img src="screenshots/out/phone-light-todo.png" width="210" alt="Lists">
   <img src="screenshots/out/phone-dark-history.png" width="210" alt="AI chat history with token use">
 </p>
 <p align="center">
@@ -40,8 +40,8 @@ your phone and PC to share data, one of your own computers acts as the server (s
 | **Home** | Weather, your day (free time, tasks due, money left) and your apps on top, then widgets you arrange: tap Edit or hold any widget to resize, reshape, recolour, move or remove it. Tap your profile picture for settings. Back from any tab returns here. |
 | **Weather** | Pick any place or use your location. Buienradar for rain in the next hours (NL/BE), Open-Meteo or Google Weather for the days ahead. |
 | **Calendar** | Day, week, month and an endless agenda. Swipe between periods, several calendars, repeats, reminders, subscribed .ics calendars. |
-| **To-do** | Quick add in plain words ("gym friday 7pm every week !"), reminders with Done and Snooze from the notification, repeating tasks, smart groups. |
-| **Notes** | Coloured notes in a masonry grid, checklists you can tick from the preview, pinning, search. |
+| **Lists: To-do** | Quick add in plain words ("gym friday 7pm every week !"), reminders with Done and Snooze from the notification, repeating tasks, smart groups. |
+| **Lists: Notes** | Coloured notes in a masonry grid, checklists you can tick from the preview, pinning, search. |
 | **Wallet** | Its own tab. What is left to spend this month and whether you are on track, a day-by-day strip with safe to spend today and where the month will end, recurring payments and income, bank cards with live balances, savings goals with on-track checks, an investment portfolio with live prices, year overview and CSV import/export. |
 | **Shopping** | Type everything in one line. Each item goes under the shop where it is usually cheapest, with an integrated AI price check against current offers. |
 | **Job / University / your own** | A space each: important dates with countdowns, meetings, a plan with progress, saved notes, links and files. Job adds a work log with hours worked or planned, contract hours, overtime or hours owed, and holidays left. Create your own spaces too. |
