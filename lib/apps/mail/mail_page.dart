@@ -1,9 +1,6 @@
-import 'package:drift/drift.dart' show Value;
 import 'package:enough_mail/enough_mail.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
@@ -12,8 +9,10 @@ import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../claude/claude_bridge.dart';
+import 'account_setup.dart';
 import 'mail_service.dart';
-import 'microsoft_auth.dart';
+
+export 'account_setup.dart' show MailAccountsPage, openAccountSetup;
 
 class MailPage extends StatefulWidget {
   const MailPage({super.key});
@@ -93,7 +92,8 @@ class _MailPageState extends State<MailPage> {
               ? EmptyState(
                   icon: Icons.mail_outline_rounded,
                   title: 'No mail accounts',
-                  message: 'Add Gmail, Proton (through Proton Bridge) or any IMAP account.',
+                  message:
+                      'Connect Gmail, Outlook, Proton, iCloud, Yahoo or any other mailbox. Hub walks you through it.',
                   action: FilledButton.icon(
                     onPressed: () => openAccountSetup(context),
                     icon: const Icon(Icons.add_rounded),
@@ -137,6 +137,10 @@ class _MailPageState extends State<MailPage> {
                                   Icon(Icons.error_outline_rounded, color: p.danger, size: 20),
                                   const SizedBox(width: 10),
                                   Expanded(child: Text('${e.account.email}: ${e.message}')),
+                                  TextButton(
+                                    onPressed: () => openAccountSetup(context, existing: e.account),
+                                    child: const Text('Fix'),
+                                  ),
                                 ],
                               ),
                             ),
@@ -502,351 +506,6 @@ class _ComposeState extends State<_Compose> {
               textCapitalization: TextCapitalization.sentences,
               style: const TextStyle(height: 1.5),
               decoration: line.copyWith(hintText: 'Write your message'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class MailAccountsPage extends StatelessWidget {
-  const MailAccountsPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final p = Palette.of(context);
-    return Scaffold(
-      appBar: HubBar(title: const Text('Mail accounts')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => openAccountSetup(context),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Add'),
-      ),
-      body: StreamBuilder<List<MailboxAccount>>(
-        stream: context.db.watchMailAccounts(),
-        builder: (context, snap) {
-          final list = snap.data ?? const <MailboxAccount>[];
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              for (final a in list)
-                ContentWidth(
-                  child: Card(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    child: Press(
-                      child: ListTile(
-                        leading: CircleAvatar(backgroundColor: Color(a.color), radius: 8),
-                        title: Text(a.email),
-                        subtitle: Text('${presetFor(a.provider).label} · ${a.imapHost}'),
-                        trailing: IconButton(
-                          tooltip: 'Remove',
-                          icon: Icon(Icons.delete_outline_rounded, color: p.danger),
-                          onPressed: () async {
-                            final db = context.db;
-                            final ok = await showDialog<bool>(
-                              context: context,
-                              builder: (d) => AlertDialog(
-                                title: const Text('Remove account?'),
-                                content: Text('${a.email} is removed from Hub. Nothing is deleted on the server.'),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Cancel')),
-                                  FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('Remove')),
-                                ],
-                              ),
-                            );
-                            if (ok == true) {
-                              await MailService.instance.forget(a.id);
-                              await db.deleteMailAccount(a.id);
-                            }
-                          },
-                        ),
-                        onTap: () => openAccountSetup(context, existing: a),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-Future<void> openAccountSetup(BuildContext context, {MailboxAccount? existing}) =>
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => _AccountSetup(existing: existing)));
-
-class _AccountSetup extends StatefulWidget {
-  const _AccountSetup({this.existing});
-  final MailboxAccount? existing;
-
-  @override
-  State<_AccountSetup> createState() => _AccountSetupState();
-}
-
-class _AccountSetupState extends State<_AccountSetup> {
-  late MailPreset _preset = presetFor(widget.existing?.provider ?? 'gmail');
-  late final _email = TextEditingController(text: widget.existing?.email ?? '');
-  late final _name = TextEditingController(text: widget.existing?.name ?? '');
-  final _password = TextEditingController();
-  late final _imapHost = TextEditingController(text: widget.existing?.imapHost ?? _preset.imapHost);
-  late final _imapPort = TextEditingController(text: '${widget.existing?.imapPort ?? _preset.imapPort}');
-  late final _smtpHost = TextEditingController(text: widget.existing?.smtpHost ?? _preset.smtpHost);
-  late final _smtpPort = TextEditingController(text: '${widget.existing?.smtpPort ?? _preset.smtpPort}');
-  final _clientId = TextEditingController();
-  bool _advanced = false;
-  bool _busy = false;
-  String? _error;
-  DeviceCode? _code;
-  String? _oauthSecret;
-  bool _disposed = false;
-
-  bool get _isOutlook => _preset.id == 'outlook';
-
-  @override
-  void dispose() {
-    _disposed = true;
-    for (final c in [_email, _name, _password, _imapHost, _imapPort, _smtpHost, _smtpPort, _clientId]) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  Future<void> _signInMicrosoft() async {
-    final clientId = _clientId.text.trim();
-    if (clientId.isEmpty) {
-      setState(() => _error = 'Paste the Application (client) ID from your app registration first.');
-      return;
-    }
-    setState(() {
-      _error = null;
-      _busy = true;
-    });
-    try {
-      final code = await MicrosoftAuth.start(clientId);
-      if (!mounted) return;
-      setState(() => _code = code);
-      await Clipboard.setData(ClipboardData(text: code.userCode));
-      await launchUrl(Uri.parse(code.url), mode: LaunchMode.externalApplication);
-      final token = await MicrosoftAuth.poll(clientId, code, cancelled: () => _disposed);
-      if (!mounted) return;
-      setState(() {
-        _oauthSecret = MailService.oauthSecret(clientId, token);
-        _code = null;
-        _busy = false;
-      });
-      await _save();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _code = null;
-        _error = '$e';
-      });
-    }
-  }
-
-  void _pick(MailPreset p) => setState(() {
-    _preset = p;
-    _imapHost.text = p.imapHost;
-    _imapPort.text = '${p.imapPort}';
-    _smtpHost.text = p.smtpHost;
-    _smtpPort.text = '${p.smtpPort}';
-    _advanced = p.id == 'imap' || p.id == 'proton';
-    _error = null;
-  });
-
-  MailboxAccount _draft(int id) => MailboxAccount(
-    id: id,
-    provider: _preset.id,
-    name: _name.text.trim().isEmpty ? _email.text.trim() : _name.text.trim(),
-    email: _email.text.trim(),
-    imapHost: _imapHost.text.trim(),
-    imapPort: int.tryParse(_imapPort.text) ?? _preset.imapPort,
-    imapSecurity: _preset.imapSecurity,
-    smtpHost: _smtpHost.text.trim(),
-    smtpPort: int.tryParse(_smtpPort.text) ?? _preset.smtpPort,
-    smtpSecurity: _preset.smtpSecurity,
-    color: _preset.color,
-    allowSelfSigned: _preset.allowSelfSigned,
-  );
-
-  Future<void> _save() async {
-    final secret = _isOutlook ? _oauthSecret : _password.text;
-    if (!_email.text.contains('@') || secret == null || secret.isEmpty || _imapHost.text.trim().isEmpty) {
-      setState(
-        () => _error = _isOutlook
-            ? 'Fill in the email address, then sign in with Microsoft.'
-            : 'Fill in the email address, ${_preset.passwordLabel.toLowerCase()} and server.',
-      );
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    final db = context.db;
-    final draft = _draft(widget.existing?.id ?? 0);
-    try {
-      await MailService.instance.test(draft, secret);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _error = '$e';
-      });
-      return;
-    }
-    final c = draft.toCompanion(false);
-    final id = await db.saveMailAccount(widget.existing == null ? c.copyWith(id: const Value.absent()) : c);
-    final accountId = widget.existing?.id ?? id;
-    await MailService.instance.forget(accountId);
-    await MailService.instance.savePassword(accountId, secret);
-    if (mounted) Navigator.pop(context);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final p = Palette.of(context);
-    return Scaffold(
-      appBar: HubBar(title: Text(widget.existing == null ? 'Add mail account' : 'Edit account')),
-      body: ContentWidth(
-        maxWidth: 560,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-          children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final preset in mailPresets)
-                  ChoiceChip(
-                    showCheckmark: false,
-                    label: Text(preset.label),
-                    selected: _preset.id == preset.id,
-                    onSelected: preset.available ? (_) => _pick(preset) : null,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: p.raised, borderRadius: BorderRadius.circular(12)),
-              child: Text(_preset.help, style: TextStyle(color: p.muted, height: 1.45)),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _email,
-              keyboardType: TextInputType.emailAddress,
-              decoration: InputDecoration(
-                hintText: _preset.id == 'proton' ? 'Email (as shown in Bridge)' : 'Email address',
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _name,
-              decoration: const InputDecoration(hintText: 'Your name, shown to recipients'),
-            ),
-            const SizedBox(height: 10),
-            if (_isOutlook)
-              TextField(
-                controller: _clientId,
-                decoration: const InputDecoration(hintText: 'Application (client) ID'),
-              )
-            else
-              TextField(
-                controller: _password,
-                obscureText: true,
-                decoration: InputDecoration(hintText: _preset.passwordLabel),
-              ),
-            if (_code != null)
-              Container(
-                margin: const EdgeInsets.only(top: 12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: p.raised, borderRadius: BorderRadius.circular(16)),
-                child: Column(
-                  children: [
-                    Text('Enter this code at ${_code!.url}', textAlign: TextAlign.center),
-                    const SizedBox(height: 8),
-                    SelectableText(
-                      _code!.userCode,
-                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: 4),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Copied to the clipboard. Waiting for you to approve…',
-                      style: TextStyle(color: p.muted, fontSize: 13.5),
-                    ),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 6),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: () => setState(() => _advanced = !_advanced),
-                child: Text(_advanced ? 'Hide server settings' : 'Server settings'),
-              ),
-            ),
-            if (_advanced) ...[
-              Row(
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: TextField(
-                      controller: _imapHost,
-                      decoration: const InputDecoration(labelText: 'IMAP server'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _imapPort,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Port'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: TextField(
-                      controller: _smtpHost,
-                      decoration: const InputDecoration(labelText: 'SMTP server'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _smtpPort,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Port'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-            ],
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(_error!, style: TextStyle(color: p.danger)),
-              ),
-            const SizedBox(height: 10),
-            FilledButton(
-              onPressed: _busy ? null : (_isOutlook ? _signInMicrosoft : _save),
-              child: _busy
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : Text(_isOutlook ? 'Sign in with Microsoft' : 'Connect and save'),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Passwords are stored in the Windows Credential Manager or the Android keystore, never in the app database.',
-              style: TextStyle(color: p.muted, fontSize: 13),
             ),
           ],
         ),

@@ -5,107 +5,11 @@ import 'package:enough_mail/enough_mail.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../core/db/database.dart';
+import 'mail_errors.dart';
 import 'microsoft_auth.dart';
 
-/// Presets for the providers Hub knows. Ports and hosts can be edited.
-class MailPreset {
-  const MailPreset({
-    required this.id,
-    required this.label,
-    required this.imapHost,
-    required this.imapPort,
-    required this.imapSecurity,
-    required this.smtpHost,
-    required this.smtpPort,
-    required this.smtpSecurity,
-    required this.passwordLabel,
-    required this.help,
-    required this.color,
-    this.allowSelfSigned = false,
-    this.available = true,
-  });
-
-  final String id;
-  final String label;
-  final String imapHost;
-  final int imapPort;
-  final String imapSecurity;
-  final String smtpHost;
-  final int smtpPort;
-  final String smtpSecurity;
-  final String passwordLabel;
-  final String help;
-  final int color;
-  final bool allowSelfSigned;
-  final bool available;
-}
-
-const mailPresets = <MailPreset>[
-  MailPreset(
-    id: 'gmail',
-    label: 'Gmail',
-    imapHost: 'imap.gmail.com',
-    imapPort: 993,
-    imapSecurity: 'ssl',
-    smtpHost: 'smtp.gmail.com',
-    smtpPort: 465,
-    smtpSecurity: 'ssl',
-    passwordLabel: 'App password',
-    help:
-        'Google needs an app password, not your normal one. Turn on 2-Step Verification, '
-        'then create one at myaccount.google.com/apppasswords and paste the 16 letters here.',
-    color: 0xFFC0563F,
-  ),
-  MailPreset(
-    id: 'proton',
-    label: 'Proton Mail',
-    imapHost: '127.0.0.1',
-    imapPort: 1143,
-    imapSecurity: 'starttls',
-    smtpHost: '127.0.0.1',
-    smtpPort: 1025,
-    smtpSecurity: 'starttls',
-    passwordLabel: 'Bridge password',
-    help:
-        'Proton works through Proton Bridge. Open Bridge on your PC, click your account, '
-        'and copy the IMAP username and password it shows (not your Proton password). '
-        'On the phone this works once the laptop server runs Bridge; then use its address as the host.',
-    color: 0xFF6D4AFF,
-    allowSelfSigned: true,
-  ),
-  MailPreset(
-    id: 'outlook',
-    label: 'Outlook',
-    imapHost: 'outlook.office365.com',
-    imapPort: 993,
-    imapSecurity: 'ssl',
-    smtpHost: 'smtp-mail.outlook.com',
-    smtpPort: 587,
-    smtpSecurity: 'starttls',
-    passwordLabel: 'Microsoft sign-in',
-    help:
-        'Outlook only allows Microsoft sign-in. That needs a one-time app registration of your own '
-        '(free, about 5 minutes): portal.azure.com → App registrations → New registration, name "Hub", '
-        'choose "Accounts in any organizational directory and personal Microsoft accounts", Register. '
-        'Then Authentication → "Allow public client flows" → Yes, Save. Paste the Application (client) ID below.',
-    color: 0xFF2F6FB5,
-  ),
-  MailPreset(
-    id: 'imap',
-    label: 'Other (IMAP)',
-    imapHost: '',
-    imapPort: 993,
-    imapSecurity: 'ssl',
-    smtpHost: '',
-    smtpPort: 465,
-    smtpSecurity: 'ssl',
-    passwordLabel: 'Password',
-    help: 'Any provider with IMAP and SMTP. Your provider lists the server names in its help pages.',
-    color: 0xFF2D8C9E,
-  ),
-];
-
-MailPreset presetFor(String id) => mailPresets.firstWhere((p) => p.id == id, orElse: () => mailPresets.last);
+export 'mail_errors.dart';
+export 'mail_providers.dart';
 
 /// One message in the unified inbox.
 class MailItem {
@@ -131,6 +35,39 @@ class MailError {
   final String message;
 }
 
+/// A keystore entry, read back: a password (with an optional login name) or a Microsoft sign-in.
+class MailSecret {
+  const MailSecret({this.password, this.username, this.clientId, this.token});
+
+  factory MailSecret.parse(String s) {
+    try {
+      if (s.startsWith('oauth:')) {
+        final j = jsonDecode(s.substring(6)) as Map<String, dynamic>;
+        return MailSecret(
+          clientId: j['clientId'] as String,
+          token: OauthToken.fromJson((j['token'] as Map).cast<String, dynamic>()),
+        );
+      }
+      if (s.startsWith('login:')) {
+        final j = jsonDecode(s.substring(6)) as Map<String, dynamic>;
+        return MailSecret(password: j['password'] as String, username: j['user'] as String?);
+      }
+    } catch (_) {
+      // Not one of ours after all; it is a plain password that happens to start that way.
+    }
+    return MailSecret(password: s);
+  }
+
+  final String? password;
+
+  /// The login name when it isn't the email address.
+  final String? username;
+  final String? clientId;
+  final OauthToken? token;
+
+  bool get isMicrosoft => token != null;
+}
+
 class MailService {
   MailService._();
   static final instance = MailService._();
@@ -143,10 +80,30 @@ class MailService {
 
   Future<String?> _password(int accountId) => _storage.read(key: 'mail-pass-$accountId');
 
+  /// The saved keystore entry of [accountId] as stored, or null.
+  Future<String?> savedSecret(int accountId) async {
+    try {
+      return await _password(accountId);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> forget(int accountId) async {
     await _clients.remove(accountId)?.disconnect().catchError((_) {});
     await _storage.delete(key: 'mail-pass-$accountId');
   }
+
+  /// The Microsoft app registration's client ID, kept so a second Outlook account doesn't ask for it again.
+  Future<String?> savedMicrosoftClientId() async {
+    try {
+      return await _storage.read(key: 'mail-ms-client-id');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveMicrosoftClientId(String id) => _storage.write(key: 'mail-ms-client-id', value: id);
 
   static SocketType _socket(String s) => s == 'starttls' ? SocketType.starttls : SocketType.ssl;
 
@@ -154,35 +111,44 @@ class MailService {
   static String oauthSecret(String clientId, OauthToken token) =>
       'oauth:${jsonEncode({'clientId': clientId, 'token': token.toJson()})}';
 
-  static (String, OauthToken)? _parseOauth(String secret) {
-    if (!secret.startsWith('oauth:')) return null;
-    final j = jsonDecode(secret.substring(6)) as Map<String, dynamic>;
-    return (j['clientId'] as String, OauthToken.fromJson((j['token'] as Map).cast<String, dynamic>()));
+  /// A password, with the login name only when it isn't the email address.
+  static String passwordSecret(String password, {String? username}) {
+    final u = username?.trim() ?? '';
+    return u.isEmpty && !password.startsWith('oauth:') && !password.startsWith('login:')
+        ? password
+        : 'login:${jsonEncode({'user': u.isEmpty ? null : u, 'password': password})}';
   }
 
-  static MailAccount buildAccount(MailboxAccount a, String secret) => MailAccount.fromManualSettingsWithAuth(
-    name: a.name,
-    email: a.email,
-    userName: a.name,
-    auth: switch (_parseOauth(secret)) {
-      (_, final token) => OauthAuthentication(a.email, token),
-      null => PlainAuthentication(a.email, secret),
-    },
-    incomingHost: a.imapHost,
-    incomingPort: a.imapPort,
-    incomingSocketType: _socket(a.imapSecurity),
-    outgoingHost: a.smtpHost,
-    outgoingPort: a.smtpPort,
-    outgoingSocketType: _socket(a.smtpSecurity),
-    outgoingClientDomain: 'hub.local',
-  );
+  static (String, OauthToken)? _parseOauth(String secret) {
+    final s = MailSecret.parse(secret);
+    return s.token == null ? null : (s.clientId!, s.token!);
+  }
+
+  static MailAccount buildAccount(MailboxAccount a, String secret) {
+    final s = MailSecret.parse(secret);
+    return MailAccount.fromManualSettingsWithAuth(
+      name: a.name,
+      email: a.email,
+      userName: a.name,
+      auth: s.token != null
+          ? OauthAuthentication(a.email, s.token!)
+          : PlainAuthentication(s.username ?? a.email, s.password ?? ''),
+      incomingHost: a.imapHost,
+      incomingPort: a.imapPort,
+      incomingSocketType: _socket(a.imapSecurity),
+      outgoingHost: a.smtpHost,
+      outgoingPort: a.smtpPort,
+      outgoingSocketType: _socket(a.smtpSecurity),
+      outgoingClientDomain: 'hub.local',
+    );
+  }
 
   MailClient _newClient(MailboxAccount a, String secret) {
     final oauth = _parseOauth(secret);
     return MailClient(
       buildAccount(a, secret),
-      // Only Proton Bridge on a local or private address may use its own certificate.
-      onBadCertificate: (_) => a.allowSelfSigned && _isPrivateHost(a.imapHost),
+      // Only a server on this computer or the home network (Proton Bridge) may use its own certificate.
+      onBadCertificate: (_) => a.allowSelfSigned && isPrivateHost(a.imapHost),
       refresh: oauth == null
           ? null
           : (client, expired) async {
@@ -193,7 +159,7 @@ class MailService {
     );
   }
 
-  static bool _isPrivateHost(String h) =>
+  static bool isPrivateHost(String h) =>
       h == 'localhost' ||
       h.startsWith('127.') ||
       h.startsWith('10.') ||
@@ -201,47 +167,72 @@ class MailService {
       h.startsWith('100.') || // Tailscale
       RegExp(r'^172\.(1[6-9]|2\d|3[01])\.').hasMatch(h);
 
-  /// Connects with the given password without saving anything. Throws a
-  /// readable message on failure.
-  Future<void> test(MailboxAccount a, String password) async {
-    final client = _newClient(a, password);
+  /// Signs in to both servers with [secret] without saving anything: reading mail (IMAP) first, then
+  /// sending (SMTP). [onStep] hears "incoming" and "outgoing" as each one starts. Throws a [MailProblem].
+  Future<void> test(MailboxAccount a, String secret, {void Function(String step)? onStep}) async {
+    final oauth = _parseOauth(secret) != null;
+    onStep?.call('incoming');
+    final client = _newClient(a, secret);
     try {
-      await client.connect(timeout: const Duration(seconds: 15));
-      await client.disconnect();
-    } on MailException catch (e) {
-      throw explain(e.message ?? '$e', a);
+      await client.connect(timeout: const Duration(seconds: 15)).timeout(const Duration(seconds: 40));
     } catch (e) {
-      throw explain('$e', a);
+      throw describeMailError(e, provider: a.provider, host: a.imapHost, port: a.imapPort, oauth: oauth);
+    } finally {
+      unawaited(client.disconnect().catchError((_) {}));
+    }
+    onStep?.call('outgoing');
+    final account = buildAccount(a, secret);
+    final smtp = SmtpClient('hub.local', onBadCertificate: (_) => a.allowSelfSigned && isPrivateHost(a.smtpHost));
+    try {
+      await () async {
+        final config = account.outgoing.serverConfig;
+        await smtp.connectToServer(
+          config.hostname,
+          config.port,
+          isSecure: config.socketType == SocketType.ssl,
+          timeout: const Duration(seconds: 15),
+        );
+        await smtp.ehlo();
+        if (config.socketType == SocketType.starttls) {
+          // Never send the password in clear text.
+          if (!smtp.serverInfo.supportsStartTls) throw 'STARTTLS is not supported by ${config.hostname}';
+          await smtp.startTls();
+        }
+        await account.outgoing.authentication.authenticate(config, smtp: smtp);
+      }().timeout(const Duration(seconds: 40));
+    } catch (e) {
+      throw describeMailError(
+        e,
+        provider: a.provider,
+        host: a.smtpHost,
+        port: a.smtpPort,
+        outgoing: true,
+        oauth: oauth,
+      );
+    } finally {
+      unawaited(smtp.disconnect().catchError((_) {}));
     }
   }
 
-  static String explain(String raw, MailboxAccount a) {
-    final r = raw.toLowerCase();
-    if (r.contains('authenticat') || r.contains('login') || r.contains('credentials') || r.contains('password')) {
-      return a.provider == 'gmail'
-          ? 'Gmail refused the login. Use an app password, not your normal password.'
-          : 'The server refused the email or password.';
-    }
-    if (r.contains('refused') || r.contains('connection') || r.contains('socket') || r.contains('timeout')) {
-      return a.provider == 'proton'
-          ? 'Could not reach Proton Bridge at ${a.imapHost}:${a.imapPort}. Is Bridge running?'
-          : 'Could not reach ${a.imapHost}. Check the server name and your connection.';
-    }
-    return raw;
-  }
+  static String explain(String raw, MailboxAccount a) =>
+      describeMailError(raw, provider: a.provider, host: a.imapHost, port: a.imapPort).text;
 
   Future<MailClient> _client(MailboxAccount a) async {
     final existing = _clients[a.id];
     if (existing != null && existing.isConnected) return existing;
     final password = await _password(a.id);
-    if (password == null) throw 'Password missing. Open the account and enter it again.';
+    if (password == null) throw 'Password missing. Open the account under Accounts and enter it again.';
     final client = _newClient(a, password);
     try {
       await client.connect();
-    } on MailException catch (e) {
-      throw explain(e.message ?? '$e', a);
     } catch (e) {
-      throw explain('$e', a);
+      throw describeMailError(
+        e,
+        provider: a.provider,
+        host: a.imapHost,
+        port: a.imapPort,
+        oauth: _parseOauth(password) != null,
+      ).text;
     }
     _clients[a.id] = client;
     return client;
@@ -284,7 +275,7 @@ class MailService {
     try {
       await client.sendMessage(message);
     } on MailException catch (e) {
-      throw explain(e.message ?? '$e', a);
+      throw describeMailError(e, provider: a.provider, host: a.smtpHost, port: a.smtpPort, outgoing: true).text;
     }
   }
 
