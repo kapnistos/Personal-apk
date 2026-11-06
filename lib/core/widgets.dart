@@ -588,3 +588,54 @@ class AppCircle extends StatelessWidget {
     );
   }
 }
+
+/// Rebuilds [builder] when the minute turns and when the app comes back to the front, so text such as
+/// "Good morning", today's date or "next up at 11:00" never stays behind the clock.
+class ClockBuilder extends StatefulWidget {
+  const ClockBuilder({super.key, required this.builder});
+  final Widget Function(BuildContext context, DateTime now) builder;
+
+  @override
+  State<ClockBuilder> createState() => _ClockBuilderState();
+}
+
+class _ClockBuilderState extends State<ClockBuilder> with WidgetsBindingObserver {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _schedule();
+  }
+
+  /// Wakes up just after the next whole minute, rather than every minute from whenever it started.
+  void _schedule() {
+    _timer?.cancel();
+    final now = DateTime.now();
+    final next = DateTime(now.year, now.month, now.day, now.hour, now.minute + 1);
+    _timer = Timer(next.difference(now) + const Duration(milliseconds: 50), () {
+      if (!mounted) return;
+      setState(() {});
+      _schedule();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      setState(() {});
+      _schedule();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, DateTime.now());
+}

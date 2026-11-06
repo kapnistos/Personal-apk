@@ -81,9 +81,21 @@ class _SearchPageState extends State<SearchPage> {
   _SearchResults? _results;
   Map<int, Calendar> _cals = {};
   Map<int, Space> _spaces = {};
+  StreamSubscription<Set<TableUpdate>>? _updates;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Results follow the data: a task ticked off here, a note deleted after opening it, or an event moved show
+    // as they are now rather than as they were when the search ran.
+    _updates ??= context.db.tableUpdates().listen((_) {
+      if (_results != null) _changed(_controller.text);
+    });
+  }
 
   @override
   void dispose() {
+    _updates?.cancel();
     _debounce?.cancel();
     _controller.dispose();
     super.dispose();

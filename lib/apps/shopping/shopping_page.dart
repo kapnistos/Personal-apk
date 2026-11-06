@@ -421,25 +421,30 @@ class _ShoppingPageState extends State<ShoppingPage> with WidgetsBindingObserver
               ),
               const SizedBox(height: 10),
               ContentWidth(
-                child: Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    PillToggle<bool>(
-                      dense: true,
-                      options: const [(true, 'By shop'), (false, 'By aisle')],
-                      value: _byShop,
-                      onChanged: (v) => setState(() => _byShop = v),
-                    ),
-                    if (open.isNotEmpty)
-                      TextButton.icon(
-                        onPressed: _checking ? null : () => _bestPrices(items),
-                        icon: _checking
-                            ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.auto_awesome_outlined, size: 18),
-                        label: const Text('Best prices'),
+                // Full width, so the toggle lines up with the list's left edge and Best prices sits on the right
+                // (ContentWidth centres whatever is narrower than the page).
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      PillToggle<bool>(
+                        dense: true,
+                        options: const [(true, 'By shop'), (false, 'By aisle')],
+                        value: _byShop,
+                        onChanged: (v) => setState(() => _byShop = v),
                       ),
-                  ],
+                      if (open.isNotEmpty)
+                        TextButton.icon(
+                          onPressed: _checking ? null : () => _bestPrices(items),
+                          icon: _checking
+                              ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.auto_awesome_outlined, size: 18),
+                          label: const Text('Best prices'),
+                        ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 6),

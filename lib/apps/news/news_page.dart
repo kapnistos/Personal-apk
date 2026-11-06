@@ -111,7 +111,14 @@ class _NewsPageState extends State<NewsPage> {
                   style: TextStyle(color: p.muted, fontSize: 13),
                 ),
               ),
-              if (items.isEmpty && !_loading)
+              if (items.isEmpty && !_loading && _news.items.isNotEmpty)
+                // Other topics have stories; this one just has none (or its feeds are switched off).
+                EmptyState(
+                  icon: Icons.newspaper_rounded,
+                  title: 'Nothing in $_topic right now',
+                  message: 'Pull down to check again, or add a feed for it under Sources.',
+                )
+              else if (items.isEmpty && !_loading)
                 EmptyState(
                   icon: Icons.cloud_off_rounded,
                   title: 'No news yet',

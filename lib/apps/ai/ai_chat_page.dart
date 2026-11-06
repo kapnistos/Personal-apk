@@ -410,6 +410,12 @@ class _AiChatPageState extends State<AiChatPage> with WidgetsBindingObserver, Cl
       if (mounted && gen == _gen) await _handOff(text, agent, why: e.note);
     } on AiException catch (e) {
       if (mounted && gen == _gen) setState(() => _turns.add(_Turn('assistant', e.message, error: true)));
+    } catch (_) {
+      // Anything unexpected (a reply in a shape nobody planned for, a storage hiccup) still gets an answer on
+      // screen, instead of a question left hanging with no reply.
+      if (mounted && gen == _gen) {
+        setState(() => _turns.add(_Turn('assistant', 'Something went wrong there. Try again.', error: true)));
+      }
     } finally {
       ai.close();
       if (mounted && gen == _gen) {
