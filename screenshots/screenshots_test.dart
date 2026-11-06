@@ -15,7 +15,9 @@ import 'package:hub/apps/ai/ai_usage.dart';
 import 'package:hub/apps/ai/chat_history_page.dart';
 import 'package:hub/apps/ai/chat_memory.dart';
 import 'package:hub/core/edition.dart';
+import 'package:hub/apps/calendar/calendar_model.dart';
 import 'package:hub/apps/calendar/calendar_page.dart';
+import 'package:hub/apps/calendar/event_editor.dart';
 import 'package:hub/apps/claude/claude_page.dart';
 import 'package:hub/apps/news/news_page.dart';
 import 'package:hub/apps/news/news_service.dart';
@@ -413,6 +415,36 @@ class _WithAiSettingsState extends State<_WithAiSettings> {
   Widget build(BuildContext context) => const AiChatPage(inTab: true);
 }
 
+/// The calendar with an event open, as after tapping it, or with a new event started.
+class _CalendarWith extends StatefulWidget {
+  const _CalendarWith({required this.editor});
+  final bool editor;
+  @override
+  State<_CalendarWith> createState() => _CalendarWithState();
+}
+
+class _CalendarWithState extends State<_CalendarWith> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (widget.editor) {
+        openEventEditor(context, start: defaultEventStart(DateTime.now(), DateTime.now()));
+        return;
+      }
+      final db = context.db;
+      final cals = {for (final c in await db.watchCalendars().first) c.id: c};
+      final today = dateOnly(DateTime.now());
+      final events = await db.watchEventsBetween(today, addDays(today, 7)).first;
+      final occ = expand(events, cals, today, addDays(today, 7)).where((o) => !o.allDay).toList();
+      if (mounted && occ.isNotEmpty) showEventDetails(context, occ.first);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const CalendarPage();
+}
+
 void main() {
   AiSetup.store = MemoryAiKeyStore()..values['ai-key-openrouter'] = 'sk-or-v1-demo-key-for-screenshots';
   // Pictures in the docs show the public build: no Lab or Internships.
@@ -423,6 +455,8 @@ void main() {
     'home': null,
     'weather': () => const WeatherPage(),
     'calendar': () => const CalendarPage(),
+    'calendar-event': () => const _CalendarWith(editor: false),
+    'calendar-new': () => const _CalendarWith(editor: true),
     'todo': () => const TodoPage(),
     'notes': () => const NotesPage(),
     'wallet': () => const WalletPage(),
@@ -450,7 +484,7 @@ void main() {
       for (final e in shots.entries) {
         if (device == 'desktop' && !['home', 'calendar', 'wallet', 'weather'].contains(e.key)) continue;
         if (e.key == 'dashboard' && device == 'desktop') continue;
-        if (dark && !['home', 'calendar', 'wallet', 'todo', 'subscriptions', 'dashboard', 'me', 'ai', 'chat', 'history', 'agent', 'savings'].contains(e.key)) continue;
+        if (dark && !['home', 'calendar', 'calendar-event', 'calendar-new', 'wallet', 'todo', 'subscriptions', 'dashboard', 'me', 'ai', 'chat', 'history', 'agent', 'savings'].contains(e.key)) continue;
         testWidgets('$device ${dark ? 'dark' : 'light'} ${e.key}', (tester) async {
           // The whole home screen, top to bottom.
           tester.view.physicalSize = e.key == 'dashboard' ? Size(size.width, 7200) : size;
