@@ -6,8 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../apps/ai/ai_page.dart';
 import '../apps/calendar/calendar_page.dart';
-import '../apps/notes/notes_page.dart';
-import '../apps/todo/todo_page.dart';
+import '../apps/lists/lists_page.dart';
 import '../apps/wallet/wallet_page.dart';
 import '../core/settings.dart';
 import '../core/theme.dart';
@@ -21,9 +20,10 @@ abstract final class ShellTab {
   static const home = 0;
   static const calendar = 1;
   static const wallet = 2;
+
+  /// Lists: To-do and Notes together.
   static const todo = 3;
   static const ai = 4;
-  static const notes = 5;
 }
 
 /// One tab the bar can hold.
@@ -63,18 +63,10 @@ final tabSpecs = <TabSpec>[
     'todo',
     Icons.check_circle_outline_rounded,
     Icons.check_circle_rounded,
-    'To-do',
-    () => const TodoPage(),
+    'Lists',
+    () => const ListsPage(),
   ),
   TabSpec(ShellTab.ai, 'ai', Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'AI', () => const AiPage()),
-  TabSpec(
-    ShellTab.notes,
-    'notes',
-    Icons.sticky_note_2_outlined,
-    Icons.sticky_note_2_rounded,
-    'Notes',
-    () => const NotesPage(),
-  ),
 ];
 
 TabSpec tabSpec(int tab) => tabSpecs.firstWhere((t) => t.tab == tab);
@@ -92,7 +84,8 @@ const defaultTabs = [ShellTab.calendar, ShellTab.wallet, ShellTab.todo, ShellTab
 List<int> barTabs(AppSettings s) {
   final raw = s.raw(tabsKey);
   if (raw == null) return defaultTabs;
-  final byId = {for (final t in tabSpecs.skip(1)) t.id: t.tab};
+  // Notes had a tab of its own before it joined To-do in Lists.
+  final byId = {for (final t in tabSpecs.skip(1)) t.id: t.tab, 'notes': ShellTab.todo};
   final out = <int>[];
   for (final id in raw.split(',')) {
     final t = byId[id];
@@ -106,7 +99,8 @@ Future<void> setBarTabs(AppSettings s, List<int> tabs) =>
 
 /// The tab Hub opens on, if it is still on the bar; Home otherwise.
 int startTab(AppSettings s) {
-  final id = s.raw(startTabKey);
+  final raw = s.raw(startTabKey);
+  final id = raw == 'notes' ? 'todo' : raw;
   final tabs = barTabs(s);
   for (final t in tabs) {
     if (tabSpec(t).id == id) return t;
@@ -138,8 +132,6 @@ class _ShellState extends State<Shell> {
         key: ValueKey(t.id),
         child: switch (t.tab) {
           ShellTab.home => HomePage(onOpenTab: openTab),
-          // Notes ends with fixed padding, so it stops above the bar instead of running on under it.
-          ShellTab.notes => _AboveBar(child: t.page()),
           _ => t.page(),
         },
       ),
@@ -286,25 +278,6 @@ class _ShellState extends State<Shell> {
       ),
     ),
   );
-}
-
-/// Keeps a page that was not made to run on under the bottom bar clear of it: the bar's height becomes real
-/// padding, so its last rows and its floating button stay above the glass.
-class _AboveBar extends StatelessWidget {
-  const _AboveBar({required this.child});
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.paddingOf(context).bottom;
-    return ColoredBox(
-      color: Palette.of(context).background,
-      child: Padding(
-        padding: EdgeInsets.only(bottom: bottom),
-        child: MediaQuery.removePadding(context: context, removeBottom: true, child: child),
-      ),
-    );
-  }
 }
 
 /// How far the fog above the bottom bar reaches up into the page.

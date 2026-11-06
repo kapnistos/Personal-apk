@@ -55,7 +55,7 @@ void main() {
             await settle();
 
             // Every tab.
-            for (final tab in ['Calendar', 'Wallet', 'To-do', 'AI', 'Home']) {
+            for (final tab in ['Calendar', 'Wallet', 'Lists', 'AI', 'Home']) {
               await tap(nav(tab));
               await settle();
             }

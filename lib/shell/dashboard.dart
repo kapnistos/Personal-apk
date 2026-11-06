@@ -10,6 +10,7 @@ import '../apps/calendar/calendar_page.dart';
 import '../apps/calendar/event_editor.dart';
 import '../apps/habits/habits_page.dart';
 import '../apps/internships/internships_page.dart';
+import '../apps/lists/lists_page.dart';
 import '../apps/news/news_page.dart';
 import '../apps/news/news_service.dart';
 import '../apps/notes/notes_page.dart';
@@ -1302,7 +1303,12 @@ class _QuickAdd extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final actions = [
-      (Icons.check_circle_outline_rounded, 'Task', TileColors.todo, () => _push(context, const TodoPage())),
+      (
+        Icons.check_circle_outline_rounded,
+        'Task',
+        TileColors.todo,
+        () => _push(context, const ListsPage(initial: ListsView.todo)),
+      ),
       (Icons.sticky_note_2_outlined, 'Note', TileColors.notes, () => openNote(context)),
       (Icons.receipt_long_outlined, 'Expense', TileColors.finance, () => editEntry(context)),
       (Icons.event_outlined, 'Event', TileColors.weather, () => openEventEditor(context)),
@@ -1512,13 +1518,13 @@ class _Tasks extends StatelessWidget {
             color: TileColors.todo,
             value: '${open.length} open',
             caption: open.isEmpty ? 'All done' : (today > 0 ? '$today today · ${open.first.title}' : open.first.title),
-            onTap: () => _push(context, const TodoPage()),
+            onTap: () => _push(context, const ListsPage(initial: ListsView.todo)),
           );
         }
         final max = size == 'm' ? 4 : 8;
         return _Panel(
           title: 'Tasks · ${open.length} open',
-          onMore: () => _push(context, const TodoPage()),
+          onMore: () => _push(context, const ListsPage(initial: ListsView.todo)),
           moreLabel: 'All',
           children: [
             if (open.isEmpty) const _Muted('Nothing open. Nice.'),

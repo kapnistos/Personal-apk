@@ -82,7 +82,10 @@ List<Note> sortNotes(List<Note> notes, NoteSort sort) {
 }
 
 class NotesPage extends StatefulWidget {
-  const NotesPage({super.key});
+  const NotesPage({super.key, this.title});
+
+  /// Replaces the plain "Notes" title, as Lists does with its To-do and Notes switch.
+  final Widget? title;
 
   @override
   State<NotesPage> createState() => _NotesPageState();
@@ -119,7 +122,7 @@ class _NotesPageState extends State<NotesPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: HubBar(
-        title: const Text('Notes'),
+        title: widget.title ?? const Text('Notes'),
         actions: [
           const AskAgentButton(label: 'Summarise', prompt: AgentPrompts.summariseNotes),
           IconButton(

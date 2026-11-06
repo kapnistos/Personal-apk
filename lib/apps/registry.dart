@@ -7,14 +7,13 @@ import 'calendar/calendar_page.dart';
 import 'claude/claude_page.dart';
 import 'habits/habits_page.dart';
 import 'internships/internships_page.dart';
+import 'lists/lists_page.dart';
 import 'mail/mail_page.dart';
 import 'news/news_page.dart';
-import 'notes/notes_page.dart';
 import 'shopping/shopping_model.dart';
 import 'shopping/shopping_page.dart';
 import 'spaces/my_spaces.dart';
 import 'spaces/space_page.dart';
-import 'todo/todo_page.dart';
 import 'wallet/wallet_page.dart';
 import 'weather/weather_page.dart';
 
@@ -42,19 +41,11 @@ final _allApps = <MiniApp>[
   ),
   MiniApp(
     id: 'todo',
-    title: 'To-do',
-    subtitle: 'Tasks with reminders',
+    title: 'Lists',
+    subtitle: 'To-do and notes',
     icon: Icons.check_circle_rounded,
     color: TileColors.todo,
-    builder: (_) => const TodoPage(),
-  ),
-  MiniApp(
-    id: 'notes',
-    title: 'Notes',
-    subtitle: 'Quick notes',
-    icon: Icons.sticky_note_2_rounded,
-    color: TileColors.notes,
-    builder: (_) => const NotesPage(),
+    builder: (_) => const ListsPage(),
   ),
   MiniApp(
     id: 'wallet',

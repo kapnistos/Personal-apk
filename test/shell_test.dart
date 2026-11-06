@@ -25,7 +25,7 @@ void main() {
     addTearDown(tester.view.reset);
   }
 
-  testWidgets('Wallet is a tab, without a back button, between Calendar and To-do', (tester) async {
+  testWidgets('Wallet is a tab, without a back button, between Calendar and Lists', (tester) async {
     phone(tester);
     await pumpWithDb(tester, (db, s) => HubApp(db: db, settings: s), (_) async {
       await settle(tester);
@@ -33,7 +33,7 @@ void main() {
         for (final d in tester.widget<NavigationBar>(find.byType(NavigationBar)).destinations)
           (d as NavigationDestination).label,
       ];
-      expect(labels, ['Home', 'Calendar', 'Wallet', 'To-do', 'AI']);
+      expect(labels, ['Home', 'Calendar', 'Wallet', 'Lists', 'AI']);
       await tester.tap(nav('Wallet'));
       await settle(tester, 800);
       expect(selected(tester), 2);
@@ -47,7 +47,7 @@ void main() {
     phone(tester);
     await pumpWithDb(tester, (db, s) => HubApp(db: db, settings: s), (_) async {
       await settle(tester);
-      for (final tab in ['Calendar', 'Wallet', 'To-do', 'AI']) {
+      for (final tab in ['Calendar', 'Wallet', 'Lists', 'AI']) {
         await tester.tap(nav(tab));
         await settle(tester);
         expect(selected(tester), isNot(0));

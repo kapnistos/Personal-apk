@@ -9,7 +9,7 @@ import 'apps/calendar/calendar_page.dart';
 import 'apps/calendar/feed_sync.dart';
 import 'apps/internships/internships_page.dart';
 import 'apps/habits/habits_page.dart';
-import 'apps/todo/todo_page.dart';
+import 'apps/lists/lists_page.dart';
 import 'apps/wallet/wallet_page.dart';
 import 'core/automations.dart';
 import 'core/backup.dart';
@@ -52,7 +52,7 @@ Future<void> _startBackground(AppDatabase db, AppSettings settings) async {
     final nav = navigatorKey.currentState;
     if (nav == null) return;
     final Widget? page = switch (payload.split(':').first) {
-      'todo' => const TodoPage(),
+      'todo' => const ListsPage(initial: ListsView.todo),
       'event' => const CalendarPage(),
       'application' => const InternshipsPage(),
       'wallet' => const WalletPage(),

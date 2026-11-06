@@ -9,6 +9,7 @@ import '../apps/ai/ai_chat_page.dart';
 import '../apps/calendar/calendar_model.dart';
 import '../apps/calendar/calendar_page.dart';
 import '../apps/internships/internships_page.dart';
+import '../apps/lists/lists_page.dart';
 import '../apps/news/news_page.dart';
 import '../apps/news/news_service.dart';
 import '../apps/notes/notes_page.dart';
@@ -716,7 +717,7 @@ class _StripCell extends StatelessWidget {
 
 /// Where each app sits on Home. Your own spaces join Life; anything new lands under More.
 const _appGroups = [
-  ('Plan', ['calendar', 'todo', 'notes', 'habits', 'weather']),
+  ('Plan', ['calendar', 'todo', 'habits', 'weather']),
   ('Life', ['wallet', 'shopping', 'space:', 'news']),
   ('Work and chat', ['job', 'uni', 'lab', 'internships', 'spaces', 'mail', 'claude']),
 ];
@@ -1388,7 +1389,9 @@ class _TodayCardState extends State<TodayCard> with WidgetsBindingObserver {
                               if (hiddenTodos > 0)
                                 _More(
                                   '$hiddenTodos more ${hiddenTodos == 1 ? 'task' : 'tasks'}',
-                                  () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TodoPage())),
+                                  () => Navigator.of(
+                                    context,
+                                  ).push(MaterialPageRoute(builder: (_) => const ListsPage(initial: ListsView.todo))),
                                 ),
                               for (final a in deadlines)
                                 ListTile(
@@ -1503,7 +1506,8 @@ class RecentNotesCard extends StatelessWidget {
         final notes = (snap.data ?? const <Note>[]).take(4).toList();
         return Section(
           title: 'Recent notes',
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotesPage())),
+          onTap: () =>
+              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ListsPage(initial: ListsView.notes))),
           trailing: IconButton(
             tooltip: 'New note',
             visualDensity: VisualDensity.compact,

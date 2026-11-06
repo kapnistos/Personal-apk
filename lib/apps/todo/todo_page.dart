@@ -26,10 +26,13 @@ const todoSortLabels = {
 };
 
 class TodoPage extends StatefulWidget {
-  const TodoPage({super.key, this.spaceId});
+  const TodoPage({super.key, this.spaceId, this.title});
 
   /// Shows only the tasks of one space when set.
   final int? spaceId;
+
+  /// Replaces the plain "To-do" title, as Lists does with its To-do and Notes switch.
+  final Widget? title;
 
   @override
   State<TodoPage> createState() => _TodoPageState();
@@ -51,7 +54,7 @@ class _TodoPageState extends State<TodoPage> {
     final db = context.db;
     return Scaffold(
       appBar: HubBar(
-        title: const Text('To-do'),
+        title: widget.title ?? const Text('To-do'),
         actions: [
           const AskAgentButton(label: 'Prioritise', prompt: AgentPrompts.prioritise),
           PopupMenuButton<TodoSort>(
