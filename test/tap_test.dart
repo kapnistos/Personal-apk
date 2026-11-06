@@ -101,7 +101,7 @@ void main() {
           }
 
           // The space around each circle belongs to it too: no dead band under a label or between two circles.
-          for (final name in ['Calendar', 'To-do']) {
+          for (final name in ['Calendar', 'Lists']) {
             final tile = find.descendant(of: grid, matching: find.text(name));
             await reveal(tile);
             final label = tester.getRect(tile);
@@ -113,7 +113,7 @@ void main() {
           // Bring the Plan label to the top, so the whole first row of circles is on screen.
           await reveal(find.descendant(of: grid, matching: find.text('Plan')));
           final cal = tester.getRect(find.descendant(of: grid, matching: find.text('Calendar')));
-          final todo = tester.getRect(find.descendant(of: grid, matching: find.text('To-do')));
+          final todo = tester.getRect(find.descendant(of: grid, matching: find.text('Lists')));
           // Halfway between the two circles, level with them (a circle sits about 35 above its label).
           await tester.tapAt(Offset((cal.center.dx + todo.center.dx) / 2, cal.top - 35));
           await settle(800);
@@ -173,7 +173,7 @@ void main() {
           expect(launched, isNotEmpty, reason: 'shortcut after edit mode');
 
           // A quick double tap opens one page, not two, and does not get stuck.
-          final notes = find.descendant(of: grid, matching: find.text('Notes'));
+          final notes = find.descendant(of: grid, matching: find.text('Habits'));
           await reveal(notes);
           await tester.tap(notes, warnIfMissed: false);
           await tester.pump(const Duration(milliseconds: 60));
@@ -192,7 +192,7 @@ void main() {
 
           // Every bottom tab.
           final nav = find.byType(NavigationBar);
-          for (final (i, tab) in ['Calendar', 'Wallet', 'To-do', 'AI', 'Home'].indexed) {
+          for (final (i, tab) in ['Calendar', 'Wallet', 'Lists', 'AI', 'Home'].indexed) {
             await tester.tap(find.descendant(of: nav, matching: find.text(tab)));
             await settle();
             expect(tester.widget<NavigationBar>(nav).selectedIndex, (i + 1) % 5, reason: 'tab $tab');

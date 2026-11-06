@@ -376,7 +376,11 @@ void main() {
       expect(bodies, hasLength(2));
       for (final b in bodies) {
         final system = b['system'] as List;
-        expect(system.first, {'type': 'text', 'text': 'Fixed', 'cache_control': {'type': 'ephemeral'}});
+        expect(system.first, {
+          'type': 'text',
+          'text': 'Fixed',
+          'cache_control': {'type': 'ephemeral'},
+        });
         expect(system.last, {'type': 'text', 'text': 'Now: noon'}, reason: 'the changing part is never cached');
         final t = b['tools'] as List;
         expect(t.last['cache_control'], {'type': 'ephemeral'});
@@ -384,7 +388,15 @@ void main() {
         final msgs = b['messages'] as List;
         final lastBlocks = msgs.last['content'] as List;
         expect(lastBlocks.last['cache_control'], {'type': 'ephemeral'});
-        expect(msgs.take(msgs.length - 1).where((m) => m['content'] is List && (m['content'] as List).any((x) => x is Map && x['cache_control'] != null)), isEmpty);
+        expect(
+          msgs
+              .take(msgs.length - 1)
+              .where(
+                (m) =>
+                    m['content'] is List && (m['content'] as List).any((x) => x is Map && x['cache_control'] != null),
+              ),
+          isEmpty,
+        );
       }
     });
 
@@ -727,13 +739,25 @@ void main() {
           s.setRaw(AiSettings.openrouterModel, 'old/model');
         },
         (db, settings) async {
+          // The prompt looks ahead from the real today, so this event is placed relative to it.
+          final soon = DateTime.now().add(const Duration(days: 2));
+          await tester.runAsync(
+            () => db.saveEvent(
+              EventsCompanion.insert(
+                calendarId: 1,
+                title: 'Dentist',
+                start: DateTime(soon.year, soon.month, soon.day, 10),
+                end: DateTime(soon.year, soon.month, soon.day, 11),
+              ),
+            ),
+          );
           navigatorKey.currentState!.push(MaterialPageRoute(builder: (_) => const AiChatPage(agent: true)));
           await tester.pump(const Duration(milliseconds: 400));
           await tester.pump(const Duration(milliseconds: 400));
           await tester.enterText(find.byType(TextField).last, 'subscriptions?');
           await tester.tap(find.byTooltip('Send'));
           await settle(tester);
-          expect(systems.single, allOf(contains('Netflix'), contains('Car insurance'), contains('Open day')));
+          expect(systems.single, allOf(contains('Netflix'), contains('Car insurance'), contains('Dentist')));
           expect(find.text('Rent and Netflix.'), findsOneWidget);
           await tester.pump(const Duration(seconds: 5));
         },

@@ -670,8 +670,8 @@ QuickTask parseQuickTask(String input, {DateTime? now}) {
 }
 
 /// The bits quick-add understood, shown as chips while typing.
-List<(IconData, String)> quickTaskChips(QuickTask q) => [
-  if (q.due != null) (Icons.event_outlined, friendlyDay(q.due!)),
+List<(IconData, String)> quickTaskChips(QuickTask q, {DateTime? now}) => [
+  if (q.due != null) (Icons.event_outlined, friendlyDay(q.due!, now: now)),
   if (q.remindAt != null) (Icons.notifications_none_rounded, DateFormat.Hm().format(q.remindAt!)),
   if (q.repeat != 'none') (Icons.repeat_rounded, todoRepeatLabels[q.repeat]!),
   if (q.important) (Icons.star_rounded, 'Important'),

@@ -41,7 +41,7 @@ Future<void> pumpWithDb(
 void main() {
   testWidgets('home screen shows the mini-apps', (tester) async {
     await pumpWithDb(tester, (db, s) => HubApp(db: db, settings: s), (_) async {
-      for (final title in ['Weather', 'Calendar', 'Notes', 'Wallet', 'Claude']) {
+      for (final title in ['Weather', 'Calendar', 'Lists', 'Wallet', 'Claude']) {
         expect(find.text(title), findsWidgets);
       }
     });

@@ -598,7 +598,9 @@ class _Legend extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        Text(text, style: TextStyle(fontSize: 12.5, color: p.muted)),
+        Flexible(
+          child: Text(text, style: TextStyle(fontSize: 12.5, color: p.muted)),
+        ),
       ],
     );
   }

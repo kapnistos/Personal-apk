@@ -70,8 +70,9 @@ void main() {
   });
 
   test('quick add chips describe what was understood', () {
-    final q = parseQuickTask('Gym every monday 18:00 !', now: DateTime(2026, 10, 30, 10));
-    final labels = quickTaskChips(q).map((c) => c.$2).toList();
+    final now = DateTime(2026, 10, 30, 10);
+    final q = parseQuickTask('Gym every monday 18:00 !', now: now);
+    final labels = quickTaskChips(q, now: now).map((c) => c.$2).toList();
     expect(labels, ['Monday', '18:00', 'Every week', 'Important']);
     expect(quickTaskChips(parseQuickTask('Just a title')), isEmpty);
   });
