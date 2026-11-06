@@ -227,12 +227,13 @@ class _NotesPageState extends State<NotesPage> {
                             child: _GroupLabel('${notes.length} ${notes.length == 1 ? 'note' : 'notes'} found'),
                           ),
                         if (pinned.isNotEmpty) ...[
-                          ContentWidth(maxWidth: 960, child: _GroupLabel('Pinned  ${pinned.length}')),
+                          ContentWidth(maxWidth: 960, child: _GroupLabel('Pinned', count: pinned.length)),
                           ContentWidth(
                             maxWidth: 960,
                             child: _Masonry(columns: cols, notes: pinned),
                           ),
-                          if (others.isNotEmpty) const ContentWidth(maxWidth: 960, child: _GroupLabel('Others')),
+                          if (others.isNotEmpty)
+                            ContentWidth(maxWidth: 960, child: _GroupLabel('Others', count: others.length)),
                         ],
                         ContentWidth(
                           maxWidth: 960,
@@ -252,13 +253,27 @@ class _NotesPageState extends State<NotesPage> {
 }
 
 class _GroupLabel extends StatelessWidget {
-  const _GroupLabel(this.text);
+  const _GroupLabel(this.text, {this.count});
   final String text;
+
+  /// Shown after the label in the quieter style To-do uses for its groups.
+  final int? count;
 
   @override
   Widget build(BuildContext context) => SizedBox(
     width: double.infinity,
-    child: Padding(padding: const EdgeInsets.fromLTRB(4, 10, 4, 8), child: SectionLabel(text)),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(4, 10, 4, 8),
+      child: Row(
+        children: [
+          SectionLabel(text),
+          if (count != null) ...[
+            const SizedBox(width: 6),
+            Text('$count', style: TextStyle(fontSize: 13, color: Palette.of(context).muted)),
+          ],
+        ],
+      ),
+    ),
   );
 }
 
@@ -531,7 +546,7 @@ class NoteEditor extends StatefulWidget {
   State<NoteEditor> createState() => _NoteEditorState();
 }
 
-class _NoteEditorState extends State<NoteEditor> {
+class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   late final _title = TextEditingController(text: widget.note?.title ?? '');
   late final _body = TextEditingController(text: widget.note?.body ?? widget.startWith);
   late int? _id = widget.note?.id;
@@ -543,12 +558,27 @@ class _NoteEditorState extends State<NoteEditor> {
   bool _deleted = false;
   String _lastBody = '';
 
+  /// The words as they are in the database, so moving the cursor or opening a note to read it does not count
+  /// as an edit (which would move it to the top as "edited just now").
+  late String _savedTitle = _title.text;
+  late String _savedBody = widget.note == null ? '' : _body.text;
+
   @override
   void initState() {
     super.initState();
     _lastBody = _body.text;
     _title.addListener(_changed);
     _body.addListener(_bodyChanged);
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // The phone can close a backgrounded app at any time: save what was just typed right away.
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _debounce?.cancel();
+      _save();
+    }
   }
 
   @override
@@ -602,9 +632,12 @@ class _NoteEditorState extends State<NoteEditor> {
   }
 
   void _changed() {
-    _dirty = true;
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 600), _save);
+    // Controllers also report cursor and selection moves; only a change in the words needs a save.
+    if (_title.text != _savedTitle || _body.text != _savedBody) {
+      _dirty = true;
+      _debounce?.cancel();
+      _debounce = Timer(const Duration(milliseconds: 600), _save);
+    }
     setState(() {});
   }
 
@@ -624,7 +657,10 @@ class _NoteEditorState extends State<NoteEditor> {
       await previous;
       if (_deleted) return;
       if (_id == null && title.trim().isEmpty && (body.trim().isEmpty || body == widget.startWith)) return;
+      if (_id != null && title == _savedTitle && body == _savedBody) return;
       _id = await _db.saveNote(id: _id, title: title, body: body);
+      _savedTitle = title;
+      _savedBody = body;
       if (pinned) await _db.setNotePinned(_id!, true);
       if (color != 0) await _db.setNoteColor(_id!, color);
     }();
@@ -632,6 +668,7 @@ class _NoteEditorState extends State<NoteEditor> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _debounce?.cancel();
     _save();
     _title.dispose();

@@ -694,7 +694,7 @@ class RainNowcastCardState extends State<RainNowcastCard> {
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    final n = _data;
+    final n = _data?.upcoming(DateTime.now());
     if (n == null) {
       if (_failed) return const SizedBox.shrink();
       return const GroupSection(title: 'Rain, next hours', child: SizedBox(height: 120));

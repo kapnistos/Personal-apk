@@ -152,7 +152,6 @@ class _HomePageState extends State<HomePage> {
 
   Widget _header(BuildContext context, String name, bool greet) {
     final p = Palette.of(context);
-    final now = DateTime.now();
     if (_editing) {
       // Add and Done sit in the bar at the bottom, so they stay in reach while you scroll.
       return Row(
@@ -186,17 +185,25 @@ class _HomePageState extends State<HomePage> {
           _topRow(context, name),
           if (greet) ...[
             const SizedBox(height: 18),
-            Text(
-              DateFormat('EEEE d MMMM').format(now),
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: p.muted),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              name.isEmpty ? greeting(now) : '${greeting(now)}, $name',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.headlineMedium
-                  ?.copyWith(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.9, height: 1.15),
+            // Home stays open for hours, so the date and the hello follow the clock.
+            ClockBuilder(
+              builder: (context, now) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    DateFormat('EEEE d MMMM').format(now),
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: p.muted),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    name.isEmpty ? greeting(now) : '${greeting(now)}, $name',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.headlineMedium
+                        ?.copyWith(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.9, height: 1.15),
+                  ),
+                ],
+              ),
             ),
           ],
         ],
@@ -218,10 +225,14 @@ class _HomePageState extends State<HomePage> {
             if (weather || today) const SizedBox(height: 18),
             if (weather) const WeatherHero(),
             if (today)
-              _TodayStrip(
-                onCalendar: () => widget.onOpenTab(ShellTab.calendar),
-                onTasks: () => widget.onOpenTab(ShellTab.todo),
-                onWallet: () => widget.onOpenTab(ShellTab.wallet),
+              // "Next up" and "Due today" move on as the day does, not only when something changes.
+              ClockBuilder(
+                builder: (context, now) => _TodayStrip(
+                  now: now,
+                  onCalendar: () => widget.onOpenTab(ShellTab.calendar),
+                  onTasks: () => widget.onOpenTab(ShellTab.todo),
+                  onWallet: () => widget.onOpenTab(ShellTab.wallet),
+                ),
               ),
             if (apps) ...[const SizedBox(height: 6), const AppGrid()],
           ],
@@ -547,7 +558,8 @@ String _wholeMoney(int cents, String currency) =>
 
 /// Next up, due today and left to spend, in one strip. Each cell opens where the number comes from.
 class _TodayStrip extends StatelessWidget {
-  const _TodayStrip({required this.onCalendar, required this.onTasks, required this.onWallet});
+  const _TodayStrip({required this.now, required this.onCalendar, required this.onTasks, required this.onWallet});
+  final DateTime now;
   final VoidCallback onCalendar;
   final VoidCallback onTasks;
   final VoidCallback onWallet;
@@ -556,7 +568,6 @@ class _TodayStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     final db = context.db;
-    final now = DateTime.now();
     final today = dateOnly(now);
     final tomorrow = addDays(today, 1);
     final month = DateTime(now.year, now.month);
@@ -813,6 +824,48 @@ class AppGrid extends StatelessWidget {
 
 bool _rainy(int code) => (code >= 51 && code <= 67) || (code >= 80 && code <= 82) || code >= 95;
 
+/// The forecast and rain for [city], kept fresh: Home stays open for hours, so the cards load again when the app
+/// comes back to the front and every ten minutes (the service's cache keeps that cheap), and a first load that
+/// failed offline gets another go. Rain points already in the past are left out.
+mixin _LiveWeather<T extends StatefulWidget> on State<T>, WidgetsBindingObserver {
+  City get city;
+  Forecast? _f;
+  Nowcast? _rawNowcast;
+  Timer? _refresh;
+
+  Nowcast? get _n => _rawNowcast?.upcoming(DateTime.now());
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _load();
+    _refresh = Timer.periodic(const Duration(minutes: 10), (_) => _load());
+  }
+
+  void _load() {
+    final s = WeatherService.instance;
+    s.forecast(city.latitude, city.longitude).then((f) {
+      if (mounted) setState(() => _f = f);
+    }, onError: (_) {});
+    s.nowcast(city.latitude, city.longitude).then((n) {
+      if (mounted) setState(() => _rawNowcast = n);
+    }, onError: (_) {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _load();
+  }
+
+  @override
+  void dispose() {
+    _refresh?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+}
+
 /// The big weather card at the top of Home: now, today's range, when rain comes, and the next four hours.
 class WeatherHero extends StatelessWidget {
   const WeatherHero({super.key});
@@ -838,21 +891,9 @@ class _WeatherHeroCard extends StatefulWidget {
   State<_WeatherHeroCard> createState() => _WeatherHeroCardState();
 }
 
-class _WeatherHeroCardState extends State<_WeatherHeroCard> {
-  Forecast? _f;
-  Nowcast? _n;
-
+class _WeatherHeroCardState extends State<_WeatherHeroCard> with WidgetsBindingObserver, _LiveWeather {
   @override
-  void initState() {
-    super.initState();
-    final s = WeatherService.instance;
-    s.forecast(widget.city.latitude, widget.city.longitude).then((f) {
-      if (mounted) setState(() => _f = f);
-    }, onError: (_) {});
-    s.nowcast(widget.city.latitude, widget.city.longitude).then((n) {
-      if (mounted) setState(() => _n = n);
-    }, onError: (_) {});
-  }
+  City get city => widget.city;
 
   /// "Rain from 15:05", "Rain until 16:20", or nothing when it stays dry.
   String? _rainLine(Forecast? f) {
@@ -1136,21 +1177,9 @@ class WeatherGlanceCard extends StatefulWidget {
   State<WeatherGlanceCard> createState() => _WeatherGlanceCardState();
 }
 
-class _WeatherGlanceCardState extends State<WeatherGlanceCard> {
-  Forecast? _f;
-  Nowcast? _n;
-
+class _WeatherGlanceCardState extends State<WeatherGlanceCard> with WidgetsBindingObserver, _LiveWeather {
   @override
-  void initState() {
-    super.initState();
-    final s = WeatherService.instance;
-    s.forecast(widget.city.latitude, widget.city.longitude).then((f) {
-      if (mounted) setState(() => _f = f);
-    }, onError: (_) {});
-    s.nowcast(widget.city.latitude, widget.city.longitude).then((n) {
-      if (mounted) setState(() => _n = n);
-    }, onError: (_) {});
-  }
+  City get city => widget.city;
 
   @override
   Widget build(BuildContext context) {

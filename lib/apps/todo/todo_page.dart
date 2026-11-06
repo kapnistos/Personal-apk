@@ -173,7 +173,14 @@ class _TodoPageState extends State<TodoPage> {
                                       ),
                                       GroupCard(
                                         indent: 56,
-                                        children: [for (final t in items) TodoTile(todo: t, space: spaces[t.spaceId])],
+                                        children: [
+                                          for (final t in items)
+                                            TodoTile(
+                                              todo: t,
+                                              space: spaces[t.spaceId],
+                                              dayInHeader: label == 'Today' || label == 'Tomorrow',
+                                            ),
+                                        ],
                                       ),
                                     ],
                                   ],
@@ -413,10 +420,13 @@ Future<void> showTodoActions(BuildContext context, Todo todo) async {
 }
 
 class TodoTile extends StatelessWidget {
-  const TodoTile({super.key, required this.todo, this.dense = false, this.space});
+  const TodoTile({super.key, required this.todo, this.dense = false, this.space, this.dayInHeader = false});
   final Todo todo;
   final bool dense;
   final Space? space;
+
+  /// True under a "Today" or "Tomorrow" heading, which already says the day: the line then shows only the time.
+  final bool dayInHeader;
 
   @override
   Widget build(BuildContext context) {
@@ -437,7 +447,7 @@ class TodoTile extends StatelessWidget {
           ),
           TextSpan(text: space!.name),
         ],
-      if (todo.due != null)
+      if (todo.due != null && !dayInHeader)
         [
           TextSpan(
             text: friendlyDay(todo.due!),
@@ -454,7 +464,7 @@ class TodoTile extends StatelessWidget {
             ),
           ),
           TextSpan(
-            text: todo.due != null && daysBetween(todo.due!, remind) == 0
+            text: (todo.due != null && daysBetween(todo.due!, remind) == 0) || (dayInHeader && todo.due == null)
                 ? DateFormat.Hm().format(remind)
                 : '${friendlyDay(remind)} ${DateFormat.Hm().format(remind)}',
           ),

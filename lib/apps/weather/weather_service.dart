@@ -142,6 +142,17 @@ class Nowcast {
 
   bool get dry => points.every((p) => p.mmPerHour < 0.1);
 
+  /// The same forecast from the step that holds [now] onwards, so one fetched a while ago does not still say
+  /// "Rain from 11:50" at one o'clock. Empty when every step has passed.
+  Nowcast upcoming(DateTime now) {
+    if (points.isNotEmpty && now.difference(points.last.time) > const Duration(minutes: 15)) {
+      return Nowcast(points: const [], source: source);
+    }
+    final current = points.lastIndexWhere((p) => !p.time.isAfter(now));
+    if (current <= 0) return this;
+    return Nowcast(points: points.sublist(current), source: source);
+  }
+
   /// A one-line summary, e.g. "Rain starting around 14:35".
   String summary(String Function(DateTime) fmt) {
     if (points.isEmpty) return 'No short-term data';
