@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/db/database.dart';
 import '../../core/format.dart';
@@ -109,3 +110,63 @@ const reminderOptions = <int?, String>{
 };
 
 const calendarColors = [0xFF3A78C9, 0xFF1F7A5A, 0xFFC0563F, 0xFF6650AE, 0xFFCF9418, 0xFFB5487A, 0xFF2D8C9E, 0xFF6F6A60];
+
+/// Where a new event starts: the next full hour today, or 9:00 on any other day.
+DateTime defaultEventStart(DateTime selectedDay, DateTime now) {
+  final day = dateOnly(selectedDay);
+  if (day != dateOnly(now)) return DateTime(day.year, day.month, day.day, 9);
+  return DateTime(now.year, now.month, now.day, now.hour + 1);
+}
+
+const _allDayOnly = {-540, 900, 9540};
+const _allDayReminders = {-540, 900, 1440, 9540};
+
+/// Notification choices that make sense for a timed or an all-day event.
+Map<int?, String> reminderChoices({required bool allDay}) => {
+  for (final e in reminderOptions.entries)
+    if (e.key == null || (allDay ? _allDayReminders.contains(e.key) : !_allDayOnly.contains(e.key))) e.key: e.value,
+};
+
+/// Keeps the reminder sensible when an event switches between timed and all-day:
+/// "15 minutes before" an all-day event would ring at 23:45 the evening before.
+int? reminderAfterAllDayToggle(int? current, {required bool allDay}) {
+  if (current == null) return null;
+  if (reminderChoices(allDay: allDay).containsKey(current)) return current;
+  return allDay ? -540 : 15;
+}
+
+/// The time line for [o] as it shows on [day]: "10:00 – 11:00", "All day",
+/// "Day 2 of 3", or "Until 02:00" / "From 22:00" for a timed event that crosses midnight.
+String timeOnDay(Occurrence o, DateTime day) {
+  final d = dateOnly(day);
+  String hm(DateTime t) => DateFormat.Hm().format(t);
+  final startDay = dateOnly(o.start);
+  final lastDay = o.end.isAfter(o.start) ? dateOnly(o.end.subtract(const Duration(seconds: 1))) : startDay;
+  if (o.allDay) {
+    final total = daysBetween(startDay, lastDay) + 1;
+    if (total <= 1) return 'All day';
+    return 'Day ${daysBetween(startDay, d) + 1} of $total';
+  }
+  if (startDay == lastDay) return o.end.isAfter(o.start) ? '${hm(o.start)} – ${hm(o.end)}' : hm(o.start);
+  if (d == startDay) return 'From ${hm(o.start)}';
+  if (d == lastDay) return 'Until ${hm(o.end)}';
+  return 'All day';
+}
+
+/// A short "how soon" note for the event sheet: "Now", "In 20 min", "In 3 h", "Tomorrow".
+/// Null once the event is over or when it is a week or more away.
+String? startsIn(Occurrence o, DateTime now) {
+  if (!o.end.isAfter(now)) return null;
+  if (!o.start.isAfter(now)) return o.allDay ? 'Today' : 'Now';
+  final days = daysBetween(dateOnly(now), dateOnly(o.start));
+  if (days == 0) {
+    if (o.allDay) return 'Today';
+    final m = (o.start.difference(now).inSeconds / 60).ceil();
+    if (m < 60) return 'In $m min';
+    final h = m ~/ 60, rest = m % 60;
+    return rest == 0 || h >= 3 ? 'In $h h' : 'In $h h $rest min';
+  }
+  if (days == 1) return 'Tomorrow';
+  if (days < 7) return 'In $days days';
+  return null;
+}

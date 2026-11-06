@@ -13,6 +13,7 @@ import 'feed_sync.dart';
 Future<void> openEventEditor(
   BuildContext context, {
   Event? event,
+  Event? copyOf,
   DateTime? start,
   int? calendarId,
   bool allDay = false,
@@ -28,6 +29,7 @@ Future<void> openEventEditor(
         settings: hub.settings,
         child: _EventEditor(
           event: event,
+          copyOf: copyOf,
           start: start,
           calendarId: calendarId,
           allDay: allDay,
@@ -42,6 +44,7 @@ Future<void> openEventEditor(
 class _EventEditor extends StatefulWidget {
   const _EventEditor({
     this.event,
+    this.copyOf,
     this.start,
     this.calendarId,
     this.allDay = false,
@@ -49,6 +52,9 @@ class _EventEditor extends StatefulWidget {
     this.title = '',
   });
   final Event? event;
+
+  /// An event to start a new one from, for Duplicate. It is saved as a new event.
+  final Event? copyOf;
   final DateTime? start;
   final int? calendarId;
   final bool allDay;
@@ -60,14 +66,15 @@ class _EventEditor extends StatefulWidget {
 }
 
 class _EventEditorState extends State<_EventEditor> {
-  late final _title = TextEditingController(text: widget.event?.title ?? widget.title);
-  late final _location = TextEditingController(text: widget.event?.location ?? '');
-  late final _notes = TextEditingController(text: widget.event?.notes ?? '');
-  late DateTime _start = widget.event?.start ?? widget.start ?? DateTime.now();
-  late DateTime _end = widget.event?.end ?? _start.add(const Duration(hours: 1));
-  late bool _allDay = widget.event?.allDay ?? widget.allDay;
-  late String _repeat = widget.event?.repeat ?? 'none';
-  late int? _remind = widget.event == null ? (widget.remindMinutes ?? 15) : widget.event!.remindMinutes;
+  late final Event? _source = widget.event ?? widget.copyOf;
+  late final _title = TextEditingController(text: _source?.title ?? widget.title);
+  late final _location = TextEditingController(text: _source?.location ?? '');
+  late final _notes = TextEditingController(text: _source?.notes ?? '');
+  late DateTime _start = _source?.start ?? widget.start ?? DateTime.now();
+  late DateTime _end = _source?.end ?? _start.add(const Duration(hours: 1));
+  late bool _allDay = _source?.allDay ?? widget.allDay;
+  late String _repeat = _source?.repeat ?? 'none';
+  late int? _remind = _source == null ? (widget.remindMinutes ?? (widget.allDay ? -540 : 15)) : _source.remindMinutes;
   int? _calendarId;
 
   /// What the editor opened with, to tell whether closing it would lose anything.
@@ -91,9 +98,9 @@ class _EventEditorState extends State<_EventEditor> {
   @override
   void initState() {
     super.initState();
-    _calendarId = widget.event?.calendarId ?? widget.calendarId;
+    _calendarId = _source?.calendarId ?? widget.calendarId;
     // All-day events store an exclusive end; the editor shows the last day.
-    if (widget.event?.allDay == true) _end = addDays(_end, -1);
+    if (_source?.allDay == true) _end = addDays(_end, -1);
     _initial = _snapshot();
     // Typing changes whether back has to ask first.
     for (final c in [_title, _location, _notes]) {
@@ -200,7 +207,7 @@ class _EventEditorState extends State<_EventEditor> {
     await context.db.saveEvent(
       EventsCompanion(
         id: widget.event == null ? const Value.absent() : Value(widget.event!.id),
-        calendarId: Value(_calendarId ?? cals.first.id),
+        calendarId: Value(cals.where((c) => c.id == _calendarId).firstOrNull?.id ?? cals.first.id),
         title: Value(title),
         location: Value(_location.text.trim()),
         notes: Value(_notes.text.trim()),
@@ -223,6 +230,11 @@ class _EventEditorState extends State<_EventEditor> {
       builder: (context, snap) {
         final cals = (snap.data ?? const <Calendar>[]).where((c) => c.icsUrl == null).toList();
         final cal = cals.where((c) => c.id == _calendarId).firstOrNull ?? cals.firstOrNull;
+        // The ones that fit this kind of event, plus whatever an older event already has.
+        final reminders = {
+          ...reminderChoices(allDay: _allDay),
+          if (reminderOptions.containsKey(_remind)) _remind: reminderOptions[_remind]!,
+        };
         return PopScope(
           // Back and the close button ask first when something was changed, so an edit is never lost by accident.
           canPop: !_dirty,
@@ -262,7 +274,10 @@ class _EventEditorState extends State<_EventEditor> {
                             contentPadding: EdgeInsets.zero,
                             title: const Text('All day'),
                             value: _allDay,
-                            onChanged: (v) => setState(() => _allDay = v),
+                            onChanged: (v) => setState(() {
+                              _allDay = v;
+                              _remind = reminderAfterAllDayToggle(_remind, allDay: v);
+                            }),
                           ),
                           _DateTimeLine(
                             date: _start,
@@ -298,11 +313,13 @@ class _EventEditorState extends State<_EventEditor> {
                     _Row(
                       icon: Icons.notifications_none_rounded,
                       child: DropdownButtonFormField<int?>(
-                        initialValue: reminderOptions.containsKey(_remind) ? _remind : 15,
+                        // Rebuilt when all-day flips, since the choices and the value change with it.
+                        key: ValueKey(_allDay),
+                        initialValue: reminders.containsKey(_remind) ? _remind : null,
                         isExpanded: true,
                         decoration: const InputDecoration(),
                         items: [
-                          for (final e in reminderOptions.entries)
+                          for (final e in reminders.entries)
                             DropdownMenuItem(
                               value: e.key,
                               child: Text(e.value, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -313,33 +330,21 @@ class _EventEditorState extends State<_EventEditor> {
                     ),
                     if (cal != null)
                       _Row(
-                        icon: Icons.circle,
-                        iconColor: Color(cal.color),
-                        child: DropdownButtonFormField<int>(
-                          initialValue: cal.id,
-                          isExpanded: true,
-                          decoration: const InputDecoration(),
-                          items: [
-                            for (final c in cals)
-                              DropdownMenuItem(
-                                value: c.id,
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 12,
-                                      height: 12,
-                                      decoration: BoxDecoration(
-                                        color: Color(c.color),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Flexible(child: Text(c.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                                  ],
+                        icon: Icons.layers_outlined,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final c in cals)
+                                _CalendarChip(
+                                  calendar: c,
+                                  selected: c.id == cal.id,
+                                  onTap: () => setState(() => _calendarId = c.id),
                                 ),
-                              ),
-                          ],
-                          onChanged: (v) => setState(() => _calendarId = v),
+                            ],
+                          ),
                         ),
                       ),
                     _Row(
@@ -386,10 +391,59 @@ class _EventEditorState extends State<_EventEditor> {
   }
 }
 
+class _CalendarChip extends StatelessWidget {
+  const _CalendarChip({required this.calendar, required this.selected, required this.onTap});
+  final Calendar calendar;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final color = Color(calendar.color);
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: Material(
+        color: selected ? color.withValues(alpha: 0.14) : p.raised,
+        shape: StadiumBorder(side: BorderSide(color: selected ? color : Colors.transparent, width: 1.5)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 40),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      calendar.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontWeight: selected ? FontWeight.w600 : FontWeight.w500, color: p.ink),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Row extends StatelessWidget {
-  const _Row({required this.icon, required this.child, this.iconColor});
+  const _Row({required this.icon, required this.child});
   final IconData icon;
-  final Color? iconColor;
   final Widget child;
 
   @override
@@ -400,7 +454,7 @@ class _Row extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 14, right: 14),
-          child: Icon(icon, size: iconColor != null ? 16 : 22, color: iconColor ?? Palette.of(context).muted),
+          child: Icon(icon, size: 22, color: Palette.of(context).muted),
         ),
         Expanded(child: child),
       ],
@@ -453,85 +507,174 @@ Future<void> deleteEventWithUndo(BuildContext context, Event e) async {
     );
 }
 
+/// "Friday 6 November" with "10:00 – 11:00" under it, or the range for longer events.
+(String, String?) eventWhen(Occurrence o) {
+  final e = o.event;
+  final sameDay = dateOnly(o.start) == dateOnly(o.end.subtract(const Duration(seconds: 1)));
+  String day(DateTime d) => DateFormat(d.year == DateTime.now().year ? 'EEEE d MMMM' : 'EEEE d MMMM y').format(d);
+  if (e.allDay) {
+    if (sameDay || !o.end.isAfter(o.start)) return (day(o.start), 'All day');
+    final last = addDays(o.end, -1);
+    return (
+      '${DateFormat('EEE d MMM').format(o.start)} – ${DateFormat('EEE d MMM').format(last)}',
+      'All day · ${daysBetween(dateOnly(o.start), dateOnly(last)) + 1} days',
+    );
+  }
+  if (sameDay || !o.end.isAfter(o.start)) {
+    final mins = o.end.difference(o.start).inMinutes;
+    final length = mins <= 0
+        ? ''
+        : mins < 60
+        ? ' · $mins min'
+        : mins % 60 == 0
+        ? ' · ${mins ~/ 60} h'
+        : ' · ${mins ~/ 60} h ${mins % 60} min';
+    final range = mins <= 0
+        ? DateFormat.Hm().format(o.start)
+        : '${DateFormat.Hm().format(o.start)} – ${DateFormat.Hm().format(o.end)}';
+    return (day(o.start), '$range$length');
+  }
+  return ('${DateFormat('EEE d MMM, HH:mm').format(o.start)} –', DateFormat('EEE d MMM, HH:mm').format(o.end));
+}
+
 Future<void> showEventDetails(BuildContext context, Occurrence o) {
+  final db = context.db;
   return showModalBottomSheet(
     context: context,
+    isScrollControlled: true,
     builder: (sheet) {
       final p = Palette.of(sheet);
       final e = o.event;
-      final sameDay = dateOnly(o.start) == dateOnly(o.end.subtract(const Duration(seconds: 1)));
-      final when = e.allDay
-          ? (sameDay
-                ? DateFormat('EEEE d MMMM').format(o.start)
-                : '${DateFormat('d MMM').format(o.start)} – ${DateFormat('d MMM').format(addDays(o.end, -1))}')
-          : sameDay
-          ? '${DateFormat('EEEE d MMMM').format(o.start)}\n${DateFormat.Hm().format(o.start)} – ${DateFormat.Hm().format(o.end)}'
-          : '${DateFormat('d MMM HH:mm').format(o.start)} – ${DateFormat('d MMM HH:mm').format(o.end)}';
-      Widget line(IconData icon, String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
+      final (whenDay, whenSub) = eventWhen(o);
+      final soon = startsIn(o, DateTime.now());
+      Widget line(IconData icon, Widget child) => Padding(
+        padding: const EdgeInsets.only(bottom: 16),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 20, color: p.muted),
-            const SizedBox(width: 14),
-            Expanded(child: Text(text, style: const TextStyle(height: 1.4))),
+            SizedBox(width: 24, child: Icon(icon, size: 20, color: p.muted)),
+            const SizedBox(width: 16),
+            Expanded(child: child),
           ],
         ),
       );
+      Text plain(String text) => Text(text, style: const TextStyle(fontSize: 15.5, height: 1.4));
+      final readOnly = e.uid != null;
       // Long notes scroll inside the sheet instead of running off the bottom.
-      return SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 14,
-                  height: 14,
-                  decoration: BoxDecoration(color: o.color, borderRadius: BorderRadius.circular(4)),
+      return ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(sheet).height * 0.85),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(24, 0, 24, 20 + MediaQuery.paddingOf(sheet).bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      width: 4,
+                      decoration: BoxDecoration(color: o.color, borderRadius: BorderRadius.circular(2)),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            e.title,
+                            style: Theme.of(sheet).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          StreamBuilder<List<Calendar>>(
+                            stream: db.watchCalendars(),
+                            builder: (context, snap) {
+                              final name = snap.data?.where((c) => c.id == e.calendarId).firstOrNull?.name;
+                              return Text([?name, ?soon].join(' · '), style: TextStyle(color: p.muted, fontSize: 14));
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(child: Text(e.title, style: Theme.of(sheet).textTheme.titleLarge)),
-              ],
-            ),
-            const SizedBox(height: 16),
-            line(Icons.schedule_rounded, when),
-            if (e.repeat != 'none') line(Icons.repeat_rounded, repeatLabels[e.repeat] ?? e.repeat),
-            if (e.remindMinutes != null) line(Icons.notifications_none_rounded, reminderOptions[e.remindMinutes] ?? ''),
-            if (e.location.isNotEmpty) line(Icons.place_outlined, e.location),
-            if (e.notes.isNotEmpty) line(Icons.notes_rounded, e.notes),
-            const SizedBox(height: 4),
-            if (e.uid != null)
-              Text(
-                'From a subscribed calendar. Edit it in the original app.',
-                style: TextStyle(color: p.muted, fontSize: 13.5),
-              )
-            else
+              ),
+              const SizedBox(height: 22),
+              line(
+                Icons.schedule_rounded,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    plain(whenDay),
+                    if (whenSub != null) Text(whenSub, style: TextStyle(color: p.muted, fontSize: 14, height: 1.4)),
+                  ],
+                ),
+              ),
+              if (e.repeat != 'none') line(Icons.repeat_rounded, plain(repeatLabels[e.repeat] ?? e.repeat)),
+              if (e.remindMinutes != null && reminderOptions.containsKey(e.remindMinutes))
+                line(Icons.notifications_none_rounded, plain(reminderOptions[e.remindMinutes]!)),
+              if (e.location.isNotEmpty)
+                line(
+                  Icons.place_outlined,
+                  SelectableText(e.location, style: const TextStyle(fontSize: 15.5, height: 1.4)),
+                ),
+              if (e.notes.isNotEmpty)
+                line(Icons.notes_rounded, SelectableText(e.notes, style: const TextStyle(fontSize: 15.5, height: 1.4))),
+              if (readOnly)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'From a subscribed calendar. Edit it in the original app, or copy it to one of yours.',
+                    style: TextStyle(color: p.muted, fontSize: 13.5, height: 1.4),
+                  ),
+                ),
+              const SizedBox(height: 4),
               Row(
                 children: [
-                  TextButton.icon(
-                    style: TextButton.styleFrom(foregroundColor: p.danger),
-                    onPressed: () {
-                      Navigator.pop(sheet);
-                      deleteEventWithUndo(context, e);
-                    },
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    label: const Text('Delete'),
-                  ),
-                  const Spacer(),
-                  FilledButton.icon(
-                    onPressed: () {
-                      Navigator.pop(sheet);
-                      openEventEditor(context, event: e);
-                    },
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                    label: const Text('Edit'),
+                  if (!readOnly)
+                    IconButton(
+                      tooltip: 'Delete',
+                      style: IconButton.styleFrom(foregroundColor: p.danger),
+                      onPressed: () {
+                        Navigator.pop(sheet);
+                        deleteEventWithUndo(context, e);
+                      },
+                      icon: const Icon(Icons.delete_outline_rounded),
+                    ),
+                  const SizedBox(width: 8),
+                  // Wraps to a second line rather than overflow with large text.
+                  Expanded(
+                    child: Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton(
+                          onPressed: () {
+                            Navigator.pop(sheet);
+                            openEventEditor(
+                              context,
+                              // A subscribed event lands in one of your own calendars.
+                              copyOf: e.copyWith(start: o.start, end: o.end, calendarId: readOnly ? -1 : e.calendarId),
+                            );
+                          },
+                          child: Text(readOnly ? 'Copy to my calendar' : 'Duplicate'),
+                        ),
+                        if (!readOnly)
+                          FilledButton(
+                            onPressed: () {
+                              Navigator.pop(sheet);
+                              openEventEditor(context, event: e);
+                            },
+                            child: const Text('Edit'),
+                          ),
+                      ],
+                    ),
                   ),
                 ],
               ),
-          ],
+            ],
+          ),
         ),
       );
     },

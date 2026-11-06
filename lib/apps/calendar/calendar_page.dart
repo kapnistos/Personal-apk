@@ -214,7 +214,7 @@ class _CalendarPageState extends State<CalendarPage> {
                   initialValue: view,
                   onSelected: _setView,
                   itemBuilder: (_) => [
-                    for (final v in [CalView.day, CalView.threeDay, CalView.month, CalView.agenda])
+                    for (final v in [CalView.day, CalView.threeDay, CalView.week, CalView.month, CalView.agenda])
                       PopupMenuItem(value: v, child: Text(v.label)),
                   ],
                 ),
@@ -245,6 +245,7 @@ class _CalendarPageState extends State<CalendarPage> {
                         compact: !wide,
                         onSelect: (d) => setState(() => _selected = d),
                         onOpenDay: (d) => _goTo(d, view: CalView.day),
+                        onNewOn: (d) => openEventEditor(context, start: defaultEventStart(d, DateTime.now())),
                       ),
                       CalView.week => _TimeGrid(days: _days(from, 7), occ: occ),
                       CalView.threeDay => _TimeGrid(days: _days(from, 3), occ: occ),
@@ -292,15 +293,7 @@ class _CalendarPageState extends State<CalendarPage> {
     for (var i = 0; i < n; i++) DateTime(from.year, from.month, from.day + i),
   ];
 
-  DateTime _defaultStart() {
-    final now = DateTime.now();
-    // Another day starts at 9:00 sharp, not 9:30.
-    if (_selected != dateOnly(now)) return DateTime(_selected.year, _selected.month, _selected.day, 9);
-    final base = now;
-    // Next half hour.
-    final m = base.minute < 30 ? 30 : 60;
-    return DateTime(base.year, base.month, base.day, base.hour).add(Duration(minutes: m));
-  }
+  DateTime _defaultStart() => defaultEventStart(_selected, DateTime.now());
 }
 
 // Sidebar (wide screens): new event, mini month, calendar list.
@@ -495,6 +488,7 @@ class _MonthView extends StatelessWidget {
     required this.compact,
     required this.onSelect,
     required this.onOpenDay,
+    required this.onNewOn,
   });
   final DateTime anchor;
   final DateTime selected;
@@ -502,6 +496,7 @@ class _MonthView extends StatelessWidget {
   final bool compact;
   final ValueChanged<DateTime> onSelect;
   final ValueChanged<DateTime> onOpenDay;
+  final ValueChanged<DateTime> onNewOn;
 
   @override
   Widget build(BuildContext context) {
@@ -548,7 +543,9 @@ class _MonthView extends StatelessWidget {
                                 occ: occ.where((o) => o.touches(day)).toList(),
                                 compact: compact,
                                 onTap: () => onSelect(day),
-                                onDoubleTap: () => onOpenDay(day),
+                                // On a phone a double tap would hold every tap back while it waits for the second one.
+                                onDoubleTap: compact ? null : () => onOpenDay(day),
+                                onLongPress: () => onNewOn(day),
                               );
                             },
                           ),
@@ -562,7 +559,6 @@ class _MonthView extends StatelessWidget {
       ],
     );
     if (!compact) return Container(color: p.surface, child: grid);
-    final dayOcc = occ.where((o) => o.touches(selected)).toList();
     return Column(
       children: [
         Expanded(
@@ -572,29 +568,173 @@ class _MonthView extends StatelessWidget {
         Divider(height: 1, color: p.line),
         Expanded(
           flex: 8,
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(16, 12, 16, 88 + MediaQuery.paddingOf(context).bottom),
-            children: [
-              Text(
-                friendlyDay(selected) == DateFormat.EEEE().format(selected)
-                    ? DateFormat('EEEE d MMMM').format(selected)
-                    : '${friendlyDay(selected)}, ${DateFormat('d MMMM').format(selected)}',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              if (dayOcc.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Text('No events', style: TextStyle(color: p.muted)),
-                ),
-              if (dayOcc.isNotEmpty) GroupCard(indent: 38, children: [for (final o in dayOcc) EventRow(o: o)]),
-            ],
+          child: DayAgenda(
+            day: selected,
+            occ: occ.where((o) => o.touches(selected)).toList(),
+            onNew: () => onNewOn(selected),
           ),
         ),
       ],
     );
   }
 }
+
+/// The selected day under the month grid on a phone: its events with their times, or a way to add one.
+class DayAgenda extends StatelessWidget {
+  const DayAgenda({super.key, required this.day, required this.occ, required this.onNew});
+  final DateTime day;
+  final List<Occurrence> occ;
+  final VoidCallback onNew;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final friendly = friendlyDay(day);
+    final title = friendly == DateFormat.EEEE().format(day) || !['Today', 'Tomorrow', 'Yesterday'].contains(friendly)
+        ? DateFormat('EEEE d MMMM').format(day)
+        : '$friendly, ${DateFormat('d MMMM').format(day)}';
+    return ListView(
+      padding: EdgeInsets.fromLTRB(16, 8, 16, 88 + MediaQuery.paddingOf(context).bottom),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+            ),
+            if (occ.isNotEmpty)
+              Text('${occ.length} ${occ.length == 1 ? 'event' : 'events'}', style: TextStyle(color: p.muted)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (occ.isEmpty)
+          Press(
+            child: Material(
+              color: p.surface,
+              borderRadius: BorderRadius.circular(22),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: onNew,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text('Nothing planned', style: TextStyle(color: p.muted)),
+                      ),
+                      Icon(Icons.add_rounded, size: 20, color: p.accent),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Add event',
+                        style: TextStyle(color: p.accent, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          )
+        else
+          GroupCard(
+            indent: 16,
+            children: [for (final o in occ) _TimedRow(o: o, day: day)],
+          ),
+      ],
+    );
+  }
+}
+
+/// A row with the time in its own column and the calendar colour as a bar, like a paper diary.
+class _TimedRow extends StatelessWidget {
+  const _TimedRow({required this.o, required this.day});
+  final Occurrence o;
+  final DateTime day;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final when = timeOnDay(o, day);
+    final timed = !o.allDay && when.contains(' – ');
+    // Left column: the start (and end) time, or "All day" for anything that fills the day.
+    final lead = timed || !when.contains(' ')
+        ? DateFormat.Hm().format(o.start)
+        : when.startsWith('From ')
+        ? when.substring(5)
+        : when.startsWith('Until ')
+        ? '00:00'
+        : 'All day';
+    final sub = [
+      if (!timed && when != 'All day' && when.contains(' ')) when,
+      if (o.event.location.isNotEmpty) o.event.location,
+    ].join(' · ');
+    final past = o.end.isBefore(DateTime.now());
+    return Press(
+      child: InkWell(
+        onTap: () => showEventDetails(context, o),
+        child: Opacity(
+          opacity: past ? 0.55 : 1,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    width: 58,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: timed
+                          ? [
+                              Text(
+                                DateFormat.Hm().format(o.start),
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: _tabular),
+                              ),
+                              Text(
+                                DateFormat.Hm().format(o.end),
+                                style: TextStyle(color: p.muted, fontSize: 13.5, fontFeatures: _tabular),
+                              ),
+                            ]
+                          : [
+                              Text(
+                                lead,
+                                style: lead == 'All day'
+                                    ? TextStyle(color: p.muted, fontSize: 13.5, fontWeight: FontWeight.w500)
+                                    : const TextStyle(fontWeight: FontWeight.w600, fontFeatures: _tabular),
+                              ),
+                            ],
+                    ),
+                  ),
+                  Container(
+                    width: 3,
+                    margin: const EdgeInsets.only(right: 12),
+                    decoration: BoxDecoration(color: o.color, borderRadius: BorderRadius.circular(2)),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(o.event.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        if (sub.isNotEmpty)
+                          Text(
+                            sub,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: p.muted, fontSize: 13.5),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const _tabular = [FontFeature.tabularFigures()];
 
 class _MonthCell extends StatelessWidget {
   const _MonthCell({
@@ -606,11 +746,13 @@ class _MonthCell extends StatelessWidget {
     required this.compact,
     required this.onTap,
     required this.onDoubleTap,
+    required this.onLongPress,
   });
   final DateTime day;
   final bool inMonth, isToday, isSelected, compact;
   final List<Occurrence> occ;
-  final VoidCallback onTap, onDoubleTap;
+  final VoidCallback onTap, onLongPress;
+  final VoidCallback? onDoubleTap;
 
   @override
   Widget build(BuildContext context) {
@@ -618,9 +760,10 @@ class _MonthCell extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       onDoubleTap: onDoubleTap,
+      onLongPress: onLongPress,
       child: Container(
         decoration: BoxDecoration(
-          color: isSelected && compact ? p.raised : (inMonth ? null : p.background.withValues(alpha: 0.5)),
+          color: inMonth ? null : p.background.withValues(alpha: 0.5),
           border: Border(
             right: BorderSide(color: p.line, width: 0.5),
             bottom: BorderSide(color: p.line, width: 0.5),
@@ -629,19 +772,34 @@ class _MonthCell extends StatelessWidget {
         padding: const EdgeInsets.all(3),
         child: LayoutBuilder(
           builder: (context, c) {
+            // On a phone the picked day is a filled circle and today is in the accent colour,
+            // so both stay visible when they differ. Wide screens mark only today.
+            final filled = compact ? isSelected : isToday;
+            final tinted = compact && isToday && !isSelected;
+            final size = compact ? 28.0 : 24.0;
             final header = Align(
               alignment: compact ? Alignment.topCenter : Alignment.topLeft,
-              child: Container(
-                width: 24,
-                height: 24,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                width: size,
+                height: size,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: isToday ? p.accent : null),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: filled
+                      ? (isToday || !compact ? p.accent : p.ink)
+                      : (tinted ? p.accent.withValues(alpha: 0.12) : null),
+                ),
                 child: Text(
                   '${day.day}',
                   style: TextStyle(
                     fontSize: 13.5,
-                    fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
-                    color: isToday ? p.onAccent : (inMonth ? p.ink : p.muted.withValues(alpha: 0.55)),
+                    fontWeight: isToday || filled ? FontWeight.w700 : FontWeight.w500,
+                    color: filled
+                        ? (isToday || !compact ? p.onAccent : p.surface)
+                        : tinted
+                        ? p.accent
+                        : (inMonth ? p.ink : p.muted.withValues(alpha: 0.55)),
                   ),
                 ),
               ),
@@ -654,19 +812,7 @@ class _MonthCell extends StatelessWidget {
                   children: [
                     header,
                     const SizedBox(height: 3),
-                    Wrap(
-                      spacing: 3,
-                      runSpacing: 3,
-                      alignment: WrapAlignment.center,
-                      children: [
-                        for (final o in occ.take(4))
-                          Container(
-                            width: 5,
-                            height: 5,
-                            decoration: BoxDecoration(color: o.color, shape: BoxShape.circle),
-                          ),
-                      ],
-                    ),
+                    _Dots(occ: occ),
                   ],
                 ),
               );
@@ -692,6 +838,48 @@ class _MonthCell extends StatelessWidget {
           },
         ),
       ),
+    );
+  }
+}
+
+/// Up to three dots in the calendars' colours (one per calendar first), then a small "+".
+class _Dots extends StatelessWidget {
+  const _Dots({required this.occ});
+  final List<Occurrence> occ;
+
+  @override
+  Widget build(BuildContext context) {
+    if (occ.isEmpty) return const SizedBox.shrink();
+    final p = Palette.of(context);
+    final colors = <Color>[];
+    for (final o in occ) {
+      if (!colors.contains(o.color)) colors.add(o.color);
+    }
+    // Repeat colours when one calendar holds several events, so the count still reads.
+    for (final o in occ) {
+      if (colors.length >= 3 || colors.length >= occ.length) break;
+      colors.add(o.color);
+    }
+    final shown = colors.take(3).toList();
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (final c in shown)
+          Container(
+            width: 5,
+            height: 5,
+            margin: const EdgeInsets.symmetric(horizontal: 1.5),
+            decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+          ),
+        if (occ.length > 3)
+          Padding(
+            padding: const EdgeInsets.only(left: 1),
+            child: Text(
+              '+',
+              style: TextStyle(fontSize: 10, height: 0.6, fontWeight: FontWeight.w700, color: p.muted),
+            ),
+          ),
+      ],
     );
   }
 }
