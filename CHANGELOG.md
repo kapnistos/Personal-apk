@@ -2,6 +2,25 @@
 
 Builds are numbered by the CI run. Notable changes, newest first.
 
+## November 2026
+
+### Lists, a better calendar, purchase goals and easier mail
+- **Lists**: To-do and Notes are now one app with one tab. Tap "To-do" or "Notes" in the title to switch; Lists
+  opens on the one you used last. A bar or start tab that had Notes now opens Lists.
+- **Calendar**: the day list shows start and end times with the calendar's colour, empty days offer "Add event",
+  long-press a day to add an event there, the event sheet says how soon it starts and can duplicate, new events
+  start at the next full hour, calendars are picked with colour chips, all-day reminders ring on the day at 9:00,
+  and the week view is in the phone's view menu.
+- **Wallet goals**: plan a purchase with a price, an optional date, link and notes; put money aside, see what is
+  needed a month or a week and whether you are on track, then mark it as bought. A Goals widget for Home, and the
+  Hub agent can read and propose goals.
+- **Mail setup**: start from your address; Gmail, Outlook, Proton (Bridge), iCloud and Yahoo fill in themselves,
+  other domains are looked up. Short steps per provider, a connection test with plain explanations, and accounts
+  that are easy to edit or remove.
+- **Fixes**: Home's greeting, Today strip and weather stay current; past rain times are dropped; reading a note no
+  longer marks it edited; notes save when you leave the app; search results follow changes; the AI chat always
+  answers, even after an unexpected error.
+
 ## October 2026
 
 ### Real supermarket offers
