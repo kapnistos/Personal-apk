@@ -18,6 +18,11 @@ class Forecast {
     required this.hours,
     required this.days,
     required this.fetchedAt,
+    this.windDirection,
+    this.gusts,
+    this.uvIndex,
+    this.pressure,
+    this.utcOffset,
   });
 
   final double temperature;
@@ -29,6 +34,24 @@ class Forecast {
   final List<HourForecast> hours;
   final List<DayForecast> days;
   final DateTime fetchedAt;
+
+  /// Where the wind comes from, in degrees (0 = north). Null when the source does not say.
+  final double? windDirection;
+
+  /// Wind gusts in km/h.
+  final double? gusts;
+  final double? uvIndex;
+
+  /// Sea-level pressure in hPa.
+  final double? pressure;
+
+  /// The place's offset from UTC. All times in this forecast are the place's own clock; null means the
+  /// device's clock.
+  final Duration? utcOffset;
+
+  /// The time now on the place's own clock, so a city in another time zone lines up with its hours.
+  DateTime get localNow => placeNow(utcOffset);
+
   String source = '';
   String? note;
 
@@ -80,11 +103,40 @@ class Forecast {
       hours: hours,
       days: days,
       fetchedAt: DateTime.now(),
+      windDirection: (c['wind_direction_10m'] as num?)?.toDouble(),
+      gusts: (c['wind_gusts_10m'] as num?)?.toDouble(),
+      uvIndex: (c['uv_index'] as num?)?.toDouble(),
+      pressure: (c['pressure_msl'] as num?)?.toDouble(),
+      utcOffset: j['utc_offset_seconds'] is num ? Duration(seconds: (j['utc_offset_seconds'] as num).toInt()) : null,
     );
   }
 
   static double _num(Object? v) => (v as num?)?.toDouble() ?? 0;
 }
+
+/// The wall-clock time now at a place [offset] from UTC, or the device's own time when unknown.
+DateTime placeNow(Duration? offset) {
+  if (offset == null) return DateTime.now();
+  final u = DateTime.now().toUtc().add(offset);
+  return DateTime(u.year, u.month, u.day, u.hour, u.minute, u.second);
+}
+
+/// "SW" for 225 degrees: the direction the wind blows from.
+String compassPoint(double degrees) {
+  const names = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  return names[((degrees % 360) / 45).round() % 8];
+}
+
+/// How strong the sun is, by the WHO bands.
+String uvLabel(double uv) => uv < 3
+    ? 'Low'
+    : uv < 6
+    ? 'Moderate'
+    : uv < 8
+    ? 'High'
+    : uv < 11
+    ? 'Very high'
+    : 'Extreme';
 
 class HourForecast {
   HourForecast({required this.time, required this.temperature, required this.code, required this.rainChance});
@@ -135,40 +187,88 @@ class RainPoint {
   final double mmPerHour;
 }
 
+/// How hard it rains, by the usual bands: light under 1 mm/h, moderate up to 5, heavy above.
+enum RainLevel {
+  none('Dry'),
+  light('Light'),
+  moderate('Moderate'),
+  heavy('Heavy');
+
+  const RainLevel(this.label);
+  final String label;
+
+  /// Below this it is too little to notice, and the summary calls it dry.
+  static const wet = 0.1;
+
+  static RainLevel of(double mmPerHour) => mmPerHour < wet
+      ? none
+      : mmPerHour < 1
+      ? light
+      : mmPerHour < 5
+      ? moderate
+      : heavy;
+}
+
 class Nowcast {
-  Nowcast({required this.points, required this.source});
+  Nowcast({required this.points, required this.source, this.radarUntil, this.utcOffset});
   final List<RainPoint> points;
   final String source;
 
-  bool get dry => points.every((p) => p.mmPerHour < 0.1);
+  /// The place's offset from UTC; times are on the place's clock. Null means the device's clock.
+  final Duration? utcOffset;
+
+  /// Where the radar steps end and the coarser model steps begin. Null when there is no radar.
+  final DateTime? radarUntil;
+
+  bool get dry => points.every((p) => p.mmPerHour < RainLevel.wet);
+
+  /// The wettest step, or null when it stays dry.
+  RainPoint? get peak {
+    if (dry) return null;
+    return points.reduce((a, b) => b.mmPerHour > a.mmPerHour ? b : a);
+  }
+
+  /// When the forecast ends: the last step plus its length.
+  DateTime get end {
+    if (points.isEmpty) return DateTime.now();
+    if (points.length == 1) return points.last.time.add(const Duration(minutes: 5));
+    return points.last.time.add(points.last.time.difference(points[points.length - 2].time));
+  }
 
   /// The same forecast from the step that holds [now] onwards, so one fetched a while ago does not still say
   /// "Rain from 11:50" at one o'clock. Empty when every step has passed.
-  Nowcast upcoming(DateTime now) {
+  Nowcast upcoming([DateTime? now]) {
+    now ??= placeNow(utcOffset);
     if (points.isNotEmpty && now.difference(points.last.time) > const Duration(minutes: 15)) {
-      return Nowcast(points: const [], source: source);
+      return Nowcast(points: const [], source: source, radarUntil: radarUntil, utcOffset: utcOffset);
     }
-    final current = points.lastIndexWhere((p) => !p.time.isAfter(now));
+    final current = points.lastIndexWhere((p) => !p.time.isAfter(now!));
     if (current <= 0) return this;
-    return Nowcast(points: points.sublist(current), source: source);
+    return Nowcast(points: points.sublist(current), source: source, radarUntil: radarUntil, utcOffset: utcOffset);
   }
 
   /// A one-line summary, e.g. "Rain starting around 14:35".
   String summary(String Function(DateTime) fmt) {
     if (points.isEmpty) return 'No short-term data';
-    final wetNow = points.first.mmPerHour >= 0.1;
-    if (dry) return 'No rain expected in the next ${_hours()} hours';
+    final wetNow = points.first.mmPerHour >= RainLevel.wet;
+    if (dry) return 'No rain expected in the next ${_hours()}';
     if (wetNow) {
-      final stop = points.firstWhere((p) => p.mmPerHour < 0.1, orElse: () => points.last);
-      return stop == points.last && stop.mmPerHour >= 0.1
-          ? 'Rain for the next ${_hours()} hours'
+      final stop = points.firstWhere((p) => p.mmPerHour < RainLevel.wet, orElse: () => points.last);
+      return stop == points.last && stop.mmPerHour >= RainLevel.wet
+          ? 'Rain for the next ${_hours()}'
           : 'Rain stopping around ${fmt(stop.time)}';
     }
-    final start = points.firstWhere((p) => p.mmPerHour >= 0.1);
+    final start = points.firstWhere((p) => p.mmPerHour >= RainLevel.wet);
     return 'Rain starting around ${fmt(start.time)}';
   }
 
-  int _hours() => ((points.last.time.difference(points.first.time).inMinutes + 5) / 60).round();
+  /// "4 hours", "1 hour", or "45 minutes" for what is left of the window.
+  String _hours() {
+    final minutes = end.difference(points.first.time).inMinutes;
+    if (minutes < 55) return '$minutes minutes';
+    final h = (minutes / 60).round();
+    return h == 1 ? 'hour' : '$h hours';
+  }
 }
 
 enum WeatherProvider { openMeteo, google }
@@ -225,7 +325,9 @@ class WeatherService {
     final uri = Uri.https('api.open-meteo.com', '/v1/forecast', {
       'latitude': '$lat',
       'longitude': '$lon',
-      'current': 'temperature_2m,apparent_temperature,relative_humidity_2m,is_day,weather_code,wind_speed_10m',
+      'current':
+          'temperature_2m,apparent_temperature,relative_humidity_2m,is_day,weather_code,wind_speed_10m,'
+          'wind_direction_10m,wind_gusts_10m,uv_index,pressure_msl',
       'hourly': 'temperature_2m,weather_code,precipitation_probability',
       'daily': 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset',
       'timezone': 'auto',
@@ -251,29 +353,37 @@ class WeatherService {
     final hit = _nowcastCache[key];
     if (!force && hit != null && DateTime.now().difference(hit.$1).inMinutes < 5) return hit.$2;
 
-    final results = await Future.wait([
-      if (Buienradar.covers(lat, lon)) Buienradar(_client).rain(lat, lon).catchError((_) => <RainPoint>[]),
-      _openMeteoMinutely(lat, lon).catchError((_) => <RainPoint>[]),
+    final results = await Future.wait<Object?>([
+      if (Buienradar.covers(lat, lon)) Buienradar(_client).text(lat, lon).catchError((_) => ''),
+      _openMeteoMinutely(lat, lon).catchError((_) => (<RainPoint>[], null)),
     ]);
-    final radar = results.length == 2 ? results.first : <RainPoint>[];
-    final model = results.last;
+    final (model, offset) = results.last as (List<RainPoint>, Duration?);
+    // Radar times are the place's clock too (Dutch/Belgian time), so read them against the place's date.
+    final radarText = results.length == 2 ? results.first as String : '';
+    final radar = radarText.isEmpty ? <RainPoint>[] : Buienradar.parse(radarText, now: placeNow(offset));
     if (radar.isEmpty && model.isEmpty) {
       throw WeatherException('Short-term rain forecast unavailable.');
     }
     final points = [...radar];
-    final radarEnd = radar.isEmpty ? null : radar.last.time;
-    points.addAll(model.where((p) => radarEnd == null || p.time.isAfter(radarEnd)));
-    final n = Nowcast(points: points, source: radar.isEmpty ? 'Open-Meteo' : 'Buienradar + Open-Meteo');
+    final radarEnd = radar.isEmpty ? null : radar.last.time.add(const Duration(minutes: 5));
+    // Model steps that start before the radar runs out would overlap it.
+    points.addAll(model.where((p) => radarEnd == null || !p.time.isBefore(radarEnd)));
+    final n = Nowcast(
+      points: points,
+      source: radar.isEmpty ? 'Open-Meteo' : 'Buienradar + Open-Meteo',
+      radarUntil: radarEnd,
+      utcOffset: offset,
+    );
     _nowcastCache[key] = (DateTime.now(), n);
     return n;
   }
 
-  Future<List<RainPoint>> _openMeteoMinutely(double lat, double lon) async {
+  Future<(List<RainPoint>, Duration?)> _openMeteoMinutely(double lat, double lon) async {
     final uri = Uri.https('api.open-meteo.com', '/v1/forecast', {
       'latitude': '$lat',
       'longitude': '$lon',
       'minutely_15': 'precipitation',
-      'forecast_minutely_15': '17',
+      'forecast_minutely_15': '18',
       'past_minutely_15': '1',
       'timezone': 'auto',
     });
@@ -281,11 +391,17 @@ class WeatherService {
     final m = j['minutely_15'] as Map<String, dynamic>;
     final times = (m['time'] as List).cast<String>();
     final values = m['precipitation'] as List;
-    return [
+    final offset = j['utc_offset_seconds'] is num ? Duration(seconds: (j['utc_offset_seconds'] as num).toInt()) : null;
+    final points = [
       for (var i = 0; i < times.length; i++)
-        // precipitation is mm per 15 minutes; convert to mm/h.
-        RainPoint(DateTime.parse(times[i]), ((values[i] as num?)?.toDouble() ?? 0) * 4),
+        // Each value is the rain of the 15 minutes before its time stamp, in mm; turn it into mm/h at the
+        // start of those 15 minutes, the way radar steps are stamped.
+        RainPoint(
+          DateTime.parse(times[i]).subtract(const Duration(minutes: 15)),
+          ((values[i] as num?)?.toDouble() ?? 0) * 4,
+        ),
     ];
+    return (points, offset);
   }
 
   void clearCache() => _cache.clear();
@@ -363,19 +479,29 @@ class Buienradar {
   /// Rough bounding box of the radar coverage.
   static bool covers(double lat, double lon) => lat >= 49.3 && lat <= 54.0 && lon >= 1.8 && lon <= 8.0;
 
-  Future<List<RainPoint>> rain(double lat, double lon, {DateTime? now}) async {
-    final uri = Uri.https('gadgets.buienradar.nl', '/data/raintext/', {
+  Future<List<RainPoint>> rain(double lat, double lon, {DateTime? now}) async =>
+      parse(await text(lat, lon), now: now ?? DateTime.now());
+
+  /// The raw "077|14:35" lines.
+  Future<String> text(double lat, double lon) => fetchText(
+    _client,
+    Uri.https('gadgets.buienradar.nl', '/data/raintext/', {
       'lat': lat.toStringAsFixed(2),
       'lon': lon.toStringAsFixed(2),
-    });
-    return parse(await fetchText(_client, uri), now: now ?? DateTime.now());
-  }
+    }),
+  );
 
   /// Lines look like "077|14:35": intensity 0-255, then local time.
   /// mm/h = 10 ^ ((intensity - 109) / 32).
   static List<RainPoint> parse(String body, {required DateTime now}) {
     final out = <RainPoint>[];
     var day = DateTime(now.year, now.month, now.day);
+    // Just after midnight the list still opens with a few steps from yesterday evening ("23:55").
+    final first = RegExp(r'\|(\d{1,2}):(\d{2})').firstMatch(body);
+    if (first != null) {
+      final m = int.parse(first.group(1)!) * 60 + int.parse(first.group(2)!);
+      if (m - (now.hour * 60 + now.minute) > 12 * 60) day = addDays(day, -1);
+    }
     int? lastMinutes;
     for (final line in body.split(RegExp(r'\r?\n'))) {
       final parts = line.trim().split('|');
@@ -480,6 +606,11 @@ class GoogleWeather {
       hours: hours,
       days: days,
       fetchedAt: DateTime.now(),
+      windDirection: ((((cur['wind'] as Map?)?['direction']) as Map?)?['degrees'] as num?)?.toDouble(),
+      gusts: ((((cur['wind'] as Map?)?['gust']) as Map?)?['value'] as num?)?.toDouble(),
+      uvIndex: (cur['uvIndex'] as num?)?.toDouble(),
+      pressure: (((cur['airPressure'] as Map?)?['meanSeaLevelMillibars']) as num?)?.toDouble(),
+      utcOffset: hours.isEmpty ? null : offset,
     );
     f.source = 'Google Weather';
     return f;
@@ -554,7 +685,7 @@ class WeatherCode {
     45 || 48 => Icons.foggy,
     >= 51 && <= 67 => Icons.water_drop_rounded,
     >= 71 && <= 77 => Icons.ac_unit_rounded,
-    80 || 81 || 82 => Icons.grain_rounded,
+    80 || 81 || 82 => Icons.umbrella_rounded,
     85 || 86 => Icons.ac_unit_rounded,
     >= 95 => Icons.thunderstorm_rounded,
     _ => Icons.cloud_queue_rounded,

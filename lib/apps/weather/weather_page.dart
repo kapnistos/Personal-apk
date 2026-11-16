@@ -11,7 +11,15 @@ import '../../core/press.dart';
 import '../../core/settings.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'rain_chart.dart';
 import 'weather_service.dart';
+
+/// Wind speed in km/h, or mph for people who read temperatures in Fahrenheit.
+String formatSpeed(double kmh, TempUnit unit, {bool withUnit = true}) {
+  final metric = unit == TempUnit.celsius;
+  final v = (metric ? kmh : kmh / 1.609344).round();
+  return withUnit ? '$v ${metric ? 'km/h' : 'mph'}' : '$v';
+}
 
 String formatTemp(double celsius, TempUnit unit, {bool withUnit = false}) {
   final v = unit == TempUnit.celsius ? celsius : celsius * 9 / 5 + 32;
@@ -297,7 +305,11 @@ class _HourlyStrip extends StatelessWidget {
           itemBuilder: (context, i) {
             final h = f.hours[i];
             final day = f.days.where((d) => dateOnly(d.date) == dateOnly(h.time)).firstOrNull;
-            final isDay = day == null || (h.time.isAfter(day.sunrise) && h.time.isBefore(day.sunset));
+            // The first slot is the hour we are in: show what it is like right now, not the hour's average.
+            final now = i == 0;
+            final isDay = now ? f.isDay : day == null || (h.time.isAfter(day.sunrise) && h.time.isBefore(day.sunset));
+            final code = now ? f.code : h.code;
+            final temp = now ? f.temperature : h.temperature;
             return SizedBox(
               width: 56,
               child: Column(
@@ -308,7 +320,7 @@ class _HourlyStrip extends StatelessWidget {
                     style: TextStyle(color: p.muted, fontSize: 13, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 8),
-                  Icon(WeatherCode.icon(h.code, isDay: isDay), size: 22, color: p.ink),
+                  Icon(WeatherCode.icon(code, isDay: isDay), size: 22, color: p.ink),
                   SizedBox(
                     height: 16,
                     child: h.rainChance >= 20
@@ -322,10 +334,7 @@ class _HourlyStrip extends StatelessWidget {
                           )
                         : null,
                   ),
-                  Text(
-                    formatTemp(h.temperature, unit),
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                  ),
+                  Text(formatTemp(temp, unit), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                 ],
               ),
             );
@@ -349,7 +358,7 @@ class _DailyList extends StatelessWidget {
     final hi = f.days.map((d) => d.max).reduce(math.max);
     final span = math.max(1.0, hi - lo);
     return GroupSection(
-      title: '7-day forecast',
+      title: '${f.days.length}-day forecast',
       child: Column(
         children: [
           for (final d in f.days)
@@ -437,13 +446,22 @@ class _Details extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final today = f.days.firstOrNull;
+    final dir = f.windDirection == null ? '' : ' ${compassPoint(f.windDirection!)}';
+    final gusts = f.gusts;
     final items = [
       (Icons.thermostat_rounded, 'Feels like', formatTemp(f.feelsLike, unit)),
       (Icons.water_drop_outlined, 'Humidity', '${f.humidity}%'),
-      (Icons.air_rounded, 'Wind', '${f.wind.round()} km/h'),
-      if (today != null) (Icons.wb_twilight_rounded, 'Sunrise', DateFormat.Hm().format(today.sunrise)),
-      if (today != null) (Icons.nights_stay_outlined, 'Sunset', DateFormat.Hm().format(today.sunset)),
-      if (today != null) (Icons.umbrella_outlined, 'Rain today', '${today.rainChance}%'),
+      (Icons.air_rounded, 'Wind', '${formatSpeed(f.wind, unit)}$dir'),
+      if (gusts != null) (Icons.storm_outlined, 'Gusts', formatSpeed(gusts, unit)),
+      if (f.uvIndex != null) (Icons.wb_sunny_outlined, 'UV index', '${f.uvIndex!.round()} · ${uvLabel(f.uvIndex!)}'),
+      if (today != null)
+        (
+          Icons.wb_twilight_rounded,
+          'Sunrise and sunset',
+          '${DateFormat.Hm().format(today.sunrise)} · ${DateFormat.Hm().format(today.sunset)}',
+        ),
+      if (today != null) (Icons.umbrella_outlined, 'Rain chance today', '${today.rainChance}%'),
+      if (f.pressure != null) (Icons.speed_rounded, 'Pressure', '${f.pressure!.round()} hPa'),
     ];
     final p = Palette.of(context);
     return LayoutBuilder(
@@ -468,8 +486,18 @@ class _Details extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(label, style: TextStyle(color: p.muted, fontSize: 13)),
-                              Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                              Text(
+                                label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: p.muted, fontSize: 13),
+                              ),
+                              Text(
+                                value,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                              ),
                             ],
                           ),
                         ),
@@ -670,11 +698,21 @@ class RainNowcastCard extends StatefulWidget {
 class RainNowcastCardState extends State<RainNowcastCard> {
   Nowcast? _data;
   bool _failed = false;
+  RainPoint? _touched;
+  Timer? _tick;
 
   @override
   void initState() {
     super.initState();
     reload(force: false);
+    // Radar moves on every five minutes; keep the chart starting at now while the page stays open.
+    _tick = Timer.periodic(const Duration(minutes: 5), (_) => reload(force: false));
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
   }
 
   Future<void> reload({bool force = true}) async {
@@ -691,15 +729,52 @@ class RainNowcastCardState extends State<RainNowcastCard> {
     }
   }
 
+  static String _mm(double v) => v < 10 ? v.toStringAsFixed(1) : v.round().toString();
+
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    final n = _data?.upcoming(DateTime.now());
-    if (n == null) {
-      if (_failed) return const SizedBox.shrink();
-      return const GroupSection(title: 'Rain, next hours', child: SizedBox(height: 120));
+    final hm = DateFormat.Hm().format;
+    final n = _data?.upcoming();
+    if (n == null || n.points.isEmpty) {
+      if (n == null && !_failed) return const GroupSection(title: 'Rain, next hours', child: SizedBox(height: 190));
+      return GroupSection(
+        title: 'Rain, next hours',
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _failed ? 'Rain radar is not reachable right now.' : 'No short-term rain data for this place.',
+                  style: TextStyle(color: p.muted, fontSize: 14),
+                ),
+              ),
+              TextButton(onPressed: () => reload(), child: const Text('Try again')),
+            ],
+          ),
+        ),
+      );
     }
-    final maxMm = n.points.fold<double>(2, (m, x) => math.max(m, x.mmPerHour));
+
+    final touched = _touched;
+    final peak = n.peak;
+    final String detail;
+    if (touched != null) {
+      final level = RainLevel.of(touched.mmPerHour);
+      detail = level == RainLevel.none
+          ? '${hm(touched.time)}  ·  Dry'
+          : '${hm(touched.time)}  ·  ${level.label}  ·  ${_mm(touched.mmPerHour)} mm/h';
+    } else if (peak != null) {
+      detail =
+          'Heaviest around ${hm(peak.time)}, ${RainLevel.of(peak.mmPerHour).label.toLowerCase()} '
+          '(${_mm(peak.mmPerHour)} mm/h)';
+    } else {
+      detail = 'Touch the chart to see any moment';
+    }
+    final radarUntil = n.radarUntil;
+    final hasModel = radarUntil != null && radarUntil.isBefore(n.end);
+
     return GroupSection(
       title: 'Rain, next hours',
       child: Padding(
@@ -707,46 +782,32 @@ class RainNowcastCardState extends State<RainNowcastCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(n.summary(DateFormat.Hm().format), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 64,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  for (final x in n.points)
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 0.75),
-                        child: Container(
-                          // Square-root scale keeps drizzle visible next to downpours.
-                          height: x.mmPerHour < 0.05 ? 2 : 4 + 60 * math.sqrt(x.mmPerHour / maxMm),
-                          decoration: BoxDecoration(
-                            color: x.mmPerHour < 0.05 ? p.raised : TileColors.weather,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+            Text(n.summary(hm), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+            const SizedBox(height: 2),
+            Text(
+              detail,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: touched != null ? p.ink : p.muted,
+                fontSize: 13.5,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
-            const SizedBox(height: 6),
-            if (n.points.isNotEmpty)
-              Row(
-                children: [
-                  Text('Now', style: TextStyle(color: p.muted, fontSize: 12.5)),
-                  const Spacer(),
-                  Text(
-                    DateFormat.Hm().format(n.points[n.points.length ~/ 2].time),
-                    style: TextStyle(color: p.muted, fontSize: 12.5),
-                  ),
-                  const Spacer(),
-                  Text(DateFormat.Hm().format(n.points.last.time), style: TextStyle(color: p.muted, fontSize: 12.5)),
-                ],
-              ),
-            const SizedBox(height: 4),
-            Text(n.source, style: TextStyle(color: p.muted, fontSize: 12)),
+            const SizedBox(height: 14),
+            Semantics(
+              label: '${n.summary(hm)}. $detail',
+              child: RainChart(nowcast: n, onSelect: (pt) => setState(() => _touched = pt)),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              radarUntil == null
+                  ? 'Open-Meteo model, 15-minute steps'
+                  : hasModel
+                  ? 'Buienradar radar to ${hm(radarUntil)}, then Open-Meteo model'
+                  : 'Buienradar radar, 5-minute steps',
+              style: TextStyle(color: p.muted, fontSize: 12),
+            ),
           ],
         ),
       ),

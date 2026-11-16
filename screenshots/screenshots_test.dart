@@ -363,6 +363,10 @@ Future<void> seed(AppDatabase db, AppSettings settings) async {
     feelsLike: 8.9,
     humidity: 78,
     wind: 21,
+    windDirection: 230,
+    gusts: 38,
+    uvIndex: 1.4,
+    pressure: 1012,
     code: 2,
     isDay: true,
     hours: [
@@ -389,9 +393,9 @@ Future<void> seed(AppDatabase db, AppSettings settings) async {
     fetchedAt: DateTime.now(),
   )..source = 'Open-Meteo';
   final n0 = DateTime(now.year, now.month, now.day, now.hour, now.minute - now.minute % 5);
-  final n = Nowcast(source: 'Buienradar + Open-Meteo', points: [
+  final n = Nowcast(source: 'Buienradar + Open-Meteo', radarUntil: n0.add(const Duration(minutes: 120)), points: [
     for (var i = 0; i < 24; i++) RainPoint(n0.add(Duration(minutes: 5 * i)), i < 7 ? 0 : (i < 15 ? 0.4 + (i - 7) * 0.35 : 3.2 - (i - 15) * 0.4).clamp(0.0, 9.0).toDouble()),
-    for (var i = 1; i <= 8; i++) RainPoint(n0.add(Duration(minutes: 115 + 15 * i)), i < 3 ? 0.3 : 0.0),
+    for (var i = 1; i <= 8; i++) RainPoint(n0.add(Duration(minutes: 105 + 15 * i)), [0.0, 0.0, 0.6, 1.4, 0.9, 0.3, 0.0, 0.0][i - 1]),
   ]);
   WeatherService.instance.seed(52.37403, 4.88969, f, n);
 }
@@ -483,7 +487,7 @@ void main() {
       for (final e in shots.entries) {
         if (device == 'desktop' && !['home', 'calendar', 'wallet', 'weather'].contains(e.key)) continue;
         if (e.key == 'dashboard' && device == 'desktop') continue;
-        if (dark && !['home', 'calendar', 'calendar-event', 'calendar-new', 'wallet', 'todo', 'subscriptions', 'dashboard', 'me', 'ai', 'chat', 'history', 'agent', 'savings'].contains(e.key)) continue;
+        if (dark && !['home', 'weather', 'calendar', 'calendar-event', 'calendar-new', 'wallet', 'todo', 'subscriptions', 'dashboard', 'me', 'ai', 'chat', 'history', 'agent', 'savings'].contains(e.key)) continue;
         testWidgets('$device ${dark ? 'dark' : 'light'} ${e.key}', (tester) async {
           // The whole home screen, top to bottom.
           tester.view.physicalSize = e.key == 'dashboard' ? Size(size.width, 7200) : size;
