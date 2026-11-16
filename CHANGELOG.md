@@ -4,6 +4,19 @@ Builds are numbered by the CI run. Notable changes, newest first.
 
 ## November 2026
 
+### Weather: a readable rain chart and correct numbers
+- **Rain chart**: bars are now placed by time, so the two radar hours no longer squeeze the model hours into a
+  quarter of the width, and the time labels are real clock times (whole hours) instead of one middle label that sat
+  at the wrong place. The height follows Light, Moderate and Heavy bands with a legend on the side, and a dashed line
+  shows where radar hands over to the model. Touch or drag the chart to read any step; the line above names the
+  heaviest moment. Colours keep their contrast in light and dark.
+- **Fixes**: just after midnight Buienradar's last steps of the evening were put a day ahead; Open-Meteo's
+  15-minute rain was drawn 15 minutes late; drizzle under 0.1 mm/h was drawn as rain while the summary said dry;
+  the chart now refreshes itself every five minutes and says so when radar is unreachable instead of vanishing.
+- **Metrics**: the first hour shows the current temperature and sky, the day list title matches its ten days,
+  wind shows its direction plus gusts (mph with Fahrenheit), and UV index and pressure were added. Cities in
+  another time zone now line up their hours and the Home card with their own clock.
+
 ### Lists, a better calendar, purchase goals and easier mail
 - **Lists**: To-do and Notes are now one app with one tab. Tap "To-do" or "Notes" in the title to switch; Lists
   opens on the one you used last. A bar or start tab that had Notes now opens Lists.

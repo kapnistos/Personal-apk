@@ -57,9 +57,13 @@ The layout is saved on the device. **Back to the starting layout** (in edit mode
 <img src="../screenshots/out/phone-light-weather.png" width="220" align="right" alt="Weather">
 
 - Tap the place name to switch places, search any city, or **use my location**.
-- **Next hours:** Buienradar's rain forecast, five-minute steps for the next two hours (Netherlands and Belgium).
+- **Next hours:** Buienradar's rain radar in five-minute steps for two hours (Netherlands and Belgium), then
+  Open-Meteo in 15-minute steps up to four hours. The chart is drawn to time, with Light, Moderate and Heavy bands
+  (under 1, 1 to 5, over 5 mm/h); touch or drag across it to read the time and amount of any step.
 - **Days ahead:** Open-Meteo by default, or Google Weather if you add your own key in Weather → Sources.
-- Hourly forecast for 24 hours, ten days, sunrise and sunset, wind, UV, humidity.
+- Hourly forecast for 24 hours, ten days, feels like, humidity, wind with direction, gusts, UV, sunrise and
+  sunset, chance of rain and pressure. Wind shows in mph when temperatures are in Fahrenheit. Cities in another
+  time zone show their own local times.
 
 <br clear="right">
 

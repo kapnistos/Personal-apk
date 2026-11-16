@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hub/apps/weather/rain_chart.dart';
 import 'package:hub/apps/calendar/calendar_model.dart';
 import 'package:hub/apps/calendar/ics.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
@@ -127,6 +128,80 @@ void main() {
       expect(pts[1].mmPerHour, closeTo(0.1, 0.01));
       expect(pts[2].mmPerHour, closeTo(1.0, 0.01));
       expect(pts[2].time, DateTime(2026, 10, 30, 0, 5));
+    });
+    test('Buienradar text just after midnight keeps yesterday evening on yesterday', () {
+      final pts = Buienradar.parse('000|23:55\n077|00:00\n109|00:05\n', now: DateTime(2026, 10, 30, 0, 2));
+      expect(pts.first.time, DateTime(2026, 10, 29, 23, 55));
+      expect(pts.last.time, DateTime(2026, 10, 30, 0, 5));
+    });
+    test('rain bands and chart heights', () {
+      expect(RainLevel.of(0.05), RainLevel.none);
+      expect(RainLevel.of(0.4), RainLevel.light);
+      expect(RainLevel.of(2), RainLevel.moderate);
+      expect(RainLevel.of(8), RainLevel.heavy);
+      expect(rainHeight(0), 0);
+      expect(rainHeight(0.1), greaterThan(0));
+      expect(rainHeight(0.99), lessThan(1 / 3));
+      expect(rainHeight(1), closeTo(1 / 3, 1e-9));
+      expect(rainHeight(5), closeTo(2 / 3, 1e-9));
+      expect(rainHeight(100), 1);
+      for (var mm = 0.1; mm < 30; mm *= 1.3) {
+        expect(rainHeight(mm * 1.3), greaterThanOrEqualTo(rainHeight(mm)));
+      }
+    });
+    test('Nowcast knows its end, peak and phrases a short window', () {
+      final t = DateTime(2026, 10, 29, 14);
+      final n = Nowcast(source: 'x', points: [
+        for (var i = 0; i < 6; i++) RainPoint(t.add(Duration(minutes: 5 * i)), 0),
+        RainPoint(t.add(const Duration(minutes: 30)), 0),
+      ]);
+      expect(n.end, t.add(const Duration(minutes: 35)));
+      expect(n.peak, isNull);
+      expect(n.summary((d) => ''), 'No rain expected in the next 35 minutes');
+      final wet = Nowcast(source: 'x', points: [RainPoint(t, 0.2), RainPoint(t.add(const Duration(minutes: 5)), 3)]);
+      expect(wet.peak!.mmPerHour, 3);
+    });
+    test('compass and UV labels', () {
+      expect(compassPoint(0), 'N');
+      expect(compassPoint(230), 'SW');
+      expect(compassPoint(350), 'N');
+      expect(uvLabel(1.4), 'Low');
+      expect(uvLabel(7), 'High');
+    });
+    test('Open-Meteo extras and the place offset are read', () {
+      final f = Forecast.fromJson({
+        'utc_offset_seconds': 7200,
+        'current': {
+          'time': '2026-10-29T14:00',
+          'temperature_2m': 12.0,
+          'apparent_temperature': 10.0,
+          'relative_humidity_2m': 80,
+          'is_day': 1,
+          'weather_code': 3,
+          'wind_speed_10m': 20.0,
+          'wind_direction_10m': 225,
+          'wind_gusts_10m': 41.0,
+          'uv_index': 2.0,
+          'pressure_msl': 1009.4,
+        },
+        'hourly': {'time': <String>[], 'temperature_2m': [], 'weather_code': [], 'precipitation_probability': []},
+        'daily': {
+          'time': <String>[],
+          'temperature_2m_max': [],
+          'temperature_2m_min': [],
+          'weather_code': [],
+          'precipitation_probability_max': [],
+          'sunrise': [],
+          'sunset': [],
+        },
+      });
+      expect(f.utcOffset, const Duration(hours: 2));
+      expect(f.windDirection, 225);
+      expect(f.gusts, 41);
+      expect(f.pressure, closeTo(1009.4, 0.01));
+      final local = f.localNow;
+      final expected = DateTime.now().toUtc().add(const Duration(hours: 2));
+      expect(local.hour, expected.hour);
     });
     test('Nowcast summary', () {
       final t = DateTime(2026, 10, 29, 14);

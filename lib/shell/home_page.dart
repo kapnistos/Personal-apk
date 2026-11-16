@@ -833,7 +833,7 @@ mixin _LiveWeather<T extends StatefulWidget> on State<T>, WidgetsBindingObserver
   Nowcast? _rawNowcast;
   Timer? _refresh;
 
-  Nowcast? get _n => _rawNowcast?.upcoming(DateTime.now());
+  Nowcast? get _n => _rawNowcast?.upcoming();
 
   @override
   void initState() {
@@ -922,7 +922,8 @@ class _WeatherHeroCardState extends State<_WeatherHeroCard> with WidgetsBindingO
     const white = Colors.white;
     final soft = white.withValues(alpha: 0.82);
 
-    final now = DateTime.now();
+    // The place's own clock, so a city in another time zone shows its next hours, not ours.
+    final now = f?.localNow ?? DateTime.now();
     final thisHour = DateTime(now.year, now.month, now.day, now.hour);
     bool dayAt(DateTime t) => today == null || (t.isAfter(today.sunrise) && t.isBefore(today.sunset));
     final slots = <(String, int, double, bool, bool)>[
